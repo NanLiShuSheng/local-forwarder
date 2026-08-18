@@ -113,8 +113,19 @@ test("ConfigStore load reports invalid internal JSON with filename and field", a
   const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-invalid-"));
   const filePath = path.join(directory, "internal.json");
   const { writeFile } = await import("node:fs/promises");
-  await writeFile(filePath, JSON.stringify({ server: { port: "bad" } }), "utf8");
   const store = new ConfigStore(filePath);
 
-  await assert.rejects(() => store.load(), /internal\.json.*server\.port/i);
+  const original = await importLegacyConfig("test/fixtures/legacy");
+  const invalidCases: Array<[string, unknown]> = [
+    ["server.port", { ...original, server: { ...original.server, port: "bad" } }],
+    ["httpRules[0].id", { ...original, httpRules: [{ ...original.httpRules[0], id: 1 }] }],
+    ["tcpTargets[0].host", { ...original, tcpTargets: [{ ...original.tcpTargets[0], host: 1 }] }],
+    ["cache.rootDir", { ...original, cache: { ...original.cache, rootDir: 1 } }],
+  ];
+
+  for (const [field, invalid] of invalidCases) {
+    await writeFile(filePath, JSON.stringify(invalid), "utf8");
+    const escapedField = field.replace(/[.[\]]/g, "\\$&");
+    await assert.rejects(() => store.load(), new RegExp(`internal\\.json ${escapedField}`));
+  }
 });

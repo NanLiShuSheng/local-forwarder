@@ -89,12 +89,10 @@ export function parseInternalJson(text: string, filename = "internal.json"): Int
   } catch (error) {
     throw new ConfigParseError(filename, "root", "invalid JSON", error);
   }
-  const config = getAppConfigValidationError(parsed) === undefined && isRecord(parsed) ? withLegacy(parsed as unknown as AppConfig) : undefined;
-  if (config === undefined) {
-    const field = typeof parsed === "object" && parsed !== null && "server" in parsed ? "server.port" : "root";
-    throw new ConfigParseError(filename, field, "invalid internal configuration");
-  }
-  return config;
+  const field = getAppConfigValidationError(parsed);
+  if (field !== undefined) throw new ConfigParseError(filename, field, "invalid internal configuration");
+  if (!isRecord(parsed)) throw new ConfigParseError(filename, "root", "invalid internal configuration");
+  return withLegacy(parsed as unknown as AppConfig);
 }
 
 function legacyExportObject(config: InternalConfig): Record<string, unknown> {
