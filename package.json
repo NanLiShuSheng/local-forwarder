@@ -1,0 +1,27 @@
+{
+  "name": "local-forwarder-mac",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite --config vite.config.ts\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "tsc -p tsconfig.node.json && node scripts/flatten-electron.mjs && vite build",
+    "test": "tsx --test test/**/*.test.ts",
+    "package:x64": "npm run build && electron-builder --mac dmg --x64",
+    "smoke": "node scripts/smoke-electron.mjs"
+  },
+  "dependencies": {
+    "electron": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "latest",
+    "concurrently": "latest",
+    "electron-builder": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "wait-on": "latest"
+  }
+}

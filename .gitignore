@@ -1,6 +1,3 @@
 node_modules/
 dist/
-release/
-.superpowers/
-.worktrees/
-.DS_Store
+dist-electron/
