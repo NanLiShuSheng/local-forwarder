@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -176,6 +177,40 @@ test("executes config.js in a restricted vm sandbox", () => {
     () => parseLegacyConfigJs("while (true) {}", "config.js"),
     /config\.js/i,
   );
+});
+
+test("does not expose a host module prototype or constructor escape", () => {
+  const config = parseLegacyConfigJs(
+    "module.exports = { modulePrototypeIsNull: Object.getPrototypeOf(module) === null }",
+    "config.js",
+  );
+  assert.equal(config.legacy.extra.moduleprototypeisnull, true);
+  assert.throws(
+    () => parseLegacyConfigJs("module.exports = module.constructor.constructor('return typeof process')()", "config.js"),
+    /config\.js/,
+  );
+});
+
+function runParserInChild(source: string) {
+  const parserPath = path.resolve("src/core/config/legacy-parser.ts");
+  const script = `import { parseLegacyConfigJs } from ${JSON.stringify(parserPath)};
+try { parseLegacyConfigJs(${JSON.stringify(source)}, "config.js"); process.exitCode = 1; }
+catch (error) { if (!String(error).includes("config.js")) process.exitCode = 2; }`;
+  return spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], {
+    cwd: path.resolve("."),
+    encoding: "utf8",
+    timeout: 1200,
+  });
+}
+
+test("times out getter and Proxy work during VM serialization", () => {
+  for (const source of [
+    "module.exports = { get value() { while (true) {} } }",
+    "module.exports = new Proxy({}, { ownKeys() { while (true) {} } })",
+  ]) {
+    const result = runParserInChild(source);
+    assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+  }
 });
 
 test("reports malformed JSON and missing legacy files with filenames", async () => {

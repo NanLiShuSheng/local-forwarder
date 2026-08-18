@@ -5,6 +5,8 @@ import type { ForwardRule } from "../../shared/contracts";
 import { createDefaultConfig, type InternalConfig } from "./model";
 
 type UnknownRecord = Record<string, unknown>;
+const VM_TIMEOUT_MS = 500;
+const MAX_SERIALIZED_CONFIG_BYTES = 1_000_000;
 
 export class ConfigParseError extends Error {
   constructor(filename: string, field: string, message: string, cause?: unknown) {
@@ -334,17 +336,36 @@ export function parseLegacyJson(text: string, filename = "config.json"): Interna
 }
 
 export function parseLegacyConfigJs(text: string, filename = "config.js"): InternalConfig {
-  const module = { exports: {} as unknown };
+  if (typeof text !== "string") {
+    throw new ConfigParseError(filename, "root", "source must be a string");
+  }
+  const context = vm.createContext(Object.create(null), {
+    codeGeneration: { strings: false, wasm: false },
+  });
+  const runOptions = {
+    filename,
+    timeout: VM_TIMEOUT_MS,
+    contextCodeGeneration: { strings: false, wasm: false },
+  };
   try {
-    vm.runInNewContext(text, { module }, {
-      filename,
-      timeout: 500,
-      contextCodeGeneration: { strings: false, wasm: false },
-    });
+    vm.runInContext(
+      "const __jsonStringify = JSON.stringify; var module = Object.create(null); var exports = Object.create(null); module.exports = exports;",
+      context,
+      runOptions,
+    );
+    vm.runInContext(text, context, runOptions);
+    const serialized = vm.runInContext("__jsonStringify(module.exports)", context, runOptions);
+    if (typeof serialized !== "string") {
+      throw new Error("module.exports must be JSON-serializable");
+    }
+    if (Buffer.byteLength(serialized, "utf8") > MAX_SERIALIZED_CONFIG_BYTES) {
+      throw new Error("serialized config is too large");
+    }
+    return fromRaw(JSON.parse(serialized), filename);
   } catch (error) {
+    if (error instanceof ConfigParseError) throw error;
     throw new ConfigParseError(filename, "root", "sandbox execution failed", error);
   }
-  return fromRaw(module.exports, filename);
 }
 
 function applySysConfig(config: InternalConfig, values: Record<string, string>, filename: string): void {
