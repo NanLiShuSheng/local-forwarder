@@ -1,9 +1,16 @@
 import { contextBridge, ipcRenderer } from "electron";
-import {
-  IPC_CHANNELS,
-  type AppConfig,
-  type ForwarderApi,
-} from "../src/shared/contracts";
+import type { AppConfig, ForwarderApi } from "../src/shared/contracts";
+
+const IPC_CHANNELS = {
+  getConfig: "config:get",
+  saveConfig: "config:save",
+  importLegacy: "config:import-legacy",
+  exportConfig: "config:export",
+  start: "runtime:start",
+  stop: "runtime:stop",
+  status: "runtime:status",
+  logs: "runtime:logs",
+} as const;
 
 const api: ForwarderApi = {
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.getConfig),

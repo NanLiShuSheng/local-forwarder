@@ -65,7 +65,14 @@ function resolveElectronBinary() {
 }
 
 const electronBinary = resolveElectronBinary();
-const child = spawn(electronBinary, ["--no-sandbox", electronEntry, "--smoke"], {
+const useNoSandbox = process.env.FORWARDER_SMOKE_NO_SANDBOX === "1";
+const electronArgs = [electronEntry, "--smoke"];
+if (useNoSandbox) {
+  electronArgs.unshift("--no-sandbox");
+  console.warn("Electron smoke check: non-sandbox validation enabled by FORWARDER_SMOKE_NO_SANDBOX=1");
+}
+
+const child = spawn(electronBinary, electronArgs, {
   cwd: projectRoot,
   env: { ...process.env, ELECTRON_ENABLE_LOGGING: "1" },
   stdio: ["ignore", "pipe", "pipe"],

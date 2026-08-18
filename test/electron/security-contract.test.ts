@@ -58,10 +58,13 @@ test("renderer policy allows only the configured dev origin and production file"
 
 test("main wires the renderer security policy into Electron", () => {
   const mainSource = fs.readFileSync(path.join(projectRoot, "electron/main.ts"), "utf8");
+  const ipcSource = fs.readFileSync(path.join(projectRoot, "electron/ipc.ts"), "utf8");
   assert.match(mainSource, /sandbox:\s*true/);
   assert.match(mainSource, /will-navigate/);
   assert.match(mainSource, /setWindowOpenHandler/);
-  assert.match(mainSource, /senderFrame\?\.url/);
+  assert.match(mainSource, /createTrustedIpcHandler/);
+  assert.match(mainSource, /createSaveConfigHandler/);
+  assert.match(ipcSource, /senderFrame\?\.url/);
 });
 
 test("runtime config validation rejects unsafe or malformed payloads", () => {

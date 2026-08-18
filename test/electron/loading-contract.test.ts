@@ -34,5 +34,7 @@ test("dev and smoke scripts are available for a clean checkout", () => {
   assert.match(smokeScript, /dist-electron[\\/]main\.js/);
   assert.match(smokeScript, /--smoke/);
   assert.match(smokeScript, /setTimeout/);
+  assert.match(smokeScript, /FORWARDER_SMOKE_NO_SANDBOX/);
+  assert.doesNotMatch(smokeScript, /\["--no-sandbox"/);
   assert.doesNotMatch(smokeScript, /\["--version"\]/);
 });
