@@ -51,6 +51,44 @@ test("ConfigStore imports and exports legacy directories", async () => {
   assert.deepEqual(restored.accounts, source.accounts);
   assert.deepEqual(restored.httpRules, source.httpRules);
   assert.equal(restored.server.port, source.server.port);
+  assert.deepEqual(restored.legacy.extra, source.legacy.extra);
+  assert.deepEqual(restored.legacy.files["config.json"], source.legacy.files["config.json"]);
+});
+
+test("ConfigStore reports field-level validation paths for every config section", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-field-validation-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const original = await importLegacyConfig("test/fixtures/legacy");
+  const httpRule = original.httpRules[0];
+  const tcpTarget = original.tcpTargets[0];
+  const invalidCases: Array<[string, typeof original]> = [
+    ["server.bindHost", { ...original, server: { ...original.server, bindHost: 1 as never } }],
+    ["server.port", { ...original, server: { ...original.server, port: 0 } }],
+    ["server.timeoutMs", { ...original, server: { ...original.server, timeoutMs: -1 } }],
+    ["server.loggingEnabled", { ...original, server: { ...original.server, loggingEnabled: "yes" as never } }],
+    ["httpRules[0].id", { ...original, httpRules: [{ ...httpRule, id: 1 as never }] }],
+    ["httpRules[0].name", { ...original, httpRules: [{ ...httpRule, name: 1 as never }] }],
+    ["httpRules[0].match", { ...original, httpRules: [{ ...httpRule, match: 1 as never }] }],
+    ["httpRules[0].target", { ...original, httpRules: [{ ...httpRule, target: 1 as never }] }],
+    ["httpRules[0].enabled", { ...original, httpRules: [{ ...httpRule, enabled: "yes" as never }] }],
+    ["tcpTargets[0].id", { ...original, tcpTargets: [{ ...tcpTarget, id: 1 as never }] }],
+    ["tcpTargets[0].name", { ...original, tcpTargets: [{ ...tcpTarget, name: 1 as never }] }],
+    ["tcpTargets[0].host", { ...original, tcpTargets: [{ ...tcpTarget, host: 1 as never }] }],
+    ["tcpTargets[0].port", { ...original, tcpTargets: [{ ...tcpTarget, port: 0 }] }],
+    ["tcpTargets[0].enabled", { ...original, tcpTargets: [{ ...tcpTarget, enabled: "yes" as never }] }],
+    ["localValues.TOKEN", { ...original, localValues: { TOKEN: 1 as never } }],
+    ["mapValues.FIXTURE_KEY", { ...original, mapValues: { FIXTURE_KEY: 1 as never } }],
+    ["accounts.ptjy.password", { ...original, accounts: { ptjy: { password: 1 as never } } }],
+    ["cache.rootDir", { ...original, cache: { ...original.cache, rootDir: 1 as never } }],
+    ["cache.downloadTarget", { ...original, cache: { ...original.cache, downloadTarget: 1 as never } }],
+    ["cache.decryptEnabled", { ...original, cache: { ...original.cache, decryptEnabled: "yes" as never } }],
+    ["cache.autoDownload", { ...original, cache: { ...original.cache, autoDownload: "yes" as never } }],
+  ];
+
+  for (const [field, invalid] of invalidCases) {
+    await assert.rejects(() => store.save(invalid), new RegExp(field.replace(/[.[\]]/g, "\\$&")));
+    await assert.rejects(() => store.exportLegacy(invalid, directory), new RegExp(field.replace(/[.[\]]/g, "\\$&")));
+  }
 });
 
 test("ConfigStore validates server and forwarding target ports before save or legacy export", async () => {

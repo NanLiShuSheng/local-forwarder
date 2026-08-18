@@ -1,4 +1,4 @@
-import type { AppConfig, ForwardRule } from "./contracts";
+import type { AppConfig } from "./contracts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -17,10 +17,6 @@ function hasOnlyKeys(
   );
 }
 
-function isStringRecord(value: unknown): value is Record<string, string> {
-  return isRecord(value) && Object.values(value).every((entry) => typeof entry === "string");
-}
-
 function isLegacyData(value: unknown): boolean {
   return (
     isRecord(value) &&
@@ -30,88 +26,91 @@ function isLegacyData(value: unknown): boolean {
   );
 }
 
-function isForwardRule(value: unknown): value is ForwardRule {
-  if (!isRecord(value) || !hasOnlyKeys(value, ["id", "name", "match", "target", "enabled"], ["rewrite"])) {
-    return false;
+function invalidHttpTargetField(target: string, field: string): string | undefined {
+  if (target.length === 0) return field;
+  if (!/^https?:\/\//i.test(target)) return undefined;
+  try {
+    new URL(target);
+  } catch {
+    return `${field}.port`;
   }
-  return (
-    typeof value.id === "string" &&
-    typeof value.name === "string" &&
-    typeof value.match === "string" &&
-    typeof value.target === "string" &&
-    typeof value.enabled === "boolean" &&
-    (value.rewrite === undefined || typeof value.rewrite === "string")
-  );
+  return undefined;
 }
 
-function isTcpTarget(value: unknown): boolean {
-  if (!isRecord(value) || !hasOnlyKeys(value, ["id", "name", "host", "port", "enabled"])) {
-    return false;
+export function getAppConfigValidationError(value: unknown): string | undefined {
+  if (!isRecord(value)) return "root";
+  if (!hasOnlyKeys(value, [
+    "server",
+    "httpRules",
+    "tcpTargets",
+    "localValues",
+    "mapValues",
+    "accounts",
+    "cache",
+  ], ["legacy"])) return "root";
+
+  const server = value.server;
+  if (!isRecord(server)) return "server";
+  if (!hasOnlyKeys(server, ["bindHost", "port", "timeoutMs", "loggingEnabled"])) return "server";
+  if (typeof server.bindHost !== "string" || server.bindHost.length === 0) return "server.bindHost";
+  if (typeof server.port !== "number" || !Number.isInteger(server.port) || server.port < 1 || server.port > 65535) return "server.port";
+  if (typeof server.timeoutMs !== "number" || !Number.isInteger(server.timeoutMs) || server.timeoutMs < 0) return "server.timeoutMs";
+  if (typeof server.loggingEnabled !== "boolean") return "server.loggingEnabled";
+
+  if (!Array.isArray(value.httpRules)) return "httpRules";
+  for (const [index, rule] of value.httpRules.entries()) {
+    const prefix = `httpRules[${index}]`;
+    if (!isRecord(rule)) return prefix;
+    if (!hasOnlyKeys(rule, ["id", "name", "match", "target", "enabled"], ["rewrite"])) return prefix;
+    if (typeof rule.id !== "string" || rule.id.length === 0) return `${prefix}.id`;
+    if (typeof rule.name !== "string" || rule.name.length === 0) return `${prefix}.name`;
+    if (typeof rule.match !== "string" || rule.match.length === 0) return `${prefix}.match`;
+    if (typeof rule.target !== "string") return `${prefix}.target`;
+    const targetError = invalidHttpTargetField(rule.target, `${prefix}.target`);
+    if (targetError !== undefined) return targetError;
+    if (rule.rewrite !== undefined && typeof rule.rewrite !== "string") return `${prefix}.rewrite`;
+    if (typeof rule.enabled !== "boolean") return `${prefix}.enabled`;
   }
-  const port = value.port;
-  return (
-    typeof value.id === "string" &&
-    typeof value.name === "string" &&
-    typeof value.host === "string" &&
-    typeof port === "number" &&
-    Number.isInteger(port) &&
-    port >= 1 &&
-    port <= 65535 &&
-    typeof value.enabled === "boolean"
-  );
+
+  if (!Array.isArray(value.tcpTargets)) return "tcpTargets";
+  for (const [index, target] of value.tcpTargets.entries()) {
+    const prefix = `tcpTargets[${index}]`;
+    if (!isRecord(target)) return prefix;
+    if (!hasOnlyKeys(target, ["id", "name", "host", "port", "enabled"])) return prefix;
+    if (typeof target.id !== "string" || target.id.length === 0) return `${prefix}.id`;
+    if (typeof target.name !== "string" || target.name.length === 0) return `${prefix}.name`;
+    if (typeof target.host !== "string" || target.host.length === 0) return `${prefix}.host`;
+    if (typeof target.port !== "number" || !Number.isInteger(target.port) || target.port < 1 || target.port > 65535) return `${prefix}.port`;
+    if (typeof target.enabled !== "boolean") return `${prefix}.enabled`;
+  }
+
+  if (!isRecord(value.localValues)) return "localValues";
+  for (const [key, entry] of Object.entries(value.localValues)) {
+    if (typeof entry !== "string") return `localValues.${key}`;
+  }
+  if (!isRecord(value.mapValues)) return "mapValues";
+  for (const [key, entry] of Object.entries(value.mapValues)) {
+    if (typeof entry !== "string") return `mapValues.${key}`;
+  }
+  if (!isRecord(value.accounts)) return "accounts";
+  for (const [account, fields] of Object.entries(value.accounts)) {
+    if (!isRecord(fields)) return `accounts.${account}`;
+    for (const [key, entry] of Object.entries(fields)) {
+      if (typeof entry !== "string") return `accounts.${account}.${key}`;
+    }
+  }
+
+  const cache = value.cache;
+  if (!isRecord(cache)) return "cache";
+  if (!hasOnlyKeys(cache, ["rootDir", "downloadTarget", "decryptEnabled", "autoDownload"])) return "cache";
+  if (typeof cache.rootDir !== "string") return "cache.rootDir";
+  if (typeof cache.downloadTarget !== "string") return "cache.downloadTarget";
+  if (typeof cache.decryptEnabled !== "boolean") return "cache.decryptEnabled";
+  if (typeof cache.autoDownload !== "boolean") return "cache.autoDownload";
+  if (value.legacy !== undefined && !isLegacyData(value.legacy)) return "legacy";
+  return undefined;
 }
 
 export function isValidAppConfig(value: unknown): value is AppConfig {
-  if (
-    !isRecord(value) ||
-    !hasOnlyKeys(value, [
-      "server",
-      "httpRules",
-      "tcpTargets",
-      "localValues",
-      "mapValues",
-      "accounts",
-      "cache",
-    ], ["legacy"])
-  ) {
-    return false;
-  }
-
-  const server = value.server;
-  const cache = value.cache;
-  const serverPort = isRecord(server) ? server.port : undefined;
-  const timeoutMs = isRecord(server) ? server.timeoutMs : undefined;
-  if (
-    !isRecord(server) ||
-    !hasOnlyKeys(server, ["bindHost", "port", "timeoutMs", "loggingEnabled"]) ||
-    typeof server.bindHost !== "string" ||
-    typeof serverPort !== "number" ||
-    !Number.isInteger(serverPort) ||
-    serverPort < 1 ||
-    serverPort > 65535 ||
-    typeof timeoutMs !== "number" ||
-    !Number.isInteger(timeoutMs) ||
-    timeoutMs < 0 ||
-    typeof server.loggingEnabled !== "boolean"
-  ) {
-    return false;
-  }
-
-  return (
-    Array.isArray(value.httpRules) &&
-    value.httpRules.every(isForwardRule) &&
-    Array.isArray(value.tcpTargets) &&
-    value.tcpTargets.every(isTcpTarget) &&
-    isStringRecord(value.localValues) &&
-    isStringRecord(value.mapValues) &&
-    isRecord(value.accounts) &&
-    Object.values(value.accounts).every(isStringRecord) &&
-    isRecord(cache) &&
-    hasOnlyKeys(cache, ["rootDir", "downloadTarget", "decryptEnabled", "autoDownload"]) &&
-    typeof cache.rootDir === "string" &&
-    typeof cache.downloadTarget === "string" &&
-    typeof cache.decryptEnabled === "boolean" &&
-    typeof cache.autoDownload === "boolean" &&
-    (value.legacy === undefined || isLegacyData(value.legacy))
-  );
+  return getAppConfigValidationError(value) === undefined;
 }

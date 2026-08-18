@@ -54,6 +54,18 @@ test("converts reqxml http targets to numeric tcp targets and other entries to h
   assert.equal(config.httpRules[0].target, "http://health.example.test/check");
 });
 
+test("converts reqxml targets with protocol default ports to tcp targets", () => {
+  const httpConfig = parseLegacyConfigJs(`module.exports = { conifg: { "/reqxml": { target: "http://127.0.0.1:80" } } }`);
+  const httpsConfig = parseLegacyConfigJs(`module.exports = { conifg: { "/reqxml": { target: "https://127.0.0.1:443" } } }`);
+
+  assert.deepEqual(httpConfig.tcpTargets.map(({ host, port }) => ({ host, port })), [
+    { host: "127.0.0.1", port: 80 },
+  ]);
+  assert.deepEqual(httpsConfig.tcpTargets.map(({ host, port }) => ({ host, port })), [
+    { host: "127.0.0.1", port: 443 },
+  ]);
+});
+
 test("rejects invalid ports with the source filename and field name", () => {
   assert.throws(
     () => parseLegacyJson('{ "server": { "port": "not-a-port" } }', "config.json"),

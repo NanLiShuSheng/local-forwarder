@@ -201,19 +201,20 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
     const target = valueOf(rule, "target");
     if (typeof target !== "string") throw new ConfigParseError(filename, `conifg.${match}.target`, "expected a string");
     if (isRecord(entry)) preserveUnknown(config, entry, ["target"], `conifg.${match}`);
-    if (match.toLowerCase() === "/reqxml" && target.startsWith("http://")) {
+    if (match.toLowerCase() === "/reqxml" && /^https?:\/\//i.test(target)) {
       let url: URL;
       try {
         url = new URL(target);
       } catch (error) {
         throw new ConfigParseError(filename, `conifg.${match}.target`, "invalid URL", error);
       }
-      if (url.protocol === "http:" && url.port !== "") {
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        const port = url.port === "" ? (url.protocol === "http:" ? 80 : 443) : Number(url.port);
         tcpTargets.push({
           id: `tcp-${tcpTargets.length + 1}`,
           name: match,
           host: url.hostname,
-          port: parsePort(Number(url.port), filename, `conifg.${match}.target.port`),
+          port: parsePort(port, filename, `conifg.${match}.target.port`),
           enabled: true,
         });
         continue;
@@ -247,7 +248,6 @@ function applyRawObject(config: InternalConfig, raw: UnknownRecord, filename: st
   applyAccounts(config, raw, filename);
   applyStringRecord(config.localValues, valueOf(raw, "localvalues") ?? valueOf(raw, "local"), filename, "localValues", true);
   applyStringRecord(config.mapValues, valueOf(raw, "mapvalues") ?? valueOf(raw, "map"), filename, "mapValues", true);
-  applyAccounts(config, raw, filename);
   applyCanonicalRules(config, raw, filename);
   applyLegacyConifg(config, raw, filename);
 
