@@ -1,11 +1,11 @@
 import { app, BrowserWindow, ipcMain } from "electron";
-import path from "node:path";
 import {
   IPC_CHANNELS,
   type AppConfig,
   type LogEntry,
   type RuntimeStatus,
 } from "../src/shared/contracts";
+import { getPreloadPath, getRendererIndexPath } from "./paths";
 
 const stoppedStatus: RuntimeStatus = {
   state: "stopped",
@@ -53,12 +53,12 @@ function createWindow(): void {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: path.join(__dirname, "preload.js"),
+      preload: getPreloadPath(__dirname),
     },
   });
 
   if (app.isPackaged) {
-    void window.loadFile(path.join(__dirname, "../dist/index.html"));
+    void window.loadFile(getRendererIndexPath(__dirname));
   } else {
     void window.loadURL(process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5173");
   }

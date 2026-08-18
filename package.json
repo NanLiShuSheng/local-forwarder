@@ -4,8 +4,9 @@
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "concurrently -k \"vite --config vite.config.ts\" \"wait-on http://localhost:5173 && electron .\"",
-    "build": "tsc -p tsconfig.node.json && node scripts/flatten-electron.mjs && vite build",
+    "dev": "concurrently -k \"vite --config vite.config.ts\" \"npm run build:electron && wait-on http://localhost:5173 && electron .\"",
+    "build:electron": "tsc -p tsconfig.node.json && node scripts/flatten-electron.mjs",
+    "build": "npm run build:electron && vite build",
     "test": "tsx --test test/**/*.test.ts",
     "package:x64": "npm run build && electron-builder --mac dmg --x64",
     "smoke": "node scripts/smoke-electron.mjs"
