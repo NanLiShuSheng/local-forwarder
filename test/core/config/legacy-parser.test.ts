@@ -16,11 +16,15 @@ test("imports legacy config and normalizes keys case-insensitively", async () =>
 
   assert.equal(config.server.port, 83);
   assert.equal(config.localValues.TOKEN, "fixture-token");
+  assert.equal(config.mapValues.FIXTURE_KEY, "fixture-value");
   assert.equal(config.httpRules[0].match, "/qdymanage");
   assert.equal(config.tcpTargets[0].host, "127.0.0.1");
   assert.equal(config.tcpTargets[0].port, 9100);
   assert.equal(config.accounts.ptjy.password, "fixture-password");
   assert.equal(config.legacy.extra.unknownfixturefield, "preserve-me");
+  assert.equal(config.legacy.extra["server.unknown"], "server-preserved");
+  assert.deepEqual(config.legacy.extra["cache.unknown"], { value: "cache-preserved" });
+  assert.equal(config.legacy.extra["conifg./qdymanage.unknown_rule"], "rule-preserved");
   assert.deepEqual(config.legacy.extra.unknownjsonfield, { preserve: true });
   assert.deepEqual(config.legacy.files["config.json"], {
     server: { port: 83 },

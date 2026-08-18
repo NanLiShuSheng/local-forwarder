@@ -39,10 +39,36 @@ test("ConfigStore imports and exports legacy directories", async () => {
   const store = new ConfigStore(path.join(directory, "internal.json"));
 
   await store.exportLegacy(source, directory);
+  const exportedJs = await readFile(path.join(directory, "config.js"), "utf8");
   const restored = await store.importLegacy(directory);
 
+  assert.match(exportedJs, /\"local\"/);
+  assert.match(exportedJs, /\"map\"/);
+  assert.match(exportedJs, /\"account\"/);
+  assert.doesNotMatch(exportedJs, /\"localValues\"|\"mapValues\"|\"accounts\"/);
+  assert.equal(restored.localValues.TOKEN, source.localValues.TOKEN);
+  assert.equal(restored.mapValues.FIXTURE_KEY, source.mapValues.FIXTURE_KEY);
+  assert.deepEqual(restored.accounts, source.accounts);
   assert.deepEqual(restored.httpRules, source.httpRules);
   assert.equal(restored.server.port, source.server.port);
+});
+
+test("ConfigStore validates server and forwarding target ports before save or legacy export", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-validation-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const original = await importLegacyConfig("test/fixtures/legacy");
+
+  await assert.rejects(
+    () => store.save({ ...original, server: { ...original.server, port: 0 } }),
+    /server\.port/i,
+  );
+  await assert.rejects(
+    () => store.exportLegacy({
+      ...original,
+      httpRules: [{ ...original.httpRules[0], target: "http://fixture.example.test:70000/path" }],
+    }, directory),
+    /httpRules\[0\]\.target(?:\.port)?/i,
+  );
 });
 
 test("ConfigStore load reports invalid internal JSON with filename and field", async () => {

@@ -88,6 +88,7 @@ function applyServer(config: InternalConfig, raw: UnknownRecord, filename: strin
   if (loggingEnabled !== undefined) {
     config.server.loggingEnabled = parseBoolean(loggingEnabled, filename, "server.loggingEnabled");
   }
+  preserveUnknown(config, server, ["bindhost", "port", "timeoutms", "loggingenabled"], "server");
 }
 
 function applyCache(config: InternalConfig, raw: UnknownRecord, filename: string): void {
@@ -105,6 +106,7 @@ function applyCache(config: InternalConfig, raw: UnknownRecord, filename: string
   const autoDownload = valueOf(cache, "autodownload");
   if (decryptEnabled !== undefined) config.cache.decryptEnabled = parseBoolean(decryptEnabled, filename, "cache.decryptEnabled");
   if (autoDownload !== undefined) config.cache.autoDownload = parseBoolean(autoDownload, filename, "cache.autoDownload");
+  preserveUnknown(config, cache, ["rootdir", "downloadtarget", "decryptenabled", "autodownload"], "cache");
 }
 
 function applyStringRecord(
@@ -123,7 +125,7 @@ function applyStringRecord(
 }
 
 function applyAccounts(config: InternalConfig, raw: UnknownRecord, filename: string): void {
-  const value = valueOf(raw, "accounts");
+  const value = valueOf(raw, "accounts") ?? valueOf(raw, "account");
   if (value === undefined) return;
   if (!isRecord(value)) throw new ConfigParseError(filename, "accounts", "expected an object");
   for (const [accountName, accountValue] of Object.entries(value)) {
@@ -161,7 +163,11 @@ function applyCanonicalRules(config: InternalConfig, raw: UnknownRecord, filenam
   const httpRules = valueOf(raw, "httprules");
   if (httpRules !== undefined) {
     if (!Array.isArray(httpRules)) throw new ConfigParseError(filename, "httpRules", "expected an array");
-    config.httpRules = httpRules.map((rule, index) => asRule(rule, index, filename));
+    config.httpRules = httpRules.map((rule, index) => {
+      const normalized = asRule(rule, index, filename);
+      if (isRecord(rule)) preserveUnknown(config, rule, ["id", "name", "match", "target", "rewrite", "enabled"], `httpRules[${index}]`);
+      return normalized;
+    });
   }
   const tcpTargets = valueOf(raw, "tcptargets");
   if (tcpTargets !== undefined) {
@@ -172,6 +178,7 @@ function applyCanonicalRules(config: InternalConfig, raw: UnknownRecord, filenam
       const port = valueOf(value, "port");
       if (typeof host !== "string") throw new ConfigParseError(filename, `tcpTargets[${index}].host`, "expected a string");
       const parsedPort = parsePort(port, filename, `tcpTargets[${index}].port`);
+      if (isRecord(value)) preserveUnknown(config, value, ["id", "name", "host", "port", "enabled"], `tcpTargets[${index}]`);
       return {
         id: typeof valueOf(value, "id") === "string" ? valueOf(value, "id") as string : `tcp-${index + 1}`,
         name: typeof valueOf(value, "name") === "string" ? valueOf(value, "name") as string : host,
@@ -193,6 +200,7 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
     const rule = isRecord(entry) ? entry : { target: entry };
     const target = valueOf(rule, "target");
     if (typeof target !== "string") throw new ConfigParseError(filename, `conifg.${match}.target`, "expected a string");
+    if (isRecord(entry)) preserveUnknown(config, entry, ["target"], `conifg.${match}`);
     if (match.toLowerCase() === "/reqxml" && target.startsWith("http://")) {
       let url: URL;
       try {
@@ -217,16 +225,33 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
   config.tcpTargets = tcpTargets;
 }
 
+function preserveUnknown(
+  config: InternalConfig,
+  record: UnknownRecord,
+  knownKeys: readonly string[],
+  prefix: string,
+): void {
+  const known = new Set(knownKeys);
+  for (const [key, value] of Object.entries(record)) {
+    const normalized = keyOf(key);
+    if (!known.has(normalized)) {
+      const cloned = cloneUnknown(value);
+      if (cloned !== undefined) config.legacy.extra[`${prefix}.${normalized}`] = cloned;
+    }
+  }
+}
+
 function applyRawObject(config: InternalConfig, raw: UnknownRecord, filename: string): InternalConfig {
   applyServer(config, raw, filename);
   applyCache(config, raw, filename);
   applyAccounts(config, raw, filename);
-  applyStringRecord(config.localValues, valueOf(raw, "localvalues"), filename, "localValues", true);
-  applyStringRecord(config.mapValues, valueOf(raw, "mapvalues"), filename, "mapValues", true);
+  applyStringRecord(config.localValues, valueOf(raw, "localvalues") ?? valueOf(raw, "local"), filename, "localValues", true);
+  applyStringRecord(config.mapValues, valueOf(raw, "mapvalues") ?? valueOf(raw, "map"), filename, "mapValues", true);
+  applyAccounts(config, raw, filename);
   applyCanonicalRules(config, raw, filename);
   applyLegacyConifg(config, raw, filename);
 
-  const known = new Set(["server", "cache", "accounts", "localvalues", "mapvalues", "httprules", "tcptargets", "conifg", "config", "legacy"]);
+  const known = new Set(["server", "cache", "accounts", "account", "localvalues", "local", "mapvalues", "map", "httprules", "tcptargets", "conifg", "config", "legacy"]);
   for (const [key, value] of Object.entries(raw)) {
     const normalized = keyOf(key);
     if (!known.has(normalized)) {
