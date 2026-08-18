@@ -40,6 +40,70 @@ test("parses sysconfig with uppercase keys and last duplicate value", () => {
   assert.deepEqual(parsed, { TOKEN: "new", FLAG: "on" });
 });
 
+test("skips INI section headers while preserving duplicate and dangerous-key handling", () => {
+  const parsed = parseSysConfig("[config]\nTOKEN = old\n[config]\nTOKEN = new\nFlag=on");
+
+  assert.deepEqual(parsed, { TOKEN: "new", FLAG: "on" });
+  assert.throws(() => parseSysConfig("[config", "sysconfig.ini"), /sysconfig\.ini.*line 1/);
+  assert.throws(() => parseSysConfig("[__proto__]", "sysconfig.ini"), /sysconfig\.ini.*__proto__/i);
+});
+
+test("normalizes legacy account scalar values to strings", () => {
+  const config = parseLegacyConfigJs(`module.exports = {
+    ACCOUNT: {
+      mobile: { ReqlinkType: 2, MobileType: false, Label: "safe-fixture" }
+    }
+  }`);
+
+  assert.deepEqual(config.accounts.mobile, {
+    reqlinktype: "2",
+    mobiletype: "false",
+    label: "safe-fixture",
+  });
+});
+
+test("reports the account field path for unsupported scalar values", () => {
+  assert.throws(
+    () => parseLegacyConfigJs("module.exports = { ACCOUNT: { mobile: { ReqlinkType: { nested: true } } } }", "config.js"),
+    /config\.js.*accounts\.mobile\.ReqlinkType.*expected a string, number, or boolean/,
+  );
+});
+
+test("maps root-level legacy service fields into server configuration", () => {
+  const config = parseLegacyConfigJs(`module.exports = {
+    ISLOG: "false",
+    TIMEOUT: 1200,
+    PORT: 9123,
+    BINDHOST: "0.0.0.0"
+  }`);
+
+  assert.deepEqual(config.server, {
+    loggingEnabled: false,
+    timeoutMs: 1200,
+    port: 9123,
+    bindHost: "0.0.0.0",
+  });
+  assert.equal(config.legacy.extra.islog, undefined);
+  assert.equal(config.legacy.extra.timeout, undefined);
+  assert.equal(config.legacy.extra.port, undefined);
+  assert.equal(config.legacy.extra.bindhost, undefined);
+});
+
+test("reports clear paths for invalid root-level service fields", () => {
+  assert.throws(
+    () => parseLegacyConfigJs('module.exports = { ISLOG: "yes" }', "config.js"),
+    /config\.js.*server\.loggingEnabled/,
+  );
+  assert.throws(
+    () => parseLegacyConfigJs("module.exports = { TIMEOUT: -1 }", "config.js"),
+    /config\.js.*server\.timeoutMs/,
+  );
+  assert.throws(
+    () => parseLegacyConfigJs("module.exports = { PORT: 0 }", "config.js"),
+    /config\.js.*server\.port/,
+  );
+});
+
 test("converts reqxml http targets to numeric tcp targets and other entries to http rules", () => {
   const config = parseLegacyConfigJs(`module.exports = {
     conifg: {
@@ -85,6 +149,19 @@ test("converts reqxml targets with protocol default ports to tcp targets", () =>
   assert.deepEqual(httpsConfig.tcpTargets.map(({ host, port }) => ({ host, port })), [
     { host: "127.0.0.1", port: 443 },
   ]);
+});
+
+test("accepts whitespace and matching wrapper quotes around reqxml targets", () => {
+  const target = '  "https://wrapped.example.test:9443"  ';
+  const config = parseLegacyConfigJs(`module.exports = { conifg: { "/reqxml": { target: ${JSON.stringify(target)} } } }`);
+
+  assert.deepEqual(config.tcpTargets.map(({ host, port, protocol }) => ({ host, port, protocol })), [
+    { host: "wrapped.example.test", port: 9443, protocol: "https" },
+  ]);
+  assert.throws(
+    () => parseLegacyConfigJs(`module.exports = { conifg: { "/reqxml": { target: ${JSON.stringify('"ftp://wrapped.example.test:21"')} } } }`),
+    /expected an http or https URL/,
+  );
 });
 
 test("rejects invalid types in canonical HTTP rules and TCP targets", () => {

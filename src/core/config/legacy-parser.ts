@@ -70,6 +70,13 @@ function parseBoolean(value: unknown, filename: string, field: string): boolean 
   throw new ConfigParseError(filename, field, "expected a boolean");
 }
 
+function parseTimeout(value: unknown, filename: string, field: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new ConfigParseError(filename, field, "expected a non-negative integer");
+  }
+  return value;
+}
+
 function cloneUnknown(value: unknown): unknown {
   if (value === undefined || typeof value === "function" || typeof value === "symbol") return undefined;
   if (Array.isArray(value)) return Array.from(value, cloneUnknown);
@@ -174,6 +181,18 @@ function assertJsonStructure(value: unknown, filename: string): void {
 }
 
 function applyServer(config: InternalConfig, raw: UnknownRecord, filename: string): void {
+  const rootBindHost = valueOf(raw, "bindhost");
+  const rootPort = valueOf(raw, "port");
+  const rootTimeout = valueOf(raw, "timeout");
+  const rootIsLog = valueOf(raw, "islog");
+  if (rootBindHost !== undefined) {
+    if (typeof rootBindHost !== "string") throw new ConfigParseError(filename, "server.bindHost", "expected a string");
+    config.server.bindHost = rootBindHost;
+  }
+  if (rootPort !== undefined) config.server.port = parsePort(rootPort, filename, "server.port");
+  if (rootTimeout !== undefined) config.server.timeoutMs = parseTimeout(rootTimeout, filename, "server.timeoutMs");
+  if (rootIsLog !== undefined) config.server.loggingEnabled = parseBoolean(rootIsLog, filename, "server.loggingEnabled");
+
   const serverValue = valueOf(raw, "server");
   if (serverValue === undefined) return;
   const server = requiredRecord(serverValue, filename);
@@ -187,10 +206,7 @@ function applyServer(config: InternalConfig, raw: UnknownRecord, filename: strin
   }
   if (port !== undefined) config.server.port = parsePort(port, filename, "server.port");
   if (timeoutMs !== undefined) {
-    if (typeof timeoutMs !== "number" || !Number.isInteger(timeoutMs) || timeoutMs < 0) {
-      throw new ConfigParseError(filename, "server.timeoutMs", "expected a non-negative integer");
-    }
-    config.server.timeoutMs = timeoutMs;
+    config.server.timeoutMs = parseTimeout(timeoutMs, filename, "server.timeoutMs");
   }
   if (loggingEnabled !== undefined) {
     config.server.loggingEnabled = parseBoolean(loggingEnabled, filename, "server.loggingEnabled");
@@ -231,6 +247,13 @@ function applyStringRecord(
   }
 }
 
+function normalizeAccountValue(value: unknown, filename: string, field: string): string {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  throw new ConfigParseError(filename, field, "expected a string, number, or boolean");
+}
+
 function applyAccounts(config: InternalConfig, raw: UnknownRecord, filename: string): void {
   const value = valueOf(raw, "accounts") ?? valueOf(raw, "account");
   if (value === undefined) return;
@@ -239,8 +262,7 @@ function applyAccounts(config: InternalConfig, raw: UnknownRecord, filename: str
     if (!isRecord(accountValue)) throw new ConfigParseError(filename, `accounts.${accountName}`, "expected an object");
     const account: Record<string, string> = config.accounts[accountName.toLowerCase()] ?? {};
     for (const [field, entry] of Object.entries(accountValue)) {
-      if (typeof entry !== "string") throw new ConfigParseError(filename, `accounts.${accountName}.${field}`, "expected a string");
-      account[field.toLowerCase()] = entry;
+      account[field.toLowerCase()] = normalizeAccountValue(entry, filename, `accounts.${accountName}.${field}`);
     }
     config.accounts[accountName.toLowerCase()] = account;
   }
@@ -327,9 +349,10 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
       for (const [index, item] of targetItems.entries()) {
         const field = Array.isArray(target) ? `conifg.${match}.target[${index}]` : `conifg.${match}.target`;
         if (typeof item !== "string") throw new ConfigParseError(filename, field, "expected a string");
+        const normalizedItem = normalizeWrappedUrl(item);
         let url: URL;
         try {
-          url = new URL(item);
+          url = new URL(normalizedItem);
         } catch (error) {
           throw new ConfigParseError(filename, field, "invalid URL", error);
         }
@@ -382,6 +405,18 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
   config.tcpTargets = tcpTargets;
 }
 
+function normalizeWrappedUrl(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length >= 2) {
+    const first = trimmed[0];
+    const last = trimmed[trimmed.length - 1];
+    if ((first === '"' || first === "'") && first === last) {
+      return trimmed.slice(1, -1).trim();
+    }
+  }
+  return trimmed;
+}
+
 function preserveUnknown(
   config: InternalConfig,
   record: UnknownRecord,
@@ -407,7 +442,7 @@ function applyRawObject(config: InternalConfig, raw: UnknownRecord, filename: st
   applyCanonicalRules(config, raw, filename);
   applyLegacyConifg(config, raw, filename);
 
-  const known = new Set(["server", "cache", "accounts", "account", "localvalues", "local", "mapvalues", "map", "httprules", "tcptargets", "conifg", "config", "legacy"]);
+  const known = new Set(["server", "cache", "accounts", "account", "localvalues", "local", "mapvalues", "map", "httprules", "tcptargets", "conifg", "config", "legacy", "islog", "timeout", "port", "bindhost"]);
   for (const [key, value] of Object.entries(raw)) {
     const normalized = keyOf(key);
     if (!known.has(normalized)) {
@@ -439,6 +474,13 @@ export function parseSysConfig(text: string, filename = "sysconfig.ini"): Record
   for (const [index, line] of text.split(/\r?\n/).entries()) {
     const uncommented = line.split(/[;#]/, 1)[0].trim();
     if (uncommented === "") continue;
+    const section = /^\[([^\[\]]+)\]$/.exec(uncommented);
+    if (section !== null) {
+      const sectionName = section[1].trim();
+      if (sectionName === "") throw new ConfigParseError(filename, `line ${index + 1}`, "section name cannot be empty");
+      if (isDangerousKey(sectionName)) throw new ConfigParseError(filename, sectionName, "dangerous key is not allowed");
+      continue;
+    }
     const separator = uncommented.indexOf("=");
     if (separator < 0) throw new ConfigParseError(filename, `line ${index + 1}`, "expected key=value");
     const key = uncommented.slice(0, separator).trim();
@@ -629,9 +671,7 @@ function applySysConfig(config: InternalConfig, values: Record<string, string>, 
     } else if (key === "BINDHOST" || key === "SERVER_BINDHOST") {
       config.server.bindHost = value;
     } else if (key === "TIMEOUTMS" || key === "SERVER_TIMEOUTMS") {
-      const timeoutMs = Number(value);
-      if (!Number.isInteger(timeoutMs) || timeoutMs < 0) throw new ConfigParseError(filename, "server.timeoutMs", "expected a non-negative integer");
-      config.server.timeoutMs = timeoutMs;
+      config.server.timeoutMs = parseTimeout(Number(value), filename, "server.timeoutMs");
     } else if (key === "LOGGINGENABLED" || key === "SERVER_LOGGINGENABLED") {
       config.server.loggingEnabled = parseBoolean(value, filename, "server.loggingEnabled");
     } else {
