@@ -54,6 +54,26 @@ test("converts reqxml http targets to numeric tcp targets and other entries to h
   assert.equal(config.httpRules[0].target, "http://health.example.test/check");
 });
 
+test("converts a reqxml target string array into tcp targets", () => {
+  const config = parseLegacyConfigJs(`module.exports = {
+    conifg: {
+      "/reqxml": { target: ["http://one.example.test:8001", "https://two.example.test:8443"] }
+    }
+  }`);
+
+  assert.deepEqual(config.tcpTargets.map(({ host, port, protocol, id, name, enabled }) => ({ host, port, protocol, id, name, enabled })), [
+    { host: "one.example.test", port: 8001, protocol: "http", id: "tcp-1", name: "/reqxml", enabled: true },
+    { host: "two.example.test", port: 8443, protocol: "https", id: "tcp-2", name: "/reqxml", enabled: true },
+  ]);
+});
+
+test("reports the index of an invalid reqxml target array item", () => {
+  assert.throws(
+    () => parseLegacyConfigJs(`module.exports = { conifg: { "/reqxml": { target: ["http://one.example.test:8001", "not-a-url"] } } }`),
+    /conifg.*\/reqxml.*target\[1\]/,
+  );
+});
+
 test("converts reqxml targets with protocol default ports to tcp targets", () => {
   const httpConfig = parseLegacyConfigJs(`module.exports = { conifg: { "/reqxml": { target: "http://127.0.0.1:80" } } }`);
   const httpsConfig = parseLegacyConfigJs(`module.exports = { conifg: { "/reqxml": { target: "https://127.0.0.1:443" } } }`);

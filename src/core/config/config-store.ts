@@ -97,8 +97,9 @@ export function parseInternalJson(text: string, filename = "internal.json"): Int
 
 function legacyExportObject(config: InternalConfig): Record<string, unknown> {
   const conifg: Record<string, unknown> = {};
-  for (const target of config.tcpTargets) {
-    conifg["/reqxml"] = { target: `${target.protocol ?? "http"}://${target.host}:${target.port}` };
+  const reqxmlTargets = config.tcpTargets.map((target) => `${target.protocol ?? "http"}://${target.host}:${target.port}`);
+  if (reqxmlTargets.length > 0) {
+    conifg["/reqxml"] = { target: reqxmlTargets.length === 1 ? reqxmlTargets[0] : reqxmlTargets };
   }
   for (const rule of config.httpRules) {
     conifg[rule.match] = {
@@ -112,6 +113,7 @@ function legacyExportObject(config: InternalConfig): Record<string, unknown> {
     map: config.mapValues,
     account: config.accounts,
     conifg,
+    tcpTargets: config.tcpTargets,
     cache: { ...config.cache },
   };
   addLegacyExtras(output, config, conifg);

@@ -91,6 +91,26 @@ test("ConfigStore export preserves HTTPS protocol for TCP targets", async () => 
   assert.match(await readFile(path.join(directory, "config.js"), "utf8"), /https:\/\/secure\.example\.test:9443/);
 });
 
+test("ConfigStore preserves all edited TCP target metadata through legacy array export", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-multi-target-"));
+  const source = await importLegacyConfig("test/fixtures/legacy");
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const edited = {
+    ...source,
+    tcpTargets: [
+      { ...source.tcpTargets[0], id: "first", name: "primary", enabled: false, protocol: "http" as const },
+      { ...source.tcpTargets[0], id: "second", name: "secure", enabled: true, protocol: "https" as const, host: "secure.example.test", port: 9443 },
+    ],
+  };
+
+  await store.exportLegacy(edited, directory);
+  const exportedJs = await readFile(path.join(directory, "config.js"), "utf8");
+  const restored = await store.importLegacy(directory);
+
+  assert.match(exportedJs, /"target": \[/);
+  assert.deepEqual(restored.tcpTargets, edited.tcpTargets);
+});
+
 test("ConfigStore reports field-level validation paths for every config section", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-field-validation-"));
   const store = new ConfigStore(path.join(directory, "internal.json"));

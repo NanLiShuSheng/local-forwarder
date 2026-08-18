@@ -209,31 +209,39 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
   if (!isRecord(value)) throw new ConfigParseError(filename, "conifg", "expected an object");
   const httpRules: ForwardRule[] = [];
   const tcpTargets: InternalConfig["tcpTargets"] = [];
+  const existingTcpTargets = config.tcpTargets;
   for (const [match, entry] of Object.entries(value)) {
     const rule = isRecord(entry) ? entry : { target: entry };
-    const target = valueOf(rule, "target");
-    if (typeof target !== "string") throw new ConfigParseError(filename, `conifg.${match}.target`, "expected a string");
     if (isRecord(entry)) preserveUnknown(config, entry, ["target"], `conifg.${match}`);
-    if (match.toLowerCase() === "/reqxml" && /^https?:\/\//i.test(target)) {
-      let url: URL;
-      try {
-        url = new URL(target);
-      } catch (error) {
-        throw new ConfigParseError(filename, `conifg.${match}.target`, "invalid URL", error);
-      }
-      if (url.protocol === "http:" || url.protocol === "https:") {
+    const target = valueOf(rule, "target");
+    if (match.toLowerCase() === "/reqxml") {
+      const targetItems = Array.isArray(target) ? target : [target];
+      for (const [index, item] of targetItems.entries()) {
+        const field = Array.isArray(target) ? `conifg.${match}.target[${index}]` : `conifg.${match}.target`;
+        if (typeof item !== "string") throw new ConfigParseError(filename, field, "expected a string");
+        let url: URL;
+        try {
+          url = new URL(item);
+        } catch (error) {
+          throw new ConfigParseError(filename, field, "invalid URL", error);
+        }
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+          throw new ConfigParseError(filename, field, "expected an http or https URL");
+        }
         const port = url.port === "" ? (url.protocol === "http:" ? 80 : 443) : Number(url.port);
+        const metadata = existingTcpTargets[tcpTargets.length];
         tcpTargets.push({
-          id: `tcp-${tcpTargets.length + 1}`,
-          name: match,
+          id: metadata?.id ?? `tcp-${tcpTargets.length + 1}`,
+          name: metadata?.name ?? match,
           host: url.hostname,
-          port: parsePort(port, filename, `conifg.${match}.target.port`),
+          port: parsePort(port, filename, `${field}.port`),
           protocol: url.protocol === "https:" ? "https" : "http",
-          enabled: true,
+          enabled: metadata?.enabled ?? true,
         });
-        continue;
       }
+      continue;
     }
+    if (typeof target !== "string") throw new ConfigParseError(filename, `conifg.${match}.target`, "expected a string");
     httpRules.push({ id: `http-${httpRules.length + 1}`, name: match, match, target, enabled: true });
   }
   config.httpRules = httpRules;
