@@ -157,6 +157,15 @@ test("reports camel-case cache field paths", () => {
   );
 });
 
+test("rejects excessively deep or large legacy JSON structures", () => {
+  let deep: unknown = "leaf";
+  for (let index = 0; index < 70; index += 1) deep = { child: deep };
+  assert.throws(() => parseLegacyJson(JSON.stringify(deep), "config.json"), /config\.json/);
+
+  const manyFields = Object.fromEntries(Array.from({ length: 10_001 }, (_, index) => [`field${index}`, index]));
+  assert.throws(() => parseLegacyJson(JSON.stringify(manyFields), "config.json"), /config\.json/);
+});
+
 test("rejects invalid ports with the source filename and field name", () => {
   assert.throws(
     () => parseLegacyJson('{ "server": { "port": "not-a-port" } }', "config.json"),

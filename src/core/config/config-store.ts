@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getAppConfigValidationError } from "../../shared/validation";
 import { createDefaultConfig, type InternalConfig } from "./model";
@@ -152,6 +152,14 @@ export class ConfigStore {
       await rename(temporaryPath, this.filePath);
     } catch (error) {
       throw new ConfigParseError(path.basename(this.filePath), "file", "could not save internal config", error);
+    } finally {
+      try {
+        await unlink(temporaryPath);
+      } catch (cleanupError) {
+        if ((cleanupError as NodeJS.ErrnoException).code !== "ENOENT") {
+          // Do not hide the original write/rename result with a cleanup error.
+        }
+      }
     }
   }
 

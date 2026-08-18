@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
 import type { ForwardRule } from "../../shared/contracts";
@@ -6,6 +6,9 @@ import { createDefaultConfig, type InternalConfig } from "./model";
 
 type UnknownRecord = Record<string, unknown>;
 const VM_TIMEOUT_MS = 500;
+const MAX_LEGACY_INPUT_BYTES = 1_048_576;
+const MAX_LEGACY_DEPTH = 64;
+const MAX_LEGACY_NODES = 10_000;
 const MAX_SERIALIZED_CONFIG_BYTES = 1_000_000;
 
 export class ConfigParseError extends Error {
@@ -66,6 +69,33 @@ function cloneUnknown(value: unknown): unknown {
     return output;
   }
   return value;
+}
+
+function assertInputSize(text: string, filename: string): void {
+  if (Buffer.byteLength(text, "utf8") > MAX_LEGACY_INPUT_BYTES) {
+    throw new ConfigParseError(filename, "file", "input is too large");
+  }
+}
+
+function assertJsonStructure(value: unknown, filename: string): void {
+  const pending: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+  let nodes = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) continue;
+    nodes += 1;
+    if (nodes > MAX_LEGACY_NODES) {
+      throw new ConfigParseError(filename, "root", "structure exceeds maximum node count");
+    }
+    if (current.depth > MAX_LEGACY_DEPTH) {
+      throw new ConfigParseError(filename, "root", "structure exceeds maximum depth");
+    }
+    if (Array.isArray(current.value)) {
+      for (const child of current.value) pending.push({ value: child, depth: current.depth + 1 });
+    } else if (isRecord(current.value)) {
+      for (const child of Object.values(current.value)) pending.push({ value: child, depth: current.depth + 1 });
+    }
+  }
 }
 
 function applyServer(config: InternalConfig, raw: UnknownRecord, filename: string): void {
@@ -306,13 +336,23 @@ function applyRawObject(config: InternalConfig, raw: UnknownRecord, filename: st
 }
 
 function fromRaw(raw: unknown, filename: string): InternalConfig {
+  assertJsonStructure(raw, filename);
   const config = applyRawObject(createDefaultConfig(), requiredRecord(raw, filename), filename);
+  const matches = new Set<string>();
+  for (const [index, rule] of config.httpRules.entries()) {
+    if (matches.has(rule.match)) {
+      throw new ConfigParseError(filename, `httpRules[${index}].match`, "duplicate HTTP rule match");
+    }
+    matches.add(rule.match);
+  }
   config.legacy.files[filename] = cloneUnknown(raw);
   return config;
 }
 
 export function parseSysConfig(text: string, filename = "sysconfig.ini"): Record<string, string> {
+  assertInputSize(text, filename);
   const result: Record<string, string> = {};
+  let entries = 0;
   for (const [index, line] of text.split(/\r?\n/).entries()) {
     const uncommented = line.split(/[;#]/, 1)[0].trim();
     if (uncommented === "") continue;
@@ -320,12 +360,17 @@ export function parseSysConfig(text: string, filename = "sysconfig.ini"): Record
     if (separator < 0) throw new ConfigParseError(filename, `line ${index + 1}`, "expected key=value");
     const key = uncommented.slice(0, separator).trim();
     if (key === "") throw new ConfigParseError(filename, `line ${index + 1}`, "key cannot be empty");
+    entries += 1;
+    if (entries > MAX_LEGACY_NODES) {
+      throw new ConfigParseError(filename, `line ${index + 1}`, "input exceeds maximum entry count");
+    }
     result[key.toUpperCase()] = uncommented.slice(separator + 1).trim();
   }
   return result;
 }
 
 export function parseLegacyJson(text: string, filename = "config.json"): InternalConfig {
+  assertInputSize(text, filename);
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -339,6 +384,7 @@ export function parseLegacyConfigJs(text: string, filename = "config.js"): Inter
   if (typeof text !== "string") {
     throw new ConfigParseError(filename, "root", "source must be a string");
   }
+  assertInputSize(text, filename);
   const context = vm.createContext(Object.create(null), {
     codeGeneration: { strings: false, wasm: false },
   });
@@ -387,9 +433,17 @@ function applySysConfig(config: InternalConfig, values: Record<string, string>, 
 }
 
 async function readLegacyFile(directory: string, filename: string): Promise<string> {
+  const filePath = path.join(directory, filename);
   try {
-    return await readFile(path.join(directory, filename), "utf8");
+    const details = await stat(filePath);
+    if (details.size > MAX_LEGACY_INPUT_BYTES) {
+      throw new ConfigParseError(filename, "file", "input is too large");
+    }
+    const text = await readFile(filePath, "utf8");
+    assertInputSize(text, filename);
+    return text;
   } catch (error) {
+    if (error instanceof ConfigParseError) throw error;
     throw new ConfigParseError(filename, "file", "could not read legacy file", error);
   }
 }

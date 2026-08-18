@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { importLegacyConfig, parseLegacyConfigJs } from "../../../src/core/config/legacy-parser";
@@ -31,6 +31,17 @@ test("ConfigStore saves atomically and loads the saved config", async () => {
   assert.deepEqual(await store.load(), original);
   assert.deepEqual(await readdir(directory), ["internal.json"]);
   assert.doesNotMatch(await readFile(filePath, "utf8"), /real-token|real-phone|real-account/);
+});
+
+test("ConfigStore.save removes the temporary file when rename fails", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-save-failure-"));
+  const targetPath = path.join(directory, "internal.json");
+  await mkdir(targetPath);
+  const store = new ConfigStore(targetPath);
+  const original = await importLegacyConfig("test/fixtures/legacy");
+
+  await assert.rejects(() => store.save(original));
+  assert.deepEqual(await readdir(directory), ["internal.json"]);
 });
 
 test("ConfigStore imports and exports legacy directories", async () => {
@@ -231,6 +242,36 @@ test("ConfigStore.importLegacy validates the normalized config with field paths"
     await writeFile(path.join(directory, "sysconfig.ini"), "\n", "utf8");
     await assert.rejects(() => store.importLegacy(directory), new RegExp(field.replace(/[.[\]]/g, "\\$&")));
   }
+});
+
+test("ConfigStore rejects oversized legacy input before parsing", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-large-input-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  await writeFile(path.join(directory, "config.js"), `module.exports = { value: "${"x".repeat(1_048_577)}" };`, "utf8");
+  await writeFile(path.join(directory, "config.json"), "{}\n", "utf8");
+  await writeFile(path.join(directory, "sysconfig.ini"), "\n", "utf8");
+
+  await assert.rejects(() => store.importLegacy(directory), /config\.js/);
+});
+
+test("ConfigStore rejects duplicate HTTP matches during import, save, and export", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-duplicate-match-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const source = await importLegacyConfig("test/fixtures/legacy");
+  const duplicate = {
+    ...source,
+    httpRules: [
+      { ...source.httpRules[0], match: "/duplicate" },
+      { ...source.httpRules[0], id: "second", match: "/duplicate" },
+    ],
+  };
+
+  await assert.rejects(() => store.save(duplicate), /httpRules\[1\]\.match/);
+  await assert.rejects(() => store.exportLegacy(duplicate, directory), /httpRules\[1\]\.match/);
+  await writeFile(path.join(directory, "config.js"), `module.exports = { HTTPRULES: ${JSON.stringify(duplicate.httpRules)} };`, "utf8");
+  await writeFile(path.join(directory, "config.json"), "{}\n", "utf8");
+  await writeFile(path.join(directory, "sysconfig.ini"), "\n", "utf8");
+  await assert.rejects(() => store.importLegacy(directory), /httpRules\[1\]\.match/);
 });
 
 test("ConfigStore load reports invalid internal JSON with filename and field", async () => {

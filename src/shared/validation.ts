@@ -73,6 +73,7 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
   if (typeof server.loggingEnabled !== "boolean") return "server.loggingEnabled";
 
   if (!Array.isArray(value.httpRules)) return "httpRules";
+  const matches = new Set<string>();
   for (const [index, rule] of value.httpRules.entries()) {
     const prefix = `httpRules[${index}]`;
     if (!isRecord(rule)) return prefix;
@@ -80,6 +81,8 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
     if (typeof rule.id !== "string" || rule.id.length === 0) return `${prefix}.id`;
     if (typeof rule.name !== "string" || rule.name.length === 0) return `${prefix}.name`;
     if (typeof rule.match !== "string" || rule.match.length === 0) return `${prefix}.match`;
+    if (matches.has(rule.match)) return `${prefix}.match`;
+    matches.add(rule.match);
     if (typeof rule.target !== "string") return `${prefix}.target`;
     const targetError = invalidHttpTargetField(rule.target, `${prefix}.target`);
     if (targetError !== undefined) return targetError;
