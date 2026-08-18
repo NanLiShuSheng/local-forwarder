@@ -74,6 +74,7 @@ test("parses targets and applies protocol default ports", () => {
 
 test("rejects unsupported protocols, invalid ports, and missing hosts", () => {
   assert.throws(() => parseTarget("ftp://example.test/file"), /unsupported protocol/i);
+  assert.throws(() => parseTarget("constructor://example.test/file"), /unsupported protocol/i);
   assert.throws(() => parseTarget("http://example.test:0/file"), /invalid port/i);
   assert.throws(() => parseTarget("http://example.test:65536/file"), /invalid target|invalid port/i);
   assert.throws(() => parseTarget("http:///file"), /host|invalid target/i);
@@ -137,6 +138,16 @@ test("redacts repeated and encoded sensitive query parameters while preserving o
     redactQuery(url),
     "https://example.test/path?%74oken=***&TOKEN=***&item=keep&mobile=***&item=again#fragment",
   );
+});
+
+test("redacts sensitive query parameters from relative HTTP request paths", () => {
+  assert.equal(redactQuery("/path?token=secret&item=keep"), "/path?token=***&item=keep");
+});
+
+test("does not treat fragment text as a query", () => {
+  assert.equal(redactQuery("#fragment?token=secret"), "#fragment?token=secret");
+  assert.equal(redactQuery("/path#fragment?token=secret"), "/path#fragment?token=secret");
+  assert.equal(redactQuery("https://example.test/path#fragment?token=secret"), "https://example.test/path#fragment?token=secret");
 });
 
 test("returns invalid URLs safely from query redaction", () => {

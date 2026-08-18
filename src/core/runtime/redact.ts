@@ -39,12 +39,12 @@ export function redactQuery(url: string): string {
   try {
     new URL(url);
   } catch {
-    return url;
+    if (!url.startsWith("/")) return url;
   }
 
   const queryStart = url.indexOf("?");
-  if (queryStart < 0) return url;
-  const hashStart = url.indexOf("#", queryStart);
+  const hashStart = url.indexOf("#");
+  if (queryStart < 0 || (hashStart >= 0 && hashStart < queryStart)) return url;
   const queryEnd = hashStart < 0 ? url.length : hashStart;
   const query = url.slice(queryStart + 1, queryEnd);
   const redactedQuery = query.split("&").map((part) => {

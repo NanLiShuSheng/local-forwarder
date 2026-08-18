@@ -59,7 +59,9 @@ export function parseTarget(target: string): ParsedTarget {
   const schemeMatch = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(target);
   if (schemeMatch === null) throw new Error(`Invalid target: missing protocol in ${target}`);
   const protocol = schemeMatch[1].toLowerCase();
-  if (!(protocol in DEFAULT_PORTS)) throw new Error(`Unsupported protocol: ${protocol}`);
+  if (protocol !== "http" && protocol !== "https" && protocol !== "tcp") {
+    throw new Error(`Unsupported protocol: ${protocol}`);
+  }
   const authorityRemainder = target.slice(schemeMatch[0].length);
   if (!authorityRemainder.startsWith("//")) throw new Error(`Invalid target: authority is required in ${target}`);
   if (authorityRemainder.startsWith("///")) throw new Error(`Invalid target: host is required in ${target}`);
