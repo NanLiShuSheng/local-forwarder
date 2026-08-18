@@ -80,6 +80,10 @@ test("rejects invalid types in canonical HTTP rules and TCP targets", () => {
     () => parseLegacyConfigJs(`module.exports = { HTTPRULES: [${JSON.stringify({ ...httpBase, rewrite: 1 })}] }`, "config.js"),
     /httpRules\[0\]\.rewrite/,
   );
+  assert.throws(
+    () => parseLegacyConfigJs(`module.exports = { HTTPRULES: [${JSON.stringify({ ...httpBase, enabled: "true" })}] }`, "config.js"),
+    /httpRules\[0\]\.enabled/,
+  );
 
   const tcpBase = { id: "id", name: "name", host: "fixture.example.test", port: 1, enabled: true };
   assert.throws(
@@ -89,6 +93,10 @@ test("rejects invalid types in canonical HTTP rules and TCP targets", () => {
   assert.throws(
     () => parseLegacyConfigJs(`module.exports = { TCPTARGETS: [${JSON.stringify({ ...tcpBase, name: 1 })}] }`, "config.js"),
     /tcpTargets\[0\]\.name/,
+  );
+  assert.throws(
+    () => parseLegacyConfigJs(`module.exports = { TCPTARGETS: [${JSON.stringify({ ...tcpBase, enabled: "false" })}] }`, "config.js"),
+    /tcpTargets\[0\]\.enabled/,
   );
 });
 

@@ -152,13 +152,14 @@ function asRule(value: unknown, index: number, filename: string): ForwardRule {
   if (id !== undefined && typeof id !== "string") throw new ConfigParseError(filename, `httpRules[${index}].id`, "expected a string");
   if (name !== undefined && typeof name !== "string") throw new ConfigParseError(filename, `httpRules[${index}].name`, "expected a string");
   if (rewrite !== undefined && typeof rewrite !== "string") throw new ConfigParseError(filename, `httpRules[${index}].rewrite`, "expected a string");
+  if (enabled !== undefined && typeof enabled !== "boolean") throw new ConfigParseError(filename, `httpRules[${index}].enabled`, "expected a boolean");
   return {
     id: id === undefined ? `http-${index + 1}` : id,
     name: name === undefined ? match : name,
     match,
     target,
     ...(rewrite === undefined ? {} : { rewrite }),
-    enabled: enabled === undefined ? true : parseBoolean(enabled, filename, `httpRules[${index}].enabled`),
+    enabled: enabled === undefined ? true : enabled,
   };
 }
 
@@ -187,6 +188,8 @@ function applyCanonicalRules(config: InternalConfig, raw: UnknownRecord, filenam
       if (id !== undefined && typeof id !== "string") throw new ConfigParseError(filename, `tcpTargets[${index}].id`, "expected a string");
       if (name !== undefined && typeof name !== "string") throw new ConfigParseError(filename, `tcpTargets[${index}].name`, "expected a string");
       if (protocol !== undefined && protocol !== "http" && protocol !== "https") throw new ConfigParseError(filename, `tcpTargets[${index}].protocol`, "expected http or https");
+      const enabled = valueOf(value, "enabled");
+      if (enabled !== undefined && typeof enabled !== "boolean") throw new ConfigParseError(filename, `tcpTargets[${index}].enabled`, "expected a boolean");
       if (isRecord(value)) preserveUnknown(config, value, ["id", "name", "host", "port", "protocol", "enabled"], `tcpTargets[${index}]`);
       return {
         id: id === undefined ? `tcp-${index + 1}` : id,
@@ -194,7 +197,7 @@ function applyCanonicalRules(config: InternalConfig, raw: UnknownRecord, filenam
         host,
         port: parsedPort,
         ...(protocol === undefined ? {} : { protocol }),
-        enabled: valueOf(value, "enabled") === undefined ? true : parseBoolean(valueOf(value, "enabled"), filename, `tcpTargets[${index}].enabled`),
+        enabled: enabled === undefined ? true : enabled,
       };
     });
   }
