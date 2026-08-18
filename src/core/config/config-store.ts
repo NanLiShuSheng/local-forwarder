@@ -98,7 +98,7 @@ export function parseInternalJson(text: string, filename = "internal.json"): Int
 function legacyExportObject(config: InternalConfig): Record<string, unknown> {
   const conifg: Record<string, unknown> = {};
   for (const target of config.tcpTargets) {
-    conifg["/reqxml"] = { target: `http://${target.host}:${target.port}` };
+    conifg["/reqxml"] = { target: `${target.protocol ?? "http"}://${target.host}:${target.port}` };
   }
   for (const rule of config.httpRules) {
     conifg[rule.match] = {

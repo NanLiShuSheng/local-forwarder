@@ -66,6 +66,32 @@ test("converts reqxml targets with protocol default ports to tcp targets", () =>
   ]);
 });
 
+test("rejects invalid types in canonical HTTP rules and TCP targets", () => {
+  const httpBase = { id: "id", name: "name", match: "/match", target: "http://fixture.example.test:1", enabled: true };
+  assert.throws(
+    () => parseLegacyConfigJs(`module.exports = { HTTPRULES: [${JSON.stringify({ ...httpBase, id: 1 })}] }`, "config.js"),
+    /httpRules\[0\]\.id/,
+  );
+  assert.throws(
+    () => parseLegacyConfigJs(`module.exports = { HTTPRULES: [${JSON.stringify({ ...httpBase, name: 1 })}] }`, "config.js"),
+    /httpRules\[0\]\.name/,
+  );
+  assert.throws(
+    () => parseLegacyConfigJs(`module.exports = { HTTPRULES: [${JSON.stringify({ ...httpBase, rewrite: 1 })}] }`, "config.js"),
+    /httpRules\[0\]\.rewrite/,
+  );
+
+  const tcpBase = { id: "id", name: "name", host: "fixture.example.test", port: 1, enabled: true };
+  assert.throws(
+    () => parseLegacyConfigJs(`module.exports = { TCPTARGETS: [${JSON.stringify({ ...tcpBase, id: 1 })}] }`, "config.js"),
+    /tcpTargets\[0\]\.id/,
+  );
+  assert.throws(
+    () => parseLegacyConfigJs(`module.exports = { TCPTARGETS: [${JSON.stringify({ ...tcpBase, name: 1 })}] }`, "config.js"),
+    /tcpTargets\[0\]\.name/,
+  );
+});
+
 test("rejects invalid ports with the source filename and field name", () => {
   assert.throws(
     () => parseLegacyJson('{ "server": { "port": "not-a-port" } }', "config.json"),

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { importLegacyConfig } from "../../../src/core/config/legacy-parser";
+import { importLegacyConfig, parseLegacyConfigJs } from "../../../src/core/config/legacy-parser";
 import {
   ConfigStore,
   exportInternalJson,
@@ -53,6 +53,42 @@ test("ConfigStore imports and exports legacy directories", async () => {
   assert.equal(restored.server.port, source.server.port);
   assert.deepEqual(restored.legacy.extra, source.legacy.extra);
   assert.deepEqual(restored.legacy.files["config.json"], source.legacy.files["config.json"]);
+});
+
+test("ConfigStore export uses the edited normalized config before preserved legacy JSON", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-overwrite-order-"));
+  const source = await importLegacyConfig("test/fixtures/legacy");
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const edited = {
+    ...source,
+    server: { ...source.server, port: 84 },
+    httpRules: [{ ...source.httpRules[0], target: "https://edited.example.test/route" }],
+    localValues: { ...source.localValues, TOKEN: "edited-token" },
+    mapValues: { ...source.mapValues, FIXTURE_KEY: "edited-map" },
+    accounts: { ...source.accounts, ptjy: { ...source.accounts.ptjy, password: "edited-password" } },
+  };
+
+  await store.exportLegacy(edited, directory);
+  const restored = await store.importLegacy(directory);
+
+  assert.equal(restored.server.port, 84);
+  assert.equal(restored.httpRules[0].target, edited.httpRules[0].target);
+  assert.equal(restored.localValues.TOKEN, "edited-token");
+  assert.equal(restored.mapValues.FIXTURE_KEY, "edited-map");
+  assert.equal(restored.accounts.ptjy.password, "edited-password");
+  assert.deepEqual(restored.legacy.files["config.json"], source.legacy.files["config.json"]);
+});
+
+test("ConfigStore export preserves HTTPS protocol for TCP targets", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-protocol-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const httpsConfig = parseLegacyConfigJs(
+    'module.exports = { CONIFG: { "/reqxml": { TARGET: "https://secure.example.test:9443" } } };',
+  );
+
+  await store.exportLegacy(httpsConfig, directory);
+
+  assert.match(await readFile(path.join(directory, "config.js"), "utf8"), /https:\/\/secure\.example\.test:9443/);
 });
 
 test("ConfigStore reports field-level validation paths for every config section", async () => {

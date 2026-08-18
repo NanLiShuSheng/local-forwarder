@@ -22,6 +22,7 @@ export interface AppConfig {
     name: string;
     host: string;
     port: number;
+    protocol?: "http" | "https";
     enabled: boolean;
   }>;
   localValues: Record<string, string>;

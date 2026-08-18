@@ -149,12 +149,15 @@ function asRule(value: unknown, index: number, filename: string): ForwardRule {
   const name = valueOf(value, "name");
   const rewrite = valueOf(value, "rewrite");
   const enabled = valueOf(value, "enabled");
+  if (id !== undefined && typeof id !== "string") throw new ConfigParseError(filename, `httpRules[${index}].id`, "expected a string");
+  if (name !== undefined && typeof name !== "string") throw new ConfigParseError(filename, `httpRules[${index}].name`, "expected a string");
+  if (rewrite !== undefined && typeof rewrite !== "string") throw new ConfigParseError(filename, `httpRules[${index}].rewrite`, "expected a string");
   return {
-    id: typeof id === "string" ? id : `http-${index + 1}`,
-    name: typeof name === "string" ? name : match,
+    id: id === undefined ? `http-${index + 1}` : id,
+    name: name === undefined ? match : name,
     match,
     target,
-    ...(rewrite === undefined ? {} : { rewrite: String(rewrite) }),
+    ...(rewrite === undefined ? {} : { rewrite }),
     enabled: enabled === undefined ? true : parseBoolean(enabled, filename, `httpRules[${index}].enabled`),
   };
 }
@@ -176,14 +179,21 @@ function applyCanonicalRules(config: InternalConfig, raw: UnknownRecord, filenam
       if (!isRecord(value)) throw new ConfigParseError(filename, `tcpTargets[${index}]`, "expected an object");
       const host = valueOf(value, "host");
       const port = valueOf(value, "port");
+      const id = valueOf(value, "id");
+      const name = valueOf(value, "name");
+      const protocol = valueOf(value, "protocol");
       if (typeof host !== "string") throw new ConfigParseError(filename, `tcpTargets[${index}].host`, "expected a string");
       const parsedPort = parsePort(port, filename, `tcpTargets[${index}].port`);
-      if (isRecord(value)) preserveUnknown(config, value, ["id", "name", "host", "port", "enabled"], `tcpTargets[${index}]`);
+      if (id !== undefined && typeof id !== "string") throw new ConfigParseError(filename, `tcpTargets[${index}].id`, "expected a string");
+      if (name !== undefined && typeof name !== "string") throw new ConfigParseError(filename, `tcpTargets[${index}].name`, "expected a string");
+      if (protocol !== undefined && protocol !== "http" && protocol !== "https") throw new ConfigParseError(filename, `tcpTargets[${index}].protocol`, "expected http or https");
+      if (isRecord(value)) preserveUnknown(config, value, ["id", "name", "host", "port", "protocol", "enabled"], `tcpTargets[${index}]`);
       return {
-        id: typeof valueOf(value, "id") === "string" ? valueOf(value, "id") as string : `tcp-${index + 1}`,
-        name: typeof valueOf(value, "name") === "string" ? valueOf(value, "name") as string : host,
+        id: id === undefined ? `tcp-${index + 1}` : id,
+        name: name === undefined ? host : name,
         host,
         port: parsedPort,
+        ...(protocol === undefined ? {} : { protocol }),
         enabled: valueOf(value, "enabled") === undefined ? true : parseBoolean(valueOf(value, "enabled"), filename, `tcpTargets[${index}].enabled`),
       };
     });
@@ -215,6 +225,7 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
           name: match,
           host: url.hostname,
           port: parsePort(port, filename, `conifg.${match}.target.port`),
+          protocol: url.protocol === "https:" ? "https" : "http",
           enabled: true,
         });
         continue;
@@ -340,9 +351,9 @@ export async function importLegacyConfig(directory: string): Promise<InternalCon
   const jsRaw = parseLegacyConfigJs(jsText, "config.js");
   const jsonRaw = parseLegacyJson(jsonText, "config.json");
   const sysValues = parseSysConfig(iniText, "sysconfig.ini");
-  applyRawObject(config, jsRaw.legacy.files["config.js"] as UnknownRecord ?? {}, "config.js");
   applyRawObject(config, jsonRaw.legacy.files["config.json"] as UnknownRecord ?? {}, "config.json");
   applySysConfig(config, sysValues, "sysconfig.ini");
+  applyRawObject(config, jsRaw.legacy.files["config.js"] as UnknownRecord ?? {}, "config.js");
   config.legacy.files = {
     "config.js": cloneUnknown(jsRaw.legacy.files["config.js"]),
     "config.json": cloneUnknown(jsonRaw.legacy.files["config.json"]),

@@ -91,11 +91,12 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
   for (const [index, target] of value.tcpTargets.entries()) {
     const prefix = `tcpTargets[${index}]`;
     if (!isRecord(target)) return prefix;
-    if (!hasOnlyKeys(target, ["id", "name", "host", "port", "enabled"])) return prefix;
+    if (!hasOnlyKeys(target, ["id", "name", "host", "port", "enabled"], ["protocol"])) return prefix;
     if (typeof target.id !== "string" || target.id.length === 0) return `${prefix}.id`;
     if (typeof target.name !== "string" || target.name.length === 0) return `${prefix}.name`;
     if (typeof target.host !== "string" || target.host.length === 0) return `${prefix}.host`;
     if (typeof target.port !== "number" || !Number.isInteger(target.port) || target.port < 1 || target.port > 65535) return `${prefix}.port`;
+    if (target.protocol !== undefined && target.protocol !== "http" && target.protocol !== "https") return `${prefix}.protocol`;
     if (typeof target.enabled !== "boolean") return `${prefix}.enabled`;
   }
 
