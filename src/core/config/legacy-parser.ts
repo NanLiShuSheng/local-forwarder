@@ -1,4 +1,4 @@
-import { readFile, stat } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import type { ForwardRule } from "../../shared/contracts";
@@ -56,6 +56,10 @@ function parsePort(value: unknown, filename: string, field: string): number {
     throw new ConfigParseError(filename, field, "port must be an integer between 1 and 65535");
   }
   return value;
+}
+
+function normalizeHost(host: string): string {
+  return host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
 }
 
 function parseBoolean(value: unknown, filename: string, field: string): boolean {
@@ -252,11 +256,12 @@ function applyCanonicalRules(config: InternalConfig, raw: UnknownRecord, filenam
       if (protocol !== undefined && protocol !== "http" && protocol !== "https") throw new ConfigParseError(filename, `tcpTargets[${index}].protocol`, "expected http or https");
       const enabled = valueOf(value, "enabled");
       if (enabled !== undefined && typeof enabled !== "boolean") throw new ConfigParseError(filename, `tcpTargets[${index}].enabled`, "expected a boolean");
+      const normalizedHost = normalizeHost(host);
       if (isRecord(value)) preserveUnknown(config, value, ["id", "name", "host", "port", "protocol", "enabled"], `tcpTargets[${index}]`);
       return {
         id: id === undefined ? `tcp-${index + 1}` : id,
-        name: name === undefined ? host : name,
-        host,
+        name: name === undefined ? normalizedHost : name,
+        host: normalizedHost,
         port: parsedPort,
         ...(protocol === undefined ? {} : { protocol }),
         enabled: enabled === undefined ? true : enabled,
@@ -295,7 +300,7 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
         tcpTargets.push({
           id: metadata?.id ?? `tcp-${tcpTargets.length + 1}`,
           name: metadata?.name ?? match,
-          host: url.hostname,
+          host: normalizeHost(url.hostname),
           port: parsePort(port, filename, `${field}.port`),
           protocol: url.protocol === "https:" ? "https" : "http",
           enabled: metadata?.enabled ?? true,
@@ -449,12 +454,26 @@ function parseLegacyConfigJsInWorker(text: string, filename: string): InternalCo
           contextCodeGeneration: { strings: false, wasm: false },
         };
         vm.runInContext(
-          "const __jsonStringify = JSON.stringify; var module = Object.create(null); var exports = Object.create(null); module.exports = exports;",
+          \`const __jsonStringify = JSON.stringify;
+           const __jsonReplacer = (key, value) => {
+             if (typeof value === "function") throw new Error("resource value is not serializable");
+             if (value !== null && typeof value === "object") {
+               const prototype = Object.getPrototypeOf(value);
+               if (prototype !== null && prototype !== Object.prototype && prototype !== Array.prototype) {
+                 throw new Error("resource object type is not serializable");
+               }
+             }
+             return value;
+           };
+           for (const name of ["ArrayBuffer", "SharedArrayBuffer", "DataView", "Uint8Array", "Uint8ClampedArray", "Uint16Array", "Uint32Array", "Int8Array", "Int16Array", "Int32Array", "Float32Array", "Float64Array", "BigInt64Array", "BigUint64Array", "Buffer", "WebAssembly", "Proxy"]) {
+             try { Object.defineProperty(globalThis, name, { value: undefined, writable: false, configurable: false }); } catch {}
+           }
+           var module = Object.create(null); var exports = Object.create(null); module.exports = exports;\`,
           context,
           runOptions,
         );
         vm.runInContext(workerData.text, context, runOptions);
-        const serialized = vm.runInContext("__jsonStringify(module.exports)", context, runOptions);
+        const serialized = vm.runInContext("__jsonStringify(module.exports, __jsonReplacer)", context, runOptions);
         if (typeof serialized !== "string") throw new Error("module.exports must be JSON-serializable");
         if (Buffer.byteLength(serialized, "utf8") > ${MAX_SERIALIZED_CONFIG_BYTES}) throw new Error("serialized config is too large");
         finish({ ok: true, serialized });
@@ -544,7 +563,10 @@ function applySysConfig(config: InternalConfig, values: Record<string, string>, 
 async function readLegacyFile(directory: string, filename: string): Promise<string> {
   const filePath = path.join(directory, filename);
   try {
-    const details = await stat(filePath);
+    const details = await lstat(filePath);
+    if (!details.isFile() || details.isSymbolicLink()) {
+      throw new ConfigParseError(filename, "file", "legacy input must be a regular file and cannot be a symlink");
+    }
     if (details.size > MAX_LEGACY_INPUT_BYTES) {
       throw new ConfigParseError(filename, "file", "input is too large");
     }
@@ -557,7 +579,21 @@ async function readLegacyFile(directory: string, filename: string): Promise<stri
   }
 }
 
+async function assertLegacyDirectory(directory: string): Promise<void> {
+  try {
+    const details = await lstat(directory);
+    if (!details.isDirectory() || details.isSymbolicLink()) {
+      throw new ConfigParseError("directory", "path", "legacy directory must be a real directory");
+    }
+  } catch (error) {
+    if (error instanceof ConfigParseError) throw error;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw new ConfigParseError("directory", "path", "could not inspect legacy directory", error);
+  }
+}
+
 export async function importLegacyConfig(directory: string): Promise<InternalConfig> {
+  await assertLegacyDirectory(directory);
   const jsText = await readLegacyFile(directory, "config.js");
   const jsonText = await readLegacyFile(directory, "config.json");
   const iniText = await readLegacyFile(directory, "sysconfig.ini");

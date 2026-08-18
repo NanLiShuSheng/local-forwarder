@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { importLegacyConfig, parseLegacyConfigJs } from "../../../src/core/config/legacy-parser";
@@ -100,6 +100,42 @@ test("ConfigStore export preserves HTTPS protocol for TCP targets", async () => 
   await store.exportLegacy(httpsConfig, directory);
 
   assert.match(await readFile(path.join(directory, "config.js"), "utf8"), /https:\/\/secure\.example\.test:9443/);
+});
+
+test("ConfigStore round-trips IPv6 TCP authorities without brackets in host", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-ipv6-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const source = parseLegacyConfigJs('module.exports = { CONIFG: { "/reqxml": { TARGET: "http://[::1]:8080" } } };');
+
+  assert.equal(source.tcpTargets[0].host, "::1");
+  await store.exportLegacy(source, directory);
+  assert.match(await readFile(path.join(directory, "config.js"), "utf8"), /http:\/\/\[::1\]:8080/);
+  const restored = await store.importLegacy(directory);
+  assert.equal(restored.tcpTargets[0].host, "::1");
+  assert.equal(restored.tcpTargets[0].port, 8080);
+});
+
+test("ConfigStore.importLegacy rejects symlinked legacy files", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-import-symlink-"));
+  await symlink(path.resolve("test/fixtures/legacy/config.js"), path.join(directory, "config.js"));
+  await writeFile(path.join(directory, "config.json"), "{}\n", "utf8");
+  await writeFile(path.join(directory, "sysconfig.ini"), "\n", "utf8");
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+
+  await assert.rejects(() => store.importLegacy(directory), /config\.js.*symlink|regular file/i);
+});
+
+test("ConfigStore.exportLegacy rejects an existing symlink target", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-export-symlink-"));
+  const outside = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-export-outside-"));
+  const outsideConfig = path.join(outside, "config.js");
+  await writeFile(outsideConfig, "outside-content\n", "utf8");
+  await symlink(outsideConfig, path.join(directory, "config.js"));
+  const source = await importLegacyConfig("test/fixtures/legacy");
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+
+  await assert.rejects(() => store.exportLegacy(source, directory), /config\.js.*symlink|regular file/i);
+  assert.equal(await readFile(outsideConfig, "utf8"), "outside-content\n");
 });
 
 test("ConfigStore export rejects dangerous legacy paths without polluting Object.prototype", async () => {

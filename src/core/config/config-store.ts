@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { getAppConfigValidationError } from "../../shared/validation";
 import { createDefaultConfig, type InternalConfig } from "./model";
@@ -27,6 +27,11 @@ const DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 function nullRecord(): Record<string, unknown> {
   return Object.create(null) as Record<string, unknown>;
+}
+
+function formatTcpHost(host: string): string {
+  const unbracketed = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+  return unbracketed.includes(":") ? `[${unbracketed}]` : unbracketed;
 }
 
 function assertSafeSegment(segment: string, field: string): void {
@@ -177,7 +182,7 @@ export function parseInternalJson(text: string, filename = "internal.json"): Int
 
 function legacyExportObject(config: InternalConfig): Record<string, unknown> {
   const conifg = nullRecord();
-  const reqxmlTargets = config.tcpTargets.map((target) => `${target.protocol ?? "http"}://${target.host}:${target.port}`);
+  const reqxmlTargets = config.tcpTargets.map((target) => `${target.protocol ?? "http"}://${formatTcpHost(target.host)}:${target.port}`);
   if (reqxmlTargets.length > 0) {
     const reqxml = nullRecord();
     setSafePath(reqxml, ["target"], reqxmlTargets.length === 1 ? reqxmlTargets[0] : reqxmlTargets, "conifg./reqxml.target");
@@ -213,6 +218,57 @@ function writeIni(values: Record<string, string>): string {
   return Object.entries(values)
     .map(([key, value]) => `${key.toUpperCase()}=${value}`)
     .join("\n") + "\n";
+}
+
+async function ensureExportDirectory(directory: string): Promise<void> {
+  let details;
+  try {
+    details = await lstat(directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw new ConfigParseError("directory", "path", "could not inspect export directory", error);
+    }
+    await mkdir(directory, { recursive: true });
+    details = await lstat(directory);
+  }
+  if (!details.isDirectory() || details.isSymbolicLink()) {
+    throw new ConfigParseError("directory", "path", "export directory must be a real directory");
+  }
+}
+
+async function assertExportTargets(directory: string): Promise<void> {
+  for (const filename of ["config.js", "config.json", "sysconfig.ini"]) {
+    try {
+      const details = await lstat(path.join(directory, filename));
+      if (!details.isFile() || details.isSymbolicLink()) {
+        throw new ConfigParseError(filename, "file", "export target must be a regular file and cannot be a symlink");
+      }
+    } catch (error) {
+      if (error instanceof ConfigParseError) throw error;
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw new ConfigParseError(filename, "file", "could not inspect export target", error);
+      }
+    }
+  }
+}
+
+async function writeLegacyFileAtomically(directory: string, filename: string, content: string): Promise<void> {
+  const targetPath = path.join(directory, filename);
+  const temporaryPath = `${targetPath}.tmp-${process.pid}-${Math.random().toString(16).slice(2)}`;
+  try {
+    await writeFile(temporaryPath, content, { encoding: "utf8", mode: 0o600, flag: "wx" });
+    await rename(temporaryPath, targetPath);
+  } catch (error) {
+    throw new ConfigParseError(filename, "file", "could not write legacy file", error);
+  } finally {
+    try {
+      await unlink(temporaryPath);
+    } catch (cleanupError) {
+      if ((cleanupError as NodeJS.ErrnoException).code !== "ENOENT") {
+        // Do not hide the original write/rename result with a cleanup error.
+      }
+    }
+  }
 }
 
 export class ConfigStore {
@@ -259,9 +315,10 @@ export class ConfigStore {
     const normalized = withLegacy(config);
     const object = legacyExportObject(normalized);
     const legacyJson = copyLegacyValue(normalized.legacy.files["config.json"], "legacy.files.config.json");
-    await mkdir(directory, { recursive: true });
-    await writeFile(path.join(directory, "config.js"), `module.exports = ${JSON.stringify(object, null, 2)};\n`, "utf8");
-    await writeFile(path.join(directory, "config.json"), `${JSON.stringify(legacyJson ?? { cache: normalized.cache }, null, 2)}\n`, "utf8");
-    await writeFile(path.join(directory, "sysconfig.ini"), writeIni(normalized.localValues), "utf8");
+    await ensureExportDirectory(directory);
+    await assertExportTargets(directory);
+    await writeLegacyFileAtomically(directory, "config.js", `module.exports = ${JSON.stringify(object, null, 2)};\n`);
+    await writeLegacyFileAtomically(directory, "config.json", `${JSON.stringify(legacyJson ?? { cache: normalized.cache }, null, 2)}\n`);
+    await writeLegacyFileAtomically(directory, "sysconfig.ini", writeIni(normalized.localValues));
   }
 }

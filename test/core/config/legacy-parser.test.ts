@@ -232,6 +232,16 @@ test("executes config.js in a restricted vm sandbox", () => {
   );
 });
 
+test("rejects external backing-memory objects instead of serializing them as empty objects", () => {
+  for (const source of [
+    "module.exports = new ArrayBuffer(200000000);",
+    "module.exports = new SharedArrayBuffer(200000000);",
+    "module.exports = new Uint8Array(200000000);",
+  ]) {
+    assert.throws(() => parseLegacyConfigJs(source, "config.js"), /config\.js.*resource|memory/i);
+  }
+});
+
 test("does not expose a host module prototype or constructor escape", () => {
   const config = parseLegacyConfigJs(
     "module.exports = { modulePrototypeIsNull: Object.getPrototypeOf(module) === null }",
