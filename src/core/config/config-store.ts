@@ -47,7 +47,8 @@ function addLegacyExtras(
     }
     const conifgMatch = /^conifg\.(.+)\.([^.]+)$/.exec(pathKey);
     if (conifgMatch) {
-      const entry = isRecord(conifg[conifgMatch[1]]) ? conifg[conifgMatch[1]] as Record<string, unknown> : {};
+      if (!isRecord(conifg[conifgMatch[1]])) continue;
+      const entry = conifg[conifgMatch[1]] as Record<string, unknown>;
       entry[conifgMatch[2]] = value;
       conifg[conifgMatch[1]] = entry;
       continue;
@@ -105,6 +106,9 @@ function legacyExportObject(config: InternalConfig): Record<string, unknown> {
     conifg[rule.match] = {
       target: rule.target,
       ...(rule.rewrite === undefined ? {} : { rewrite: rule.rewrite }),
+      id: rule.id,
+      name: rule.name,
+      enabled: rule.enabled,
     };
   }
   const output: Record<string, unknown> = {

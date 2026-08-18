@@ -111,6 +111,28 @@ test("ConfigStore preserves all edited TCP target metadata through legacy array 
   assert.deepEqual(restored.tcpTargets, edited.tcpTargets);
 });
 
+test("ConfigStore preserves HTTP rule metadata through legacy export and import", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-http-rule-roundtrip-"));
+  const source = await importLegacyConfig("test/fixtures/legacy");
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const edited = {
+    ...source,
+    httpRules: [{
+      id: "custom-rule",
+      name: "Custom rule",
+      match: "/custom",
+      target: "https://edited.example.test/target",
+      rewrite: "/rewritten",
+      enabled: false,
+    }],
+  };
+
+  await store.exportLegacy(edited, directory);
+  const restored = await store.importLegacy(directory);
+
+  assert.deepEqual(restored.httpRules, edited.httpRules);
+});
+
 test("ConfigStore reports field-level validation paths for every config section", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-field-validation-"));
   const store = new ConfigStore(path.join(directory, "internal.json"));

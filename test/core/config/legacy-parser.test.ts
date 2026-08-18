@@ -120,6 +120,42 @@ test("rejects invalid types in canonical HTTP rules and TCP targets", () => {
   );
 });
 
+test("imports legacy HTTP rule metadata and supports target/url-only entries", () => {
+  const config = parseLegacyConfigJs(`module.exports = { CONIFG: {
+    "/custom": { target: "https://custom.example.test", rewrite: "/rewritten", id: "custom-id", name: "Custom", enabled: false },
+    "/legacy": { url: "http://legacy.example.test" }
+  } }`);
+
+  assert.deepEqual(config.httpRules, [
+    {
+      id: "custom-id",
+      name: "Custom",
+      match: "/custom",
+      target: "https://custom.example.test",
+      rewrite: "/rewritten",
+      enabled: false,
+    },
+    {
+      id: "http-2",
+      name: "/legacy",
+      match: "/legacy",
+      target: "http://legacy.example.test",
+      enabled: true,
+    },
+  ]);
+});
+
+test("reports camel-case cache field paths", () => {
+  assert.throws(
+    () => parseLegacyConfigJs('module.exports = { CACHE: { ROOTDIR: 1 } }', "config.js"),
+    /cache\.rootDir/,
+  );
+  assert.throws(
+    () => parseLegacyConfigJs('module.exports = { CACHE: { DOWNLOADTARGET: 1 } }', "config.js"),
+    /cache\.downloadTarget/,
+  );
+});
+
 test("rejects invalid ports with the source filename and field name", () => {
   assert.throws(
     () => parseLegacyJson('{ "server": { "port": "not-a-port" } }', "config.json"),

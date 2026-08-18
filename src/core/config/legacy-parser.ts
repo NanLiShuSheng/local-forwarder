@@ -98,7 +98,7 @@ function applyCache(config: InternalConfig, raw: UnknownRecord, filename: string
   for (const field of ["rootdir", "downloadtarget"] as const) {
     const value = valueOf(cache, field);
     if (value !== undefined) {
-      if (typeof value !== "string") throw new ConfigParseError(filename, `cache.${field}`, "expected a string");
+      if (typeof value !== "string") throw new ConfigParseError(filename, `cache.${field === "rootdir" ? "rootDir" : "downloadTarget"}`, "expected a string");
       config.cache[field === "rootdir" ? "rootDir" : "downloadTarget"] = value;
     }
   }
@@ -212,7 +212,7 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
   const existingTcpTargets = config.tcpTargets;
   for (const [match, entry] of Object.entries(value)) {
     const rule = isRecord(entry) ? entry : { target: entry };
-    if (isRecord(entry)) preserveUnknown(config, entry, ["target"], `conifg.${match}`);
+    if (isRecord(entry)) preserveUnknown(config, entry, ["target", "url", "id", "name", "rewrite", "enabled"], `conifg.${match}`);
     const target = valueOf(rule, "target");
     if (match.toLowerCase() === "/reqxml") {
       const targetItems = Array.isArray(target) ? target : [target];
@@ -241,8 +241,27 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
       }
       continue;
     }
-    if (typeof target !== "string") throw new ConfigParseError(filename, `conifg.${match}.target`, "expected a string");
-    httpRules.push({ id: `http-${httpRules.length + 1}`, name: match, match, target, enabled: true });
+    const targetValue = valueOf(rule, "target");
+    const urlValue = valueOf(rule, "url");
+    const targetField = targetValue !== undefined ? "target" : "url";
+    const resolvedTarget = targetValue ?? urlValue;
+    if (typeof resolvedTarget !== "string") throw new ConfigParseError(filename, `conifg.${match}.${targetField}`, "expected a string");
+    const id = valueOf(rule, "id");
+    const name = valueOf(rule, "name");
+    const rewrite = valueOf(rule, "rewrite");
+    const enabled = valueOf(rule, "enabled");
+    if (id !== undefined && typeof id !== "string") throw new ConfigParseError(filename, `conifg.${match}.id`, "expected a string");
+    if (name !== undefined && typeof name !== "string") throw new ConfigParseError(filename, `conifg.${match}.name`, "expected a string");
+    if (rewrite !== undefined && typeof rewrite !== "string") throw new ConfigParseError(filename, `conifg.${match}.rewrite`, "expected a string");
+    if (enabled !== undefined && typeof enabled !== "boolean") throw new ConfigParseError(filename, `conifg.${match}.enabled`, "expected a boolean");
+    httpRules.push({
+      id: id === undefined ? `http-${httpRules.length + 1}` : id,
+      name: name === undefined ? match : name,
+      match,
+      target: resolvedTarget,
+      ...(rewrite === undefined ? {} : { rewrite }),
+      enabled: enabled === undefined ? true : enabled,
+    });
   }
   config.httpRules = httpRules;
   config.tcpTargets = tcpTargets;
