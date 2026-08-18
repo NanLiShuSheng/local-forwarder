@@ -58,6 +58,17 @@ function parsePort(value: unknown, filename: string, field: string): number {
   return value;
 }
 
+function parseLegacyRootPort(value: unknown, filename: string, field: string): number {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      throw new ConfigParseError(filename, field, "port must be an integer between 1 and 65535");
+    }
+    return parsePort(Number(trimmed), filename, field);
+  }
+  return parsePort(value, filename, field);
+}
+
 function normalizeHost(host: string): string {
   return host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
 }
@@ -189,7 +200,7 @@ function applyServer(config: InternalConfig, raw: UnknownRecord, filename: strin
     if (typeof rootBindHost !== "string") throw new ConfigParseError(filename, "server.bindHost", "expected a string");
     config.server.bindHost = rootBindHost;
   }
-  if (rootPort !== undefined) config.server.port = parsePort(rootPort, filename, "server.port");
+  if (rootPort !== undefined) config.server.port = parseLegacyRootPort(rootPort, filename, "server.port");
   if (rootTimeout !== undefined) config.server.timeoutMs = parseTimeout(rootTimeout, filename, "server.timeoutMs");
   if (rootIsLog !== undefined) config.server.loggingEnabled = parseBoolean(rootIsLog, filename, "server.loggingEnabled");
 
@@ -359,6 +370,9 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
         if (url.protocol !== "http:" && url.protocol !== "https:") {
           throw new ConfigParseError(filename, field, "expected an http or https URL");
         }
+        if (!/^https?:\/\/[^/?#\s]+/i.test(normalizedItem) || url.hostname === "") {
+          throw new ConfigParseError(filename, field, "invalid URL");
+        }
         const port = url.port === "" ? (url.protocol === "http:" ? 80 : 443) : Number(url.port);
         const metadata = existingTcpTargets[tcpTargets.length];
         tcpTargets.push({
@@ -413,8 +427,23 @@ function normalizeWrappedUrl(value: string): string {
     if ((first === '"' || first === "'") && first === last) {
       return trimmed.slice(1, -1).trim();
     }
+    if (first === '"' || first === "'") {
+      const candidate = trimmed.slice(1).trim();
+      if (isLegalHttpUrl(candidate)) return candidate;
+    }
   }
   return trimmed;
+}
+
+function isLegalHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:")
+      && /^https?:\/\/[^/?#\s]+/i.test(value)
+      && url.hostname !== "";
+  } catch {
+    return false;
+  }
 }
 
 function preserveUnknown(

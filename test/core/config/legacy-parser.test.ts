@@ -104,6 +104,20 @@ test("reports clear paths for invalid root-level service fields", () => {
   );
 });
 
+test("accepts numeric strings only for the root-level legacy port", () => {
+  const config = parseLegacyConfigJs('module.exports = { PORT: "83" }');
+
+  assert.equal(config.server.port, 83);
+  assert.throws(
+    () => parseLegacyConfigJs('module.exports = { PORT: "not-a-port" }', "config.js"),
+    /config\.js.*server\.port/,
+  );
+  assert.throws(
+    () => parseLegacyConfigJs('module.exports = { SERVER: { PORT: "83" } }', "config.js"),
+    /config\.js.*server\.port/,
+  );
+});
+
 test("converts reqxml http targets to numeric tcp targets and other entries to http rules", () => {
   const config = parseLegacyConfigJs(`module.exports = {
     conifg: {
@@ -158,9 +172,18 @@ test("accepts whitespace and matching wrapper quotes around reqxml targets", () 
   assert.deepEqual(config.tcpTargets.map(({ host, port, protocol }) => ({ host, port, protocol })), [
     { host: "wrapped.example.test", port: 9443, protocol: "https" },
   ]);
+  const legacySingleSidedQuote = '  "http://legacy.example.test:9001';
+  const legacyConfig = parseLegacyConfigJs(`module.exports = { conifg: { "/reqxml": { target: ${JSON.stringify(legacySingleSidedQuote)} } } }`);
+  assert.deepEqual(legacyConfig.tcpTargets.map(({ host, port, protocol }) => ({ host, port, protocol })), [
+    { host: "legacy.example.test", port: 9001, protocol: "http" },
+  ]);
   assert.throws(
     () => parseLegacyConfigJs(`module.exports = { conifg: { "/reqxml": { target: ${JSON.stringify('"ftp://wrapped.example.test:21"')} } } }`),
     /expected an http or https URL/,
+  );
+  assert.throws(
+    () => parseLegacyConfigJs(`module.exports = { conifg: { "/reqxml": { target: ${JSON.stringify("http://:9001")} } } }`),
+    /invalid URL/,
   );
 });
 
