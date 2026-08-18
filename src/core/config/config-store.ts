@@ -150,7 +150,9 @@ export class ConfigStore {
   }
 
   async importLegacy(directory: string): Promise<InternalConfig> {
-    return importLegacyConfig(directory);
+    const config = await importLegacyConfig(directory);
+    assertValidConfig(config, "legacy");
+    return config;
   }
 
   async exportLegacy(config: AppConfig, directory: string): Promise<void> {

@@ -34,6 +34,21 @@ function invalidHttpTargetField(target: string, field: string): string | undefin
   } catch {
     return `${field}.port`;
   }
+  const authority = /^https?:\/\/([^/?#]*)/i.exec(target)?.[1];
+  const hostPort = authority?.slice(authority.lastIndexOf("@") + 1);
+  let explicitPort: string | undefined;
+  if (hostPort?.startsWith("[")) {
+    const closingBracket = hostPort.indexOf("]");
+    if (closingBracket >= 0 && hostPort[closingBracket + 1] === ":") {
+      explicitPort = hostPort.slice(closingBracket + 2);
+    }
+  } else {
+    const colon = hostPort?.lastIndexOf(":") ?? -1;
+    if (colon >= 0) explicitPort = hostPort?.slice(colon + 1);
+  }
+  if (explicitPort !== undefined && (!/^\d+$/.test(explicitPort) || Number(explicitPort) < 1 || Number(explicitPort) > 65535)) {
+    return `${field}.port`;
+  }
   return undefined;
 }
 

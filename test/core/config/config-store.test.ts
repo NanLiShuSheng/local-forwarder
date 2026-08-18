@@ -109,6 +109,52 @@ test("ConfigStore validates server and forwarding target ports before save or le
   );
 });
 
+test("ConfigStore rejects explicit invalid URL and TCP ports with field paths", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-port-validation-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const original = await importLegacyConfig("test/fixtures/legacy");
+  const urlPorts = ["0", "-1", "65536", "abc"];
+
+  for (const port of urlPorts) {
+    await assert.rejects(
+      () => store.save({
+        ...original,
+        httpRules: [{ ...original.httpRules[0], target: `http://fixture.example.test:${port}/path` }],
+      }),
+      /httpRules\[0\]\.target\.port/,
+    );
+  }
+
+  for (const port of [0, -1, 65536, "abc"]) {
+    await assert.rejects(
+      () => store.save({
+        ...original,
+        tcpTargets: [{ ...original.tcpTargets[0], port: port as never }],
+      }),
+      /tcpTargets\[0\]\.port/,
+    );
+  }
+});
+
+test("ConfigStore.importLegacy validates the normalized config with field paths", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-import-validation-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const { writeFile } = await import("node:fs/promises");
+  const invalidCases: Array<[string, Record<string, unknown>]> = [
+    ["server.bindHost", { SERVER: { BINDHOST: "" } }],
+    ["httpRules[0].match", { HTTPRULES: [{ id: "id", name: "name", match: "", target: "http://fixture.example.test:1", enabled: true }] }],
+    ["httpRules[0].target.port", { HTTPRULES: [{ id: "id", name: "name", match: "/x", target: "http://fixture.example.test:0", enabled: true }] }],
+    ["tcpTargets[0].port", { TCPTARGETS: [{ id: "id", name: "name", host: "fixture.example.test", port: 0, enabled: true }] }],
+  ];
+
+  for (const [field, invalid] of invalidCases) {
+    await writeFile(path.join(directory, "config.js"), `module.exports = ${JSON.stringify(invalid)};\n`, "utf8");
+    await writeFile(path.join(directory, "config.json"), "{}\n", "utf8");
+    await writeFile(path.join(directory, "sysconfig.ini"), "\n", "utf8");
+    await assert.rejects(() => store.importLegacy(directory), new RegExp(field.replace(/[.[\]]/g, "\\$&")));
+  }
+});
+
 test("ConfigStore load reports invalid internal JSON with filename and field", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-invalid-"));
   const filePath = path.join(directory, "internal.json");
