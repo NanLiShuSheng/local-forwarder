@@ -146,6 +146,50 @@ test("imports legacy HTTP rule metadata and supports target/url-only entries", (
   ]);
 });
 
+test("rejects dangerous legacy keys without polluting host prototypes", () => {
+  const cases = [
+    ["account.__proto__", '{"account":{"__proto__":{"polluted":"yes"}}}'],
+    ["local.__proto__", '{"local":{"__proto__":"value"}}'],
+    ["map.prototype", '{"map":{"prototype":"value"}}'],
+    ["unknown.constructor", '{"unknown":{"constructor":{"value":true}}}'],
+    ["legacy.extra.__proto__", '{"legacy":{"extra":{"__proto__":{"polluted":"yes"}}}}'],
+    ["legacy.files.__proto__", '{"legacy":{"files":{"__proto__":{"polluted":"yes"}}}}'],
+  ] as const;
+
+  for (const [field, raw] of cases) {
+    const source = `module.exports = JSON.parse(${JSON.stringify(raw)});`;
+    const escapedField = field.replace(/[.[\]]/g, "\\$&");
+    try {
+      assert.throws(() => parseLegacyConfigJs(source, "config.js"), new RegExp(`config\\.js.*${escapedField}`));
+    } finally {
+      delete (Object.prototype as Record<string, unknown>).polluted;
+    }
+    assert.equal(({} as Record<string, unknown>).polluted, undefined);
+  }
+});
+
+test("keeps canonical HTTP rules and merges distinct legacy rules", () => {
+  const config = parseLegacyConfigJs(`module.exports = {
+    HTTPRULES: [{ id: "canonical", name: "Canonical", match: "/canonical", target: "http://canonical.example.test", enabled: true }],
+    CONIFG: { "/legacy": { target: "http://legacy.example.test", enabled: false } }
+  };`);
+
+  assert.deepEqual(config.httpRules.map(({ match, target, enabled }) => ({ match, target, enabled })), [
+    { match: "/canonical", target: "http://canonical.example.test", enabled: true },
+    { match: "/legacy", target: "http://legacy.example.test", enabled: false },
+  ]);
+});
+
+test("rejects duplicate matches across canonical and legacy HTTP rules", () => {
+  assert.throws(
+    () => parseLegacyConfigJs(`module.exports = {
+      HTTPRULES: [{ id: "canonical", name: "Canonical", match: "/same", target: "http://canonical.example.test", enabled: true }],
+      CONIFG: { "/same": { target: "http://legacy.example.test" } }
+    };`, "config.js"),
+    /config\.js.*httpRules\[1\]\.match/,
+  );
+});
+
 test("reports camel-case cache field paths", () => {
   assert.throws(
     () => parseLegacyConfigJs('module.exports = { CACHE: { ROOTDIR: 1 } }', "config.js"),

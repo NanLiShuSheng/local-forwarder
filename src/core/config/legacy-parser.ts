@@ -10,6 +10,7 @@ const MAX_LEGACY_INPUT_BYTES = 1_048_576;
 const MAX_LEGACY_DEPTH = 64;
 const MAX_LEGACY_NODES = 10_000;
 const MAX_SERIALIZED_CONFIG_BYTES = 1_000_000;
+const DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
 export class ConfigParseError extends Error {
   constructor(filename: string, field: string, message: string, cause?: unknown) {
@@ -24,6 +25,10 @@ function isRecord(value: unknown): value is UnknownRecord {
 
 function keyOf(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function isDangerousKey(key: string): boolean {
+  return DANGEROUS_KEYS.has(keyOf(key));
 }
 
 function recordKey(record: UnknownRecord, wanted: string): string | undefined {
@@ -78,7 +83,7 @@ function assertInputSize(text: string, filename: string): void {
 }
 
 function assertJsonStructure(value: unknown, filename: string): void {
-  const pending: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }];
+  const pending: Array<{ value: unknown; depth: number; field: string }> = [{ value, depth: 0, field: "root" }];
   let nodes = 0;
   while (pending.length > 0) {
     const current = pending.pop();
@@ -91,9 +96,21 @@ function assertJsonStructure(value: unknown, filename: string): void {
       throw new ConfigParseError(filename, "root", "structure exceeds maximum depth");
     }
     if (Array.isArray(current.value)) {
-      for (const child of current.value) pending.push({ value: child, depth: current.depth + 1 });
+      for (const [index, child] of current.value.entries()) {
+        pending.push({
+          value: child,
+          depth: current.depth + 1,
+          field: `${current.field === "root" ? "" : current.field}[${index}]`,
+        });
+      }
     } else if (isRecord(current.value)) {
-      for (const child of Object.values(current.value)) pending.push({ value: child, depth: current.depth + 1 });
+      for (const key of Object.keys(current.value)) {
+        const field = current.field === "root" ? key : `${current.field}.${key}`;
+        if (isDangerousKey(key)) {
+          throw new ConfigParseError(filename, field, "dangerous key is not allowed");
+        }
+        pending.push({ value: current.value[key], depth: current.depth + 1, field });
+      }
     }
   }
 }
@@ -295,7 +312,14 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
       enabled: enabled === undefined ? true : enabled,
     });
   }
-  config.httpRules = httpRules;
+  const existingMatches = new Set(config.httpRules.map((rule) => rule.match));
+  for (const [index, rule] of httpRules.entries()) {
+    if (existingMatches.has(rule.match)) {
+      throw new ConfigParseError(filename, `httpRules[${config.httpRules.length + index}].match`, "duplicate HTTP rule match");
+    }
+    existingMatches.add(rule.match);
+  }
+  config.httpRules = [...config.httpRules, ...httpRules];
   config.tcpTargets = tcpTargets;
 }
 
@@ -360,6 +384,7 @@ export function parseSysConfig(text: string, filename = "sysconfig.ini"): Record
     if (separator < 0) throw new ConfigParseError(filename, `line ${index + 1}`, "expected key=value");
     const key = uncommented.slice(0, separator).trim();
     if (key === "") throw new ConfigParseError(filename, `line ${index + 1}`, "key cannot be empty");
+    if (isDangerousKey(key)) throw new ConfigParseError(filename, key, "dangerous key is not allowed");
     entries += 1;
     if (entries > MAX_LEGACY_NODES) {
       throw new ConfigParseError(filename, `line ${index + 1}`, "input exceeds maximum entry count");
