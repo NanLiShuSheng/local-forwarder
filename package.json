@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently -k \"vite --config vite.config.ts\" \"npm run build:electron && wait-on http://localhost:5173 && electron .\"",
     "build:electron": "tsc -p tsconfig.node.json && node scripts/flatten-electron.mjs",
-    "build": "npm run build:electron && vite build",
+    "build": "npm run build:electron && tsc -p tsconfig.json --noEmit && vite build",
     "test": "tsx --test test/**/*.test.ts",
     "package:x64": "npm run build && electron-builder --mac dmg --x64",
     "smoke": "node scripts/smoke-electron.mjs"
@@ -18,6 +18,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
     "concurrently": "latest",
     "electron-builder": "latest",
     "tsx": "latest",
