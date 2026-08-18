@@ -65,6 +65,11 @@ test("parses targets and applies protocol default ports", () => {
   assert.equal(parsed.search, "?x=1");
   assert.equal(parsed.hash, "#fragment");
   assert.equal(parsed.path, "/path?x=1");
+
+  const withUserInfoAndIpv6 = parseTarget("https://user:pass@[::1]:8443/path?q=1#fragment");
+  assert.equal(withUserInfoAndIpv6.hostname, "[::1]");
+  assert.equal(withUserInfoAndIpv6.port, 8443);
+  assert.equal(withUserInfoAndIpv6.path, "/path?q=1");
 });
 
 test("rejects unsupported protocols, invalid ports, and missing hosts", () => {
@@ -72,6 +77,19 @@ test("rejects unsupported protocols, invalid ports, and missing hosts", () => {
   assert.throws(() => parseTarget("http://example.test:0/file"), /invalid port/i);
   assert.throws(() => parseTarget("http://example.test:65536/file"), /invalid target|invalid port/i);
   assert.throws(() => parseTarget("http:///file"), /host|invalid target/i);
+});
+
+test("rejects explicitly empty ports for supported protocols", () => {
+  assert.throws(() => parseTarget("http://example.test:"), /invalid port/i);
+  assert.throws(() => parseTarget("https://example.test:"), /invalid port/i);
+  assert.throws(() => parseTarget("tcp://127.0.0.1:"), /invalid port/i);
+});
+
+test("requires supported targets to use an authority", () => {
+  for (const protocol of ["http", "https", "tcp"]) {
+    assert.throws(() => parseTarget(`${protocol}:/host`), /invalid target|authority|host/i);
+    assert.throws(() => parseTarget(`${protocol}:host`), /invalid target|authority|host/i);
+  }
 });
 
 test("redacts nested sensitive object keys without changing the original", () => {

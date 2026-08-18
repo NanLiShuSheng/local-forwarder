@@ -61,9 +61,10 @@ export function parseTarget(target: string): ParsedTarget {
   const protocol = schemeMatch[1].toLowerCase();
   if (!(protocol in DEFAULT_PORTS)) throw new Error(`Unsupported protocol: ${protocol}`);
   const authorityRemainder = target.slice(schemeMatch[0].length);
+  if (!authorityRemainder.startsWith("//")) throw new Error(`Invalid target: authority is required in ${target}`);
   if (authorityRemainder.startsWith("///")) throw new Error(`Invalid target: host is required in ${target}`);
   const rawPort = explicitPort(target, schemeMatch[1]);
-  if (rawPort !== undefined && rawPort !== "") {
+  if (rawPort !== undefined) {
     if (!/^\d+$/.test(rawPort)) throw new Error(`Invalid port in target: ${target}`);
     const numericPort = Number(rawPort);
     if (!Number.isInteger(numericPort) || numericPort < 1 || numericPort > 65535) {
