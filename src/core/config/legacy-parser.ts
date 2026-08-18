@@ -97,20 +97,53 @@ function assertNoObviousHugeAllocation(text: string, filename: string): void {
       throw new ConfigParseError(filename, "root", "source exceeds restricted worker resource limit");
     }
   }
+  const arrayPattern = /(?:new\s+)?Array\s*\(\s*(\d+)\s*\)/g;
+  for (const match of text.matchAll(arrayPattern)) {
+    if (Number(match[1]) > MAX_STATIC_REPEAT_COUNT) {
+      throw new ConfigParseError(filename, "root", "source exceeds restricted worker resource limit");
+    }
+  }
+  const arrayFromPattern = /Array\.from\s*\(\s*\{\s*length\s*:\s*(\d+)/g;
+  for (const match of text.matchAll(arrayFromPattern)) {
+    if (Number(match[1]) > MAX_STATIC_REPEAT_COUNT) {
+      throw new ConfigParseError(filename, "root", "source exceeds restricted worker resource limit");
+    }
+  }
 }
 
-function assertJsonStructure(value: unknown, filename: string): void {
+export function assertConfigDataLimits(value: unknown, filename: string, rootField = "root"): void {
   const pending: Array<{ value: unknown; depth: number; field: string }> = [{ value, depth: 0, field: "root" }];
   let nodes = 0;
+  let estimatedBytes = 0;
+  const reportField = (relativeField: string): string => {
+    if (rootField === "root") return relativeField;
+    if (relativeField === "root") return rootField;
+    return relativeField.startsWith("[") ? `${rootField}${relativeField}` : `${rootField}.${relativeField}`;
+  };
   while (pending.length > 0) {
     const current = pending.pop();
     if (current === undefined) continue;
     nodes += 1;
     if (nodes > MAX_LEGACY_NODES) {
-      throw new ConfigParseError(filename, "root", "structure exceeds maximum node count");
+      throw new ConfigParseError(filename, reportField(current.field), "structure exceeds maximum node count");
     }
     if (current.depth > MAX_LEGACY_DEPTH) {
-      throw new ConfigParseError(filename, "root", "structure exceeds maximum depth");
+      throw new ConfigParseError(filename, reportField(current.field), "structure exceeds maximum depth");
+    }
+    const field = reportField(current.field);
+    if (typeof current.value === "string") {
+      estimatedBytes += Buffer.byteLength(current.value, "utf8") + 2;
+    } else if (typeof current.value === "number" || typeof current.value === "boolean" || current.value === null) {
+      estimatedBytes += 16;
+    } else if (current.value === undefined || typeof current.value === "function" || typeof current.value === "symbol" || typeof current.value === "bigint") {
+      throw new ConfigParseError(filename, field, "value is not JSON-serializable");
+    } else if (Array.isArray(current.value)) {
+      estimatedBytes += 2;
+    } else if (isRecord(current.value)) {
+      estimatedBytes += 2;
+    }
+    if (estimatedBytes > MAX_SERIALIZED_CONFIG_BYTES) {
+      throw new ConfigParseError(filename, field, "structure exceeds maximum serialized size");
     }
     if (Array.isArray(current.value)) {
       for (const [index, child] of current.value.entries()) {
@@ -122,14 +155,22 @@ function assertJsonStructure(value: unknown, filename: string): void {
       }
     } else if (isRecord(current.value)) {
       for (const key of Object.keys(current.value)) {
-        const field = current.field === "root" ? key : `${current.field}.${key}`;
-        if (isDangerousKey(key)) {
-          throw new ConfigParseError(filename, field, "dangerous key is not allowed");
+        const childField = current.field === "root" ? key : `${current.field}.${key}`;
+        estimatedBytes += Buffer.byteLength(key, "utf8") + 3;
+        if (estimatedBytes > MAX_SERIALIZED_CONFIG_BYTES) {
+          throw new ConfigParseError(filename, reportField(childField), "structure exceeds maximum serialized size");
         }
-        pending.push({ value: current.value[key], depth: current.depth + 1, field });
+        if (isDangerousKey(key)) {
+          throw new ConfigParseError(filename, reportField(childField), "dangerous key is not allowed");
+        }
+        pending.push({ value: current.value[key], depth: current.depth + 1, field: childField });
       }
     }
   }
+}
+
+function assertJsonStructure(value: unknown, filename: string): void {
+  assertConfigDataLimits(value, filename);
 }
 
 function applyServer(config: InternalConfig, raw: UnknownRecord, filename: string): void {
@@ -483,6 +524,9 @@ function parseLegacyConfigJsInWorker(text: string, filename: string): InternalCo
     })();
   `;
   let worker: Worker;
+  let workerError: Error | undefined;
+  let workerExitCode: number | undefined;
+  let workerMessage: unknown;
   try {
     const workerOptions = {
       eval: true,
@@ -500,12 +544,44 @@ function parseLegacyConfigJsInWorker(text: string, filename: string): InternalCo
     throw new ConfigParseError(filename, "root", "could not start restricted config worker", error);
   }
 
+  const onWorkerError = (error: Error): void => {
+    workerError = error;
+    Atomics.store(header, 0, 2);
+    Atomics.notify(header, 0);
+  };
+  const onWorkerExit = (code: number): void => {
+    workerExitCode = code;
+    if (code !== 0 && Atomics.load(header, 0) === 0) {
+      Atomics.store(header, 0, 2);
+      Atomics.notify(header, 0);
+    }
+  };
+  const onWorkerMessage = (message: unknown): void => {
+    workerMessage = message;
+  };
+  worker.on("error", onWorkerError);
+  worker.on("exit", onWorkerExit);
+  worker.on("message", onWorkerMessage);
+
+  const terminateWorker = (): void => {
+    void worker.terminate()
+      .catch((error: unknown) => {
+        workerError ??= error instanceof Error ? error : new Error(String(error));
+      })
+      .finally(() => {
+        worker.off("error", onWorkerError);
+        worker.off("exit", onWorkerExit);
+        worker.off("message", onWorkerMessage);
+      });
+  };
+
   const waitResult = Atomics.wait(header, 0, 0, CONFIG_WORKER_WAIT_MS);
   if (waitResult === "timed-out" || Atomics.load(header, 0) !== 1) {
-    void worker.terminate();
-    throw new ConfigParseError(filename, "root", "restricted config worker exceeded resource limit or timeout");
+    const detail = workerError?.message ?? (workerExitCode === undefined ? "worker did not return" : `worker exited with code ${workerExitCode}`);
+    terminateWorker();
+    throw new ConfigParseError(filename, "root", `restricted config worker exceeded resource limit or timeout: ${detail}`);
   }
-  void worker.terminate();
+  terminateWorker();
 
   const length = Atomics.load(header, 1);
   if (length < 0 || length > CONFIG_WORKER_RESULT_BYTES - 8) {
@@ -529,7 +605,11 @@ function parseLegacyConfigJsInWorker(text: string, filename: string): InternalCo
     }
     return fromRaw(raw, filename);
   }
-  const message = isRecord(envelope) && typeof envelope.message === "string" ? envelope.message : "unknown worker error";
+  const message = isRecord(envelope) && typeof envelope.message === "string"
+    ? envelope.message
+    : workerMessage !== undefined
+      ? String(workerMessage)
+      : "unknown worker error";
   throw new ConfigParseError(filename, "root", `restricted config worker resource limit or timeout: ${message}`);
 }
 

@@ -242,6 +242,47 @@ test("ConfigStore preserves HTTP rule metadata through legacy export and import"
   assert.deepEqual(restored.httpRules, edited.httpRules);
 });
 
+test("ConfigStore keeps unknown HTTP rule fields in one canonical legacy representation", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-http-rule-extra-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const source = parseLegacyConfigJs(`module.exports = {
+    HTTPRULES: [{ id: "extra-id", name: "Extra", match: "/extra", target: "http://extra.example.test:8080", enabled: false, vendor: { flag: true } }]
+  };`);
+
+  await store.exportLegacy(source, directory);
+  const exportedJs = await readFile(path.join(directory, "config.js"), "utf8");
+  assert.match(exportedJs, /HTTPRULES/);
+  assert.doesNotMatch(exportedJs, /conifg.*["']\/extra/);
+
+  const restored = await store.importLegacy(directory);
+  assert.deepEqual(restored.httpRules, source.httpRules);
+  assert.deepEqual(restored.legacy.extra["httpRules[0].vendor"], { flag: true });
+});
+
+test("ConfigStore rejects deeply nested internal legacy data with a field path", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-internal-depth-"));
+  const filePath = path.join(directory, "internal.json");
+  const store = new ConfigStore(filePath);
+  const original = await importLegacyConfig("test/fixtures/legacy");
+  let nested: unknown = "leaf";
+  for (let index = 0; index < 12_000; index += 1) nested = { child: nested };
+  const invalid = { ...original, legacy: { files: {}, extra: { hostile: nested } } };
+
+  assert.throws(() => exportInternalJson(invalid), /internal\.json.*legacy\.extra\.hostile/i);
+  await writeFile(filePath, JSON.stringify(invalid), "utf8");
+  await assert.rejects(() => store.load(), /internal\.json.*legacy\.extra\.hostile/i);
+});
+
+test("ConfigStore rejects oversized internal legacy data before export", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-internal-size-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const original = await importLegacyConfig("test/fixtures/legacy");
+  const invalid = { ...original, legacy: { files: {}, extra: { hostile: "x".repeat(1_048_577) } } };
+
+  assert.throws(() => exportInternalJson(invalid), /internal\.json.*legacy\.extra\.hostile/i);
+  await assert.rejects(() => store.save(invalid), /internal\.json.*legacy\.extra\.hostile/i);
+});
+
 test("ConfigStore reports field-level validation paths for every config section", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-field-validation-"));
   const store = new ConfigStore(path.join(directory, "internal.json"));

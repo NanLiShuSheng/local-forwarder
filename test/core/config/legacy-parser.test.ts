@@ -296,6 +296,16 @@ test("rejects a short config.js that tries to allocate hundreds of megabytes", (
   assert.equal(result.status, 0, result.error?.message ?? result.stderr);
 });
 
+test("converts worker OOM into a controlled child parser error", () => {
+  const result = runParserInChildExpecting(
+    "module.exports = Array(10000000);",
+    /config\.js.*(resource|worker|timeout|memory)/i,
+  );
+  assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+  assert.equal(result.signal, null);
+  assert.doesNotMatch(result.stderr, /ERR_WORKER_OUT_OF_MEMORY|Unhandled 'error'/i);
+});
+
 test("reports malformed JSON and missing legacy files with filenames", async () => {
   await assert.rejects(
     () => importLegacyConfig(path.join(fixtureDirectory, "missing")),

@@ -2,7 +2,7 @@ import { lstat, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promi
 import path from "node:path";
 import { getAppConfigValidationError } from "../../shared/validation";
 import { createDefaultConfig, type InternalConfig } from "./model";
-import { ConfigParseError, importLegacyConfig } from "./legacy-parser";
+import { assertConfigDataLimits, ConfigParseError, importLegacyConfig } from "./legacy-parser";
 import type { AppConfig } from "../../shared/contracts";
 
 function assertValidConfig(config: AppConfig, filename: string): void {
@@ -44,16 +44,30 @@ function assertSafePathText(text: string, field: string): void {
   for (const segment of text.split(".")) assertSafeSegment(segment, field);
 }
 
-function copyLegacyValue(value: unknown, field: string): unknown {
-  if (Array.isArray(value)) return value.map((entry, index) => copyLegacyValue(entry, `${field}[${index}]`));
-  if (!isRecord(value)) return value;
-  const output = nullRecord();
-  for (const [key, entry] of Object.entries(value)) {
-    const entryField = `${field}.${key}`;
-    assertSafeSegment(key, entryField);
-    output[key] = copyLegacyValue(entry, entryField);
+function copyLegacyValue(value: unknown, field: string, filename = "internal.json"): unknown {
+  if (value === undefined) return undefined;
+  assertConfigDataLimits(value, filename, field);
+  if (!Array.isArray(value) && !isRecord(value)) return value;
+  const root: unknown = Array.isArray(value) ? [] : nullRecord();
+  const pending: Array<{ source: unknown[] | Record<string, unknown>; target: unknown[] | Record<string, unknown>; field: string }> = [
+    { source: value as unknown[] | Record<string, unknown>, target: root as unknown[] | Record<string, unknown>, field },
+  ];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (current === undefined) continue;
+    for (const [key, entry] of Object.entries(current.source)) {
+      const entryField = Array.isArray(current.source) ? `${current.field}[${key}]` : `${current.field}.${key}`;
+      assertSafeSegment(key, entryField);
+      if (Array.isArray(entry) || isRecord(entry)) {
+        const child: unknown = Array.isArray(entry) ? [] : nullRecord();
+        (current.target as unknown as Record<string, unknown>)[key] = child;
+        pending.push({ source: entry, target: child as unknown[] | Record<string, unknown>, field: entryField });
+      } else {
+        (current.target as unknown as Record<string, unknown>)[key] = entry;
+      }
+    }
   }
-  return output;
+  return root;
 }
 
 function setSafePath(target: Record<string, unknown>, segments: readonly string[], value: unknown, field: string): void {
@@ -96,11 +110,13 @@ function addLegacyExtras(
   output: Record<string, unknown>,
   config: InternalConfig,
   conifg: Record<string, unknown>,
+  canonicalHttpIndices: ReadonlySet<number>,
+  filename = "config.js",
 ): void {
   const canonicalHttpExtras = new Map<number, Record<string, unknown>>();
   const canonicalTcpExtras = new Map<number, Record<string, unknown>>();
   for (const [pathKey, value] of Object.entries(config.legacy.extra)) {
-    const safeValue = copyLegacyValue(value, pathKey);
+    const safeValue = copyLegacyValue(value, pathKey, filename);
     const serverMatch = /^server\.(.+)$/.exec(pathKey);
     if (serverMatch && isRecord(output.server)) {
       setSafePath(output.server, serverMatch[1].split("."), safeValue, pathKey);
@@ -138,17 +154,17 @@ function addLegacyExtras(
     }
     if (!pathKey.includes(".")) setSafePath(output, [pathKey], safeValue, pathKey);
   }
-  if (canonicalHttpExtras.size > 0) {
-    const canonicalKey = Array.isArray(output.HTTPRULES) ? "HTTPRULES" : "httpRules";
-    const rules = config.httpRules.map((rule, index) => {
+  if (canonicalHttpIndices.size > 0) {
+    const rules = config.httpRules.flatMap((rule, index) => {
+      if (!canonicalHttpIndices.has(index)) return [];
       const entry = exportHttpRule(rule, index);
       const extras = canonicalHttpExtras.get(index);
       if (extras !== undefined) {
         for (const [key, value] of Object.entries(extras)) setSafePath(entry, [key], value, `httpRules[${index}].${key}`);
       }
-      return entry;
+      return [entry];
     });
-    setSafePath(output, [canonicalKey], rules, canonicalKey);
+    setSafePath(output, ["HTTPRULES"], rules, "HTTPRULES");
   }
   if (canonicalTcpExtras.size > 0) {
     const targets = config.tcpTargets.map((target, index) => {
@@ -164,23 +180,39 @@ function addLegacyExtras(
 }
 
 export function exportInternalJson(config: AppConfig): string {
-  return `${JSON.stringify(withLegacy(config), null, 2)}\n`;
+  const normalized = withLegacy(config);
+  assertValidConfig(normalized, "internal.json");
+  assertConfigDataLimits(normalized, "internal.json");
+  try {
+    const serialized = JSON.stringify(normalized, null, 2);
+    if (Buffer.byteLength(serialized, "utf8") > 1_000_000) {
+      throw new ConfigParseError("internal.json", "legacy", "internal configuration exceeds maximum serialized size");
+    }
+    return `${serialized}\n`;
+  } catch (error) {
+    if (error instanceof ConfigParseError) throw error;
+    throw new ConfigParseError("internal.json", "root", "could not serialize internal configuration", error);
+  }
 }
 
 export function parseInternalJson(text: string, filename = "internal.json"): InternalConfig {
+  if (Buffer.byteLength(text, "utf8") > 1_048_576) {
+    throw new ConfigParseError(filename, "file", "input is too large");
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch (error) {
     throw new ConfigParseError(filename, "root", "invalid JSON", error);
   }
+  assertConfigDataLimits(parsed, filename);
   const field = getAppConfigValidationError(parsed);
   if (field !== undefined) throw new ConfigParseError(filename, field, "invalid internal configuration");
   if (!isRecord(parsed)) throw new ConfigParseError(filename, "root", "invalid internal configuration");
   return withLegacy(parsed as unknown as AppConfig);
 }
 
-function legacyExportObject(config: InternalConfig): Record<string, unknown> {
+function legacyExportObject(config: InternalConfig, filename = "config.js"): Record<string, unknown> {
   const conifg = nullRecord();
   const reqxmlTargets = config.tcpTargets.map((target) => `${target.protocol ?? "http"}://${formatTcpHost(target.host)}:${target.port}`);
   if (reqxmlTargets.length > 0) {
@@ -188,29 +220,41 @@ function legacyExportObject(config: InternalConfig): Record<string, unknown> {
     setSafePath(reqxml, ["target"], reqxmlTargets.length === 1 ? reqxmlTargets[0] : reqxmlTargets, "conifg./reqxml.target");
     setSafePath(conifg, ["/reqxml"], reqxml, "conifg./reqxml");
   }
-  const hasReqxmlHttpRule = config.httpRules.some((rule) => rule.match.toLowerCase() === "/reqxml");
-  const output = nullRecord();
-  if (hasReqxmlHttpRule) {
-    setSafePath(output, ["HTTPRULES"], config.httpRules.map(exportHttpRule), "HTTPRULES");
-  } else {
-    for (const [index, rule] of config.httpRules.entries()) {
-      const entry = nullRecord();
-      setSafePath(entry, ["target"], rule.target, `conifg.${rule.match}[${index}].target`);
-      if (rule.rewrite !== undefined) setSafePath(entry, ["rewrite"], rule.rewrite, `conifg.${rule.match}[${index}].rewrite`);
-      setSafePath(entry, ["id"], rule.id, `conifg.${rule.match}[${index}].id`);
-      setSafePath(entry, ["name"], rule.name, `conifg.${rule.match}[${index}].name`);
-      setSafePath(entry, ["enabled"], rule.enabled, `conifg.${rule.match}[${index}].enabled`);
-      setSafePath(conifg, [rule.match], entry, `conifg.${rule.match}[${index}]`);
-    }
+  const canonicalHttpIndices = new Set<number>();
+  for (const pathKey of Object.keys(config.legacy.extra)) {
+    const match = /^httpRules\[(\d+)\]\./.exec(pathKey);
+    if (match !== null) canonicalHttpIndices.add(Number(match[1]));
   }
-  setSafePath(output, ["server"], copyLegacyValue(config.server, "server"), "server");
-  setSafePath(output, ["local"], copyLegacyValue(config.localValues, "local"), "local");
-  setSafePath(output, ["map"], copyLegacyValue(config.mapValues, "map"), "map");
-  setSafePath(output, ["account"], copyLegacyValue(config.accounts, "account"), "account");
+  for (const [index, rule] of config.httpRules.entries()) {
+    if (rule.match.toLowerCase() === "/reqxml") canonicalHttpIndices.add(index);
+  }
+  const output = nullRecord();
+  for (const [index, rule] of config.httpRules.entries()) {
+    if (canonicalHttpIndices.has(index)) continue;
+    const entry = nullRecord();
+    setSafePath(entry, ["target"], rule.target, `conifg.${rule.match}[${index}].target`);
+    if (rule.rewrite !== undefined) setSafePath(entry, ["rewrite"], rule.rewrite, `conifg.${rule.match}[${index}].rewrite`);
+    setSafePath(entry, ["id"], rule.id, `conifg.${rule.match}[${index}].id`);
+    setSafePath(entry, ["name"], rule.name, `conifg.${rule.match}[${index}].name`);
+    setSafePath(entry, ["enabled"], rule.enabled, `conifg.${rule.match}[${index}].enabled`);
+    setSafePath(conifg, [rule.match], entry, `conifg.${rule.match}[${index}]`);
+  }
+  if (canonicalHttpIndices.size > 0) {
+    setSafePath(
+      output,
+      ["HTTPRULES"],
+      config.httpRules.filter((_rule, index) => canonicalHttpIndices.has(index)).map(exportHttpRule),
+      "HTTPRULES",
+    );
+  }
+  setSafePath(output, ["server"], copyLegacyValue(config.server, "server", filename), "server");
+  setSafePath(output, ["local"], copyLegacyValue(config.localValues, "local", filename), "local");
+  setSafePath(output, ["map"], copyLegacyValue(config.mapValues, "map", filename), "map");
+  setSafePath(output, ["account"], copyLegacyValue(config.accounts, "account", filename), "account");
   setSafePath(output, ["conifg"], conifg, "conifg");
   setSafePath(output, ["tcpTargets"], config.tcpTargets.map(exportTcpTarget), "tcpTargets");
-  setSafePath(output, ["cache"], copyLegacyValue(config.cache, "cache"), "cache");
-  addLegacyExtras(output, config, conifg);
+  setSafePath(output, ["cache"], copyLegacyValue(config.cache, "cache", filename), "cache");
+  addLegacyExtras(output, config, conifg, canonicalHttpIndices, filename);
   return output;
 }
 
@@ -286,6 +330,7 @@ export class ConfigStore {
 
   async save(config: AppConfig): Promise<void> {
     assertValidConfig(config, path.basename(this.filePath));
+    assertConfigDataLimits(withLegacy(config), path.basename(this.filePath));
     await mkdir(path.dirname(this.filePath), { recursive: true });
     const temporaryPath = `${this.filePath}.tmp-${process.pid}-${Math.random().toString(16).slice(2)}`;
     try {
@@ -313,8 +358,8 @@ export class ConfigStore {
   async exportLegacy(config: AppConfig, directory: string): Promise<void> {
     assertValidConfig(config, "config.js");
     const normalized = withLegacy(config);
-    const object = legacyExportObject(normalized);
-    const legacyJson = copyLegacyValue(normalized.legacy.files["config.json"], "legacy.files.config.json");
+    const object = legacyExportObject(normalized, "config.js");
+    const legacyJson = copyLegacyValue(normalized.legacy.files["config.json"], "legacy.files.config.json", "config.js");
     await ensureExportDirectory(directory);
     await assertExportTargets(directory);
     await writeLegacyFileAtomically(directory, "config.js", `module.exports = ${JSON.stringify(object, null, 2)};\n`);
