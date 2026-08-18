@@ -1,13 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+import { spawn, spawnSync } from "node:child_process";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 
-const require = createRequire(import.meta.url);
 const projectRoot = process.cwd();
 const rendererDir = path.join(projectRoot, "dist");
 const rendererEntry = path.join(rendererDir, "index.html");
 const electronEntry = path.join(projectRoot, "dist-electron", "main.js");
+const smokeTimeoutMs = 10000;
 
 function fail(message) {
   console.error(`Electron smoke check failed: ${message}`);
@@ -40,23 +39,64 @@ for (const reference of assetReferences) {
   }
 }
 
-let electronBinary;
-try {
-  electronBinary = process.env.ELECTRON_BINARY ?? require("electron");
-} catch (error) {
-  fail(`cannot resolve Electron executable: ${error.message}`);
+function resolveElectronBinary() {
+  if (process.env.ELECTRON_BINARY) {
+    return process.env.ELECTRON_BINARY;
+  }
+
+  const result = spawnSync(
+    process.execPath,
+    ["-e", "process.stdout.write(require('electron'))"],
+    { cwd: projectRoot, encoding: "utf8", timeout: 5000 },
+  );
+  if (result.error) {
+    fail(`cannot resolve Electron executable within 5000ms: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    fail(
+      `cannot resolve Electron executable: ${(result.stderr || result.stdout || "").trim()}`,
+    );
+  }
+  const binary = result.stdout.trim();
+  if (!binary) {
+    fail("cannot resolve Electron executable: resolver returned an empty path");
+  }
+  return binary;
 }
 
-const result = spawnSync(electronBinary, ["--version"], {
+const electronBinary = resolveElectronBinary();
+const child = spawn(electronBinary, ["--no-sandbox", electronEntry, "--smoke"], {
   cwd: projectRoot,
-  encoding: "utf8",
+  env: { ...process.env, ELECTRON_ENABLE_LOGGING: "1" },
+  stdio: ["ignore", "pipe", "pipe"],
 });
 
-if (result.error) {
-  fail(`cannot execute Electron: ${result.error.message}`);
-}
-if (result.status !== 0) {
-  fail(`Electron exited with status ${result.status}: ${(result.stderr ?? "").trim()}`);
-}
+let stdout = "";
+let stderr = "";
+child.stdout.on("data", (chunk) => {
+  stdout += chunk;
+});
+child.stderr.on("data", (chunk) => {
+  stderr += chunk;
+});
 
-console.log(`Electron smoke check passed: ${result.stdout.trim()}`);
+const timeout = setTimeout(() => {
+  child.kill("SIGTERM");
+  fail(`timed out after ${smokeTimeoutMs}ms; stderr: ${stderr.trim()}`);
+}, smokeTimeoutMs);
+
+child.on("error", (error) => {
+  clearTimeout(timeout);
+  fail(`cannot start Electron: ${error.message}`);
+});
+
+child.on("close", (code, signal) => {
+  clearTimeout(timeout);
+  if (code !== 0) {
+    fail(
+      `Electron smoke process exited with code ${code ?? "null"} and signal ${signal ?? "none"}; ` +
+        `stderr: ${stderr.trim()}`,
+    );
+  }
+  console.log(`Electron smoke check passed: renderer loaded and status IPC completed. ${stdout.trim()}`);
+});

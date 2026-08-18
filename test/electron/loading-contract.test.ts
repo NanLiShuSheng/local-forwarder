@@ -28,5 +28,11 @@ test("Vite emits renderer assets with file-loadable relative URLs", () => {
 test("dev and smoke scripts are available for a clean checkout", () => {
   assert.match(packageJson.scripts.dev, /npm run build:electron/);
   assert.match(packageJson.scripts.dev, /wait-on http:\/\/localhost:5173/);
-  assert.equal(fs.existsSync(path.join(projectRoot, "scripts/smoke-electron.mjs")), true);
+  const smokeScriptPath = path.join(projectRoot, "scripts/smoke-electron.mjs");
+  assert.equal(fs.existsSync(smokeScriptPath), true);
+  const smokeScript = fs.readFileSync(smokeScriptPath, "utf8");
+  assert.match(smokeScript, /dist-electron[\\/]main\.js/);
+  assert.match(smokeScript, /--smoke/);
+  assert.match(smokeScript, /setTimeout/);
+  assert.doesNotMatch(smokeScript, /\["--version"\]/);
 });
