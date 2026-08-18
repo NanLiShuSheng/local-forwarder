@@ -21,6 +21,15 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   return isRecord(value) && Object.values(value).every((entry) => typeof entry === "string");
 }
 
+function isLegacyData(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, ["files", "extra"]) &&
+    isRecord(value.files) &&
+    isRecord(value.extra)
+  );
+}
+
 function isForwardRule(value: unknown): value is ForwardRule {
   if (!isRecord(value) || !hasOnlyKeys(value, ["id", "name", "match", "target", "enabled"], ["rewrite"])) {
     return false;
@@ -63,7 +72,7 @@ export function isValidAppConfig(value: unknown): value is AppConfig {
       "mapValues",
       "accounts",
       "cache",
-    ])
+    ], ["legacy"])
   ) {
     return false;
   }
@@ -102,6 +111,7 @@ export function isValidAppConfig(value: unknown): value is AppConfig {
     typeof cache.rootDir === "string" &&
     typeof cache.downloadTarget === "string" &&
     typeof cache.decryptEnabled === "boolean" &&
-    typeof cache.autoDownload === "boolean"
+    typeof cache.autoDownload === "boolean" &&
+    (value.legacy === undefined || isLegacyData(value.legacy))
   );
 }

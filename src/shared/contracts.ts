@@ -33,6 +33,12 @@ export interface AppConfig {
     decryptEnabled: boolean;
     autoDownload: boolean;
   };
+  legacy?: LegacyData;
+}
+
+export interface LegacyData {
+  files: Record<string, unknown>;
+  extra: Record<string, unknown>;
 }
 
 export interface LogEntry {

@@ -1,0 +1,5 @@
+{
+  "server": { "port": 83 },
+  "localValues": { "JSON_VALUE": "fixture-json" },
+  "unknownJsonField": { "preserve": true }
+}
