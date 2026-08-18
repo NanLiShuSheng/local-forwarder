@@ -26,6 +26,8 @@ test("Vite emits renderer assets with file-loadable relative URLs", () => {
 });
 
 test("dev and smoke scripts are available for a clean checkout", () => {
+  assert.match(packageJson.scripts.test, /node --import tsx --test/);
+  assert.doesNotMatch(packageJson.scripts.test, /test\/\*\*\.test\.ts/);
   assert.match(packageJson.scripts.dev, /npm run build:electron/);
   assert.match(packageJson.scripts.dev, /wait-on http:\/\/localhost:5173/);
   const smokeScriptPath = path.join(projectRoot, "scripts/smoke-electron.mjs");

@@ -102,6 +102,68 @@ test("ConfigStore export preserves HTTPS protocol for TCP targets", async () => 
   assert.match(await readFile(path.join(directory, "config.js"), "utf8"), /https:\/\/secure\.example\.test:9443/);
 });
 
+test("ConfigStore export rejects dangerous legacy paths without polluting Object.prototype", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-export-prototype-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const source = await importLegacyConfig("test/fixtures/legacy");
+  const extra = Object.create(null) as Record<string, unknown>;
+  extra["conifg.__proto__.polluted"] = "yes";
+  const dangerous = {
+    ...source,
+    localValues: Object.assign(Object.create(null), source.localValues, { __proto__: "value" }),
+    mapValues: Object.assign(Object.create(null), source.mapValues, { prototype: "value" }),
+    accounts: Object.assign(Object.create(null), source.accounts, {
+      constructor: Object.assign(Object.create(null), { password: "value" }),
+    }),
+    legacy: { ...source.legacy, extra },
+  };
+
+  try {
+    await assert.rejects(() => store.exportLegacy(dangerous, directory), /config\.js.*(?:conifg.*__proto__|map\.prototype|account\.constructor)/);
+  } finally {
+    delete (Object.prototype as Record<string, unknown>).polluted;
+  }
+  assert.equal(({} as Record<string, unknown>).polluted, undefined);
+});
+
+test("ConfigStore export rejects dangerous preserved legacy JSON without pollution", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-export-files-prototype-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const source = await importLegacyConfig("test/fixtures/legacy");
+  const legacyJson = Object.create(null) as Record<string, unknown>;
+  Object.defineProperty(legacyJson, "__proto__", { value: { polluted: "yes" }, enumerable: true });
+  const files = Object.assign(Object.create(null), source.legacy.files, { "config.json": legacyJson });
+  const dangerous = { ...source, legacy: { ...source.legacy, files } };
+
+  try {
+    await assert.rejects(() => store.exportLegacy(dangerous, directory), /config\.js.*legacy\.files\.config\.json.*__proto__/);
+  } finally {
+    delete (Object.prototype as Record<string, unknown>).polluted;
+  }
+  assert.equal(({} as Record<string, unknown>).polluted, undefined);
+});
+
+test("ConfigStore preserves HTTP and TCP rules that both use /reqxml", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-reqxml-conflict-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const source = parseLegacyConfigJs(`module.exports = {
+    HTTPRULES: [{ id: "http-reqxml", name: "HTTP reqxml", match: "/reqxml", target: "https://http.example.test/api", rewrite: "/rewritten", enabled: false }]
+  };`);
+  const edited = {
+    ...source,
+    tcpTargets: [{ id: "tcp-reqxml", name: "TCP reqxml", host: "127.0.0.1", port: 9100, protocol: "https" as const, enabled: true }],
+  };
+
+  await store.exportLegacy(edited, directory);
+  const exportedJs = await readFile(path.join(directory, "config.js"), "utf8");
+  const restored = await store.importLegacy(directory);
+
+  assert.match(exportedJs, /HTTPRULES/);
+  assert.match(exportedJs, /conifg/i);
+  assert.deepEqual(restored.httpRules, edited.httpRules);
+  assert.deepEqual(restored.tcpTargets, edited.tcpTargets);
+});
+
 test("ConfigStore preserves all edited TCP target metadata through legacy array export", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-multi-target-"));
   const source = await importLegacyConfig("test/fixtures/legacy");

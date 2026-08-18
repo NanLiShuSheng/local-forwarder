@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import vm from "node:vm";
+import { Worker } from "node:worker_threads";
 import type { ForwardRule } from "../../shared/contracts";
 import { createDefaultConfig, type InternalConfig } from "./model";
 
@@ -11,6 +11,10 @@ const MAX_LEGACY_DEPTH = 64;
 const MAX_LEGACY_NODES = 10_000;
 const MAX_SERIALIZED_CONFIG_BYTES = 1_000_000;
 const DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+const CONFIG_WORKER_KIND = "local-forwarder-legacy-config";
+const CONFIG_WORKER_WAIT_MS = 2_000;
+const CONFIG_WORKER_RESULT_BYTES = 4_000_000;
+const MAX_STATIC_REPEAT_COUNT = 8_000_000;
 
 export class ConfigParseError extends Error {
   constructor(filename: string, field: string, message: string, cause?: unknown) {
@@ -79,6 +83,15 @@ function cloneUnknown(value: unknown): unknown {
 function assertInputSize(text: string, filename: string): void {
   if (Buffer.byteLength(text, "utf8") > MAX_LEGACY_INPUT_BYTES) {
     throw new ConfigParseError(filename, "file", "input is too large");
+  }
+}
+
+function assertNoObviousHugeAllocation(text: string, filename: string): void {
+  const repeatPattern = /\.repeat\s*\(\s*(\d+)\s*\)/g;
+  for (const match of text.matchAll(repeatPattern)) {
+    if (Number(match[1]) > MAX_STATIC_REPEAT_COUNT) {
+      throw new ConfigParseError(filename, "root", "source exceeds restricted worker resource limit");
+    }
   }
 }
 
@@ -405,38 +418,109 @@ export function parseLegacyJson(text: string, filename = "config.json"): Interna
   return fromRaw(raw, filename);
 }
 
+function parseLegacyConfigJsInWorker(text: string, filename: string): InternalConfig {
+  const resultBuffer = new SharedArrayBuffer(CONFIG_WORKER_RESULT_BYTES);
+  const header = new Int32Array(resultBuffer, 0, 2);
+  const workerSource = `
+    import * as vm from "node:vm";
+    import { workerData } from "node:worker_threads";
+    const header = new Int32Array(workerData.resultBuffer, 0, 2);
+    const resultBuffer = Buffer.from(workerData.resultBuffer);
+    const finish = (payload) => {
+      let encoded;
+      try { encoded = Buffer.from(JSON.stringify(payload), "utf8"); }
+      catch (error) { encoded = Buffer.from(JSON.stringify({ ok: false, message: String(error) }), "utf8"); }
+      if (encoded.byteLength > resultBuffer.byteLength - 8) {
+        encoded = Buffer.from(JSON.stringify({ ok: false, message: "worker result exceeded output limit" }), "utf8");
+      }
+      resultBuffer.writeUInt32LE(encoded.byteLength, 4);
+      encoded.copy(resultBuffer, 8);
+      Atomics.store(header, 0, 1);
+      Atomics.notify(header, 0);
+    };
+    (async () => {
+      try {
+        const context = vm.createContext(Object.create(null), {
+          codeGeneration: { strings: false, wasm: false },
+        });
+        const runOptions = {
+          filename: workerData.filename,
+          timeout: ${VM_TIMEOUT_MS},
+          contextCodeGeneration: { strings: false, wasm: false },
+        };
+        vm.runInContext(
+          "const __jsonStringify = JSON.stringify; var module = Object.create(null); var exports = Object.create(null); module.exports = exports;",
+          context,
+          runOptions,
+        );
+        vm.runInContext(workerData.text, context, runOptions);
+        const serialized = vm.runInContext("__jsonStringify(module.exports)", context, runOptions);
+        if (typeof serialized !== "string") throw new Error("module.exports must be JSON-serializable");
+        if (Buffer.byteLength(serialized, "utf8") > ${MAX_SERIALIZED_CONFIG_BYTES}) throw new Error("serialized config is too large");
+        finish({ ok: true, serialized });
+      } catch (error) {
+        finish({ ok: false, message: error instanceof Error ? error.message : String(error) });
+      }
+    })();
+  `;
+  let worker: Worker;
+  try {
+    const workerOptions = {
+      eval: true,
+      type: "module",
+      workerData: { kind: CONFIG_WORKER_KIND, text, filename, resultBuffer },
+      resourceLimits: {
+        maxOldGenerationSizeMb: 64,
+        maxYoungGenerationSizeMb: 16,
+        codeRangeSizeMb: 16,
+        stackSizeMb: 4,
+      },
+    };
+    worker = new Worker(workerSource, workerOptions as unknown as ConstructorParameters<typeof Worker>[1]);
+  } catch (error) {
+    throw new ConfigParseError(filename, "root", "could not start restricted config worker", error);
+  }
+
+  const waitResult = Atomics.wait(header, 0, 0, CONFIG_WORKER_WAIT_MS);
+  if (waitResult === "timed-out" || Atomics.load(header, 0) !== 1) {
+    void worker.terminate();
+    throw new ConfigParseError(filename, "root", "restricted config worker exceeded resource limit or timeout");
+  }
+  void worker.terminate();
+
+  const length = Atomics.load(header, 1);
+  if (length < 0 || length > CONFIG_WORKER_RESULT_BYTES - 8) {
+    throw new ConfigParseError(filename, "root", "restricted config worker returned invalid output");
+  }
+  let envelope: unknown;
+  try {
+    envelope = JSON.parse(Buffer.from(resultBuffer, 8, length).toString("utf8"));
+  } catch (error) {
+    throw new ConfigParseError(filename, "root", "restricted config worker returned invalid JSON", error);
+  }
+  if (isRecord(envelope) && envelope.ok === true && typeof envelope.serialized === "string") {
+    if (Buffer.byteLength(envelope.serialized, "utf8") > MAX_SERIALIZED_CONFIG_BYTES) {
+      throw new ConfigParseError(filename, "root", "serialized config is too large");
+    }
+    let raw: unknown;
+    try {
+      raw = JSON.parse(envelope.serialized);
+    } catch (error) {
+      throw new ConfigParseError(filename, "root", "invalid serialized config JSON", error);
+    }
+    return fromRaw(raw, filename);
+  }
+  const message = isRecord(envelope) && typeof envelope.message === "string" ? envelope.message : "unknown worker error";
+  throw new ConfigParseError(filename, "root", `restricted config worker resource limit or timeout: ${message}`);
+}
+
 export function parseLegacyConfigJs(text: string, filename = "config.js"): InternalConfig {
   if (typeof text !== "string") {
     throw new ConfigParseError(filename, "root", "source must be a string");
   }
   assertInputSize(text, filename);
-  const context = vm.createContext(Object.create(null), {
-    codeGeneration: { strings: false, wasm: false },
-  });
-  const runOptions = {
-    filename,
-    timeout: VM_TIMEOUT_MS,
-    contextCodeGeneration: { strings: false, wasm: false },
-  };
-  try {
-    vm.runInContext(
-      "const __jsonStringify = JSON.stringify; var module = Object.create(null); var exports = Object.create(null); module.exports = exports;",
-      context,
-      runOptions,
-    );
-    vm.runInContext(text, context, runOptions);
-    const serialized = vm.runInContext("__jsonStringify(module.exports)", context, runOptions);
-    if (typeof serialized !== "string") {
-      throw new Error("module.exports must be JSON-serializable");
-    }
-    if (Buffer.byteLength(serialized, "utf8") > MAX_SERIALIZED_CONFIG_BYTES) {
-      throw new Error("serialized config is too large");
-    }
-    return fromRaw(JSON.parse(serialized), filename);
-  } catch (error) {
-    if (error instanceof ConfigParseError) throw error;
-    throw new ConfigParseError(filename, "root", "sandbox execution failed", error);
-  }
+  assertNoObviousHugeAllocation(text, filename);
+  return parseLegacyConfigJsInWorker(text, filename);
 }
 
 function applySysConfig(config: InternalConfig, values: Record<string, string>, filename: string): void {

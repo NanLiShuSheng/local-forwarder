@@ -252,7 +252,19 @@ catch (error) { if (!String(error).includes("config.js")) process.exitCode = 2; 
   return spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], {
     cwd: path.resolve("."),
     encoding: "utf8",
-    timeout: 1200,
+    timeout: 4000,
+  });
+}
+
+function runParserInChildExpecting(source: string, expected: RegExp) {
+  const parserPath = path.resolve("src/core/config/legacy-parser.ts");
+  const script = `import { parseLegacyConfigJs } from ${JSON.stringify(parserPath)};
+try { parseLegacyConfigJs(${JSON.stringify(source)}, "config.js"); process.exitCode = 1; }
+catch (error) { if (!${expected}.test(String(error))) process.exitCode = 2; }`;
+  return spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], {
+    cwd: path.resolve("."),
+    encoding: "utf8",
+    timeout: 4000,
   });
 }
 
@@ -264,6 +276,14 @@ test("times out getter and Proxy work during VM serialization", () => {
     const result = runParserInChild(source);
     assert.equal(result.status, 0, result.error?.message ?? result.stderr);
   }
+});
+
+test("rejects a short config.js that tries to allocate hundreds of megabytes", () => {
+  const result = runParserInChildExpecting(
+    'module.exports = "x".repeat(300000000);',
+    /resource limit|worker.*timeout/i,
+  );
+  assert.equal(result.status, 0, result.error?.message ?? result.stderr);
 });
 
 test("reports malformed JSON and missing legacy files with filenames", async () => {
