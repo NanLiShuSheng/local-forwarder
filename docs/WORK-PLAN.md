@@ -47,10 +47,10 @@
 - 任务 8：renderer 已升级为规则优先控制台，包含运行状态、规则搜索/启停、变量掩码、缓存、日志过滤、设置和旧配置导入导出页面。
 - 旧版配置补充兼容：`config.js` 的 `path` 会按配置目录解析为项目目录并提供静态文件与 `.d` 资源读取；`_local` 生成的登录字段会并入本地变量缓存，界面显示缓存数量，登录响应中的 `ACTION=100` 或 `TOKEN` 更新会自动保存到内部配置。
 - 旧版 `/reqxml` 补充兼容：按 `hq`、`jy`、`zx` 顺序提供转发地址配置，支持无协议地址自动按 HTTP 处理、HTTP/HTTPS 地址、地址路径（例如 `/ant`）和 `useHttp` 导入导出。
-- 手动配置补充：变量页面支持直接粘贴多行 `键 = 值` 登录缓存并合并保存；设置页面支持通过 macOS 系统目录选择框选择 H5 项目目录。
+- 手动配置补充：变量页面支持直接粘贴多行 `键 = 值` 登录缓存并合并保存，值的续行内容（如 `ErrorMsg5`、`Grid`）会保留；设置页面支持通过 macOS 系统目录选择框选择 H5 项目目录，项目目录独占一行显示。
 - 任务 9：已补充 HTTP、TCP、缓存、服务生命周期和 renderer 验收清单；`scripts/smoke-electron.mjs` 已检查 renderer 资源、`forwarder-ready` 和 status IPC。
 - 任务 10：`electron-builder.yml` 已固定 DMG/x64 构建入口、`resources/protocol` 资源和 asar 文件范围；Electron 已移入 devDependencies。
-- 当前验证：`npm test` 通过 108/108，`npm run build` 通过；已用 `/Users/hdw/Desktop/proxy 2` 做脱敏导入回归：项目目录解析正确，三组 `/reqxml` 地址和 74 项登录缓存可 round-trip 保留。
+- 当前验证：`npm test` 通过 115/115，`npm run build` 通过；已用 `/Users/hdw/Desktop/proxy 2` 做脱敏导入回归：项目目录解析正确，三组 `/reqxml` 地址和 74 项登录缓存可 round-trip 保留。
 - smoke 验证：`npm run smoke` 和 `FORWARDER_SMOKE_NO_SANDBOX=1 npm run smoke` 均因 Electron GUI 进程直接 `SIGABRT` 失败；最小 BrowserWindow 复现同样失败，故已定位为当前 Electron GUI 运行环境，不是应用 IPC 握手失败。
 - 打包根因：Electron 缓存 ZIP 的 SHA-512 为 `6cdde2f6...`，与官方校验值 `7ab39ec1...` 不一致；electron-builder 默认解包阶段因此长期无产物。已固定 `electronDist: node_modules/electron/dist`，并改为先构建 `dir`、再用 macOS 原生 `hdiutil` 创建 DMG。
 - 打包验证：`npm run package:x64` 已成功退出并生成 `release/Local Forwarder-0.1.0.dmg`；DMG 已通过 `hdiutil` CRC 校验、只读挂载、`app.asar`/`resources/protocol` 存在性检查和卸载。

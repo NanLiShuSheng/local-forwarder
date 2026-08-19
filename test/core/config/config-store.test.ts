@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { importLegacyConfig, parseLegacyConfigJs } from "../../../src/core/config/legacy-parser";
+import { createDefaultConfig } from "../../../src/core/config/model";
+import { parseLocalCacheText } from "../../../src/shared/local-cache";
 import {
   ConfigStore,
   exportInternalJson,
@@ -18,6 +20,22 @@ test("export and re-import preserves normalized config", async () => {
   assert.deepEqual(restored.httpRules, original.httpRules);
   assert.equal(restored.accounts.ptjy.password, original.accounts.ptjy.password);
   assert.deepEqual(restored.legacy, original.legacy);
+});
+
+test("saves multiline pasted login cache values and reloads them", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-login-cache-"));
+  const config = createDefaultConfig();
+  Object.assign(config.localValues, parseLocalCacheText("ErrorMsg5 = first line\nsecond line\nToken = cache-token"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+
+  try {
+    await store.save(config);
+    const restored = await store.load();
+    assert.equal(restored.localValues.ERRORMSG5, "first line\nsecond line");
+    assert.equal(restored.localValues.TOKEN, "cache-token");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("ConfigStore saves atomically and loads the saved config", async () => {

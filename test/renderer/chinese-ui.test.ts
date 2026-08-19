@@ -52,4 +52,5 @@ test("renderer exposes manual login cache and project directory controls", async
   }
   assert.match(source, /parseLocalCacheText/);
   assert.match(source, /selectProjectDirectory/);
+  assert.match(source, /project-directory-field/);
 });

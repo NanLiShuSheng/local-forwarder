@@ -15,6 +15,14 @@ test("parses pasted login cache while preserving values after the first equals s
 });
 
 test("rejects non-empty cache lines without a key and equals sign", () => {
-  assert.throws(() => parseLocalCacheText("TOKEN=ok\nmalformed line"), /line 2/);
+  assert.throws(() => parseLocalCacheText("malformed line\nTOKEN=ok"), /line 1/);
   assert.throws(() => parseLocalCacheText(" = missing-key"), /line 1/);
+});
+
+test("keeps continuation lines in multiline login cache values", () => {
+  assert.deepEqual(parseLocalCacheText("ErrorMsg5 = first line\nsecond line\nGrid = A|B|\n | | | |\nTOKEN = ok"), {
+    ERRORMSG5: "first line\nsecond line",
+    GRID: "A|B|\n| | | |",
+    TOKEN: "ok",
+  });
 });
