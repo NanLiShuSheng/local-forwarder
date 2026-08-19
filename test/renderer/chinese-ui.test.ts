@@ -44,3 +44,12 @@ test("renderer exposes the hq, jy, and zx forwarding address settings", async ()
     assert.equal(source.includes(label), true, `missing forwarding address setting: ${label}`);
   }
 });
+
+test("renderer exposes manual login cache and project directory controls", async () => {
+  const source = (await Promise.all(rendererFiles.map((file) => readFile(file, "utf8")))).join("\n");
+  for (const label of ["粘贴登录缓存", "保存登录缓存", "选择项目目录"]) {
+    assert.equal(source.includes(label), true, `missing manual configuration control: ${label}`);
+  }
+  assert.match(source, /parseLocalCacheText/);
+  assert.match(source, /selectProjectDirectory/);
+});

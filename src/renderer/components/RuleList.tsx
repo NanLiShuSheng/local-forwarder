@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { AppConfig, ForwardRule } from "../../shared/contracts";
 
-interface RuleListProps { config: AppConfig; onChange: (config: AppConfig) => Promise<void>; }
+interface RuleListProps { config: AppConfig; onChange: (config: AppConfig) => Promise<boolean>; }
 
 export function RuleList({ config, onChange }: RuleListProps) {
   const [query, setQuery] = useState("");

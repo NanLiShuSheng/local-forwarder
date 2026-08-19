@@ -1,7 +1,7 @@
 :root { color: #e9eef7; background: #0d1421; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-synthesis: none; text-rendering: optimizeLegibility; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 .app-shell { min-height: 100vh; display: flex; background: radial-gradient(circle at 70% -10%, #243c61 0, #101b2d 38%, #0d1421 78%); }
 .sidebar { width: 236px; flex: 0 0 236px; display: flex; flex-direction: column; padding: 28px 16px; border-right: 1px solid #26344b; background: rgb(8 15 27 / 72%); }
@@ -66,6 +66,12 @@ h2 { font-size: 1.35rem; }
 .value-list span, dd { margin: 0; color: #a8b8ce; }
 .form-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .form-grid label { display: grid; gap: 8px; color: #91a5bf; font-size: 0.8rem; }
+.input-with-button { display: flex; gap: 8px; }
+.input-with-button input { min-width: 0; flex: 1; }
+.input-with-button button { border: 1px solid #3b4e68; border-radius: 8px; padding: 9px 12px; color: #dae5f4; background: #1a2b43; white-space: nowrap; }
+.input-with-button button:hover { border-color: #79e2c0; }
+textarea { width: 100%; resize: vertical; border: 1px solid #344862; border-radius: 8px; padding: 10px; color: #e8effa; background: #111e32; outline: none; }
+textarea:focus { border-color: #79e2c0; }
 .address-editor { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 14px; margin-top: 14px; }
 .address-editor label { display: grid; gap: 8px; color: #91a5bf; font-size: 0.8rem; }
 .address-enabled { display: flex !important; align-items: center; gap: 8px !important; padding-bottom: 10px; white-space: nowrap; }

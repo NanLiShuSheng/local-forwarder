@@ -92,27 +92,27 @@ git commit -m "feat: expose project directory picker"
 - 修改：`src/renderer/App.tsx`
 - 修改：`test/renderer/chinese-ui.test.ts`
 
-- [ ] **步骤 1：编写失败 UI 合同测试**
+- [x] **步骤 1：编写失败 UI 合同测试**
 
 断言界面包含“粘贴登录缓存”“保存登录缓存”“选择项目目录”等中文文案，以及 `parseLocalCacheText` 和 `selectProjectDirectory` 的调用点。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`npm run build && node --import tsx --test test/renderer/chinese-ui.test.ts`
 
 预期：新增界面文案或调用点断言失败。
 
-- [ ] **步骤 3：实现 UI**
+- [x] **步骤 3：实现 UI**
 
 变量页增加受控多行输入框；保存时调用解析函数，将结果与 `config.localValues` 合并后调用现有 `onChange`，成功清空输入，失败显示错误。设置页增加当前目录输入展示和系统目录选择按钮；选择成功后调用 `onChange` 保存绝对路径，取消不显示错误。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`npm run build && node --import tsx --test test/renderer/chinese-ui.test.ts`
 
 预期：UI 合同测试通过且 renderer 严格类型检查通过。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add src/renderer/components/ConfigPages.tsx src/renderer/App.tsx test/renderer/chinese-ui.test.ts
