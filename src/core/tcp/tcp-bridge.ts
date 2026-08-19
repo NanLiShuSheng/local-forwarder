@@ -57,15 +57,15 @@ export class TcpBridgePool {
 
     const serial = this.nextSerial();
     const key = endpointKey(target);
-    const connection = this.getOrCreateConnection(target, key);
     const frame = this.codec.encode(query, serial);
+    const connection = this.getOrCreateConnection(target, key);
     return new Promise<TztResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
         if (connection.pending.delete(serial)) reject(new Error(`TCP request timeout for ${key}`));
       }, this.requestTimeoutMs);
       connection.pending.set(serial, { resolve, reject, timer });
       void connection.connectPromise.then(() => {
-        if (!connection.failed) connection.socket.write(frame, (error) => {
+        if (!connection.failed && connection.pending.has(serial)) connection.socket.write(frame, (error) => {
           if (error) this.failConnection(connection, error);
         });
       }).catch(() => undefined);
@@ -125,6 +125,10 @@ export class TcpBridgePool {
     if (connection.failed) return;
     connection.buffer = Buffer.concat([connection.buffer, chunk]);
     while (connection.buffer.length >= 6) {
+      if (connection.buffer.readUInt16LE(0) !== 0x07b7) {
+        this.failConnection(connection, new Error("Invalid TZT frame: bad magic"));
+        return;
+      }
       const payloadLength = connection.buffer.readUInt32LE(2);
       const frameLength = payloadLength + 6;
       if (frameLength <= 6 || frameLength > 1024 * 1024) {
@@ -143,10 +147,10 @@ export class TcpBridgePool {
       }
       const serial = Number(response.HandleSerialNo);
       const pending = connection.pending.get(serial);
-      if (pending === undefined) {
-        this.failConnection(connection, new Error(`Unknown TZT response serial: ${response.HandleSerialNo}`));
-        return;
-      }
+      // A timed-out request may still have a response in flight. Ignore that
+      // valid late frame so it cannot take down unrelated requests sharing the
+      // same long-lived connection.
+      if (pending === undefined) continue;
       connection.pending.delete(serial);
       clearTimeout(pending.timer);
       delete response.HandleSerialNo;

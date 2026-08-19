@@ -1,0 +1,17 @@
+appId: com.localforwarder.mac
+productName: Local Forwarder
+asar: true
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+extraResources:
+  - from: resources/protocol
+    to: protocol
+    filter:
+      - "**/*"
+mac:
+  target:
+    - dmg
+  arch:
+    - x64
