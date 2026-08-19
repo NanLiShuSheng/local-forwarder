@@ -52,17 +52,17 @@ git commit -m "feat: parse pasted login cache values"
 - 修改：`test/electron/ipc-contract.test.ts`
 - 修改：`test/electron/preload-contract.test.ts`
 
-- [ ] **步骤 1：编写失败合同测试**
+- [x] **步骤 1：编写失败合同测试**
 
 断言 `IPC_CHANNELS.selectProjectDirectory` 为 `config:select-project-directory`，`ForwarderApi` 暴露选择方法，并编译后的 preload 不包含 shared contracts 运行时依赖。
 
-- [ ] **步骤 2：运行定向测试确认失败**
+- [x] **步骤 2：运行定向测试确认失败**
 
 运行：`npm run build && node --import tsx --test test/electron/ipc-contract.test.ts test/electron/preload-contract.test.ts`
 
 预期：新增通道和 API 合同断言失败。
 
-- [ ] **步骤 3：实现主进程和 preload**
+- [x] **步骤 3：实现主进程和 preload**
 
 在 shared 合同中增加：
 
@@ -72,13 +72,13 @@ selectProjectDirectory(): Promise<OperationResult & { path?: string; canceled?: 
 
 在 preload 和 main 使用同名通道；主进程用 `dialog.showOpenDialog({ properties: ["openDirectory"] })`，取消返回 `{ ok: false, canceled: true }`，选择后返回 `{ ok: true, path }`。
 
-- [ ] **步骤 4：运行定向测试确认通过**
+- [x] **步骤 4：运行定向测试确认通过**
 
 运行：`npm run build && node --import tsx --test test/electron/ipc-contract.test.ts test/electron/preload-contract.test.ts`
 
 预期：合同测试通过。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add src/shared/contracts.ts electron/preload.ts electron/main.ts test/electron/ipc-contract.test.ts test/electron/preload-contract.test.ts

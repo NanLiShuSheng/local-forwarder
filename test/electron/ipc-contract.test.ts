@@ -8,6 +8,7 @@ test("IPC channels expose stable runtime commands", () => {
     saveConfig: "config:save",
     importLegacy: "config:import-legacy",
     exportConfig: "config:export",
+    selectProjectDirectory: "config:select-project-directory",
     start: "runtime:start",
     stop: "runtime:stop",
     status: "runtime:status",

@@ -73,6 +73,7 @@ export interface ForwarderApi {
   saveConfig(config: AppConfig): Promise<OperationResult>;
   importLegacy(): Promise<OperationResult & { config?: AppConfig }>;
   exportConfig(): Promise<OperationResult & { path?: string }>;
+  selectProjectDirectory(): Promise<OperationResult & { path?: string; canceled?: boolean }>;
   start(): Promise<RuntimeStatus>;
   stop(): Promise<RuntimeStatus>;
   status(): Promise<RuntimeStatus>;
@@ -84,6 +85,7 @@ export const IPC_CHANNELS = {
   saveConfig: "config:save",
   importLegacy: "config:import-legacy",
   exportConfig: "config:export",
+  selectProjectDirectory: "config:select-project-directory",
   start: "runtime:start",
   stop: "runtime:stop",
   status: "runtime:status",

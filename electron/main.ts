@@ -14,6 +14,7 @@ const IPC_CHANNELS = {
   saveConfig: "config:save",
   importLegacy: "config:import-legacy",
   exportConfig: "config:export",
+  selectProjectDirectory: "config:select-project-directory",
   start: "runtime:start",
   stop: "runtime:stop",
   status: "runtime:status",
@@ -69,6 +70,11 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "could not export configuration" };
     }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.selectProjectDirectory, async () => {
+    const selected = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+    if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, canceled: true };
+    return { ok: true, path: selected.filePaths[0] };
   });
   registerIpcHandler(policy, IPC_CHANNELS.start, () => service.start());
   registerIpcHandler(policy, IPC_CHANNELS.stop, () => service.stop());
