@@ -124,23 +124,23 @@ git commit -m "feat: add manual cache and project directory controls"
 **文件：**
 - 修改：`docs/WORK-PLAN.md`
 
-- [ ] **步骤 1：运行完整测试**
+- [x] **步骤 1：运行完整测试**
 
 运行：`npm test`
 
 预期：全部测试通过，退出码为 0。
 
-- [ ] **步骤 2：检查差异并更新工作计划**
+- [x] **步骤 2：检查差异并更新工作计划**
 
 运行：`git diff --check`；在工作计划记录手动缓存和目录选择能力。
 
-- [ ] **步骤 3：重新生成并验证 Intel x64 DMG**
+- [x] **步骤 3：重新生成并验证 Intel x64 DMG**
 
 运行：`npm run package:x64`
 
 预期：生成 `release/Local Forwarder-0.1.0.dmg`，自动 DMG 验证通过。
 
-- [ ] **步骤 4：提交文档并确认工作区**
+- [x] **步骤 4：提交文档并确认工作区**
 
 ```bash
 git add docs/WORK-PLAN.md
