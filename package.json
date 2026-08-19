@@ -1,6 +1,8 @@
 {
   "name": "local-forwarder-mac",
   "version": "0.1.0",
+  "description": "A local HTTP, HTTPS, and TZT forwarding service for Intel Mac",
+  "author": "Local Forwarder",
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
@@ -12,7 +14,6 @@
     "smoke": "node scripts/smoke-electron.mjs"
   },
   "dependencies": {
-    "electron": "latest",
     "react": "latest",
     "react-dom": "latest"
   },
@@ -21,6 +22,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "concurrently": "latest",
+    "electron": "latest",
     "electron-builder": "latest",
     "tsx": "latest",
     "typescript": "latest",

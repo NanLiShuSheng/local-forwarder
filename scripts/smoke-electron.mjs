@@ -19,6 +19,9 @@ if (!existsSync(rendererEntry)) {
 if (!existsSync(electronEntry)) {
   fail("missing dist-electron/main.js; run npm run build first");
 }
+if (!existsSync(path.join(projectRoot, "node_modules/electron/dist/version"))) {
+  fail("missing Electron binary; install dependencies with scripts enabled before running smoke");
+}
 
 const html = readFileSync(rendererEntry, "utf8");
 const assetReferences = [...html.matchAll(/(?:src|href)="([^\"]+)"/g)]
@@ -104,6 +107,9 @@ child.on("close", (code, signal) => {
       `Electron smoke process exited with code ${code ?? "null"} and signal ${signal ?? "none"}; ` +
         `stderr: ${stderr.trim()}`,
     );
+  }
+  if (!stdout.includes("forwarder-ready")) {
+    fail(`renderer did not complete the status IPC handshake; stdout: ${stdout.trim()}`);
   }
   console.log(`Electron smoke check passed: renderer loaded and status IPC completed. ${stdout.trim()}`);
 });

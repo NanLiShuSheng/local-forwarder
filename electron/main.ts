@@ -1,5 +1,10 @@
-import { app, BrowserWindow, ipcMain } from "electron";
-import type { AppConfig, LogEntry, RuntimeStatus } from "../src/shared/contracts";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import path from "node:path";
+import { access } from "node:fs/promises";
+import type { AppConfig, LogEntry } from "../src/shared/contracts";
+import { ConfigStore } from "../src/core/config/config-store";
+import { createDefaultConfig } from "../src/core/config/model";
+import { ForwardingService } from "../src/core/runtime/forwarding-service";
 import { getPreloadPath, getRendererIndexPath } from "./paths";
 import { createRendererSecurityPolicy, type RendererSecurityPolicy } from "./security";
 import { createSaveConfigHandler, createTrustedIpcHandler, type IpcHandler } from "./ipc";
@@ -15,34 +20,10 @@ const IPC_CHANNELS = {
   logs: "runtime:logs",
 } as const;
 
-const stoppedStatus: RuntimeStatus = {
-  state: "stopped",
-  requestCount: 0,
-  tcpConnections: 0,
-};
-
-const placeholderConfig: AppConfig = {
-  server: {
-    bindHost: "127.0.0.1",
-    port: 8080,
-    timeoutMs: 30000,
-    loggingEnabled: true,
-  },
-  httpRules: [],
-  tcpTargets: [],
-  localValues: {},
-  mapValues: {},
-  accounts: {},
-  cache: {
-    rootDir: "",
-    downloadTarget: "",
-    decryptEnabled: false,
-    autoDownload: false,
-  },
-};
-
-const placeholderError = "This operation is not implemented in the application skeleton.";
 const smokeMode = process.argv.includes("--smoke");
+let service: ForwardingService;
+let configStore: ConfigStore;
+let quitting = false;
 
 function registerIpcHandler(
   policy: RendererSecurityPolicy,
@@ -53,23 +34,71 @@ function registerIpcHandler(
 }
 
 function registerIpcHandlers(policy: RendererSecurityPolicy): void {
-  registerIpcHandler(policy, IPC_CHANNELS.getConfig, () => placeholderConfig);
+  registerIpcHandler(policy, IPC_CHANNELS.getConfig, () => service.getConfig());
   registerIpcHandler(
     policy,
     IPC_CHANNELS.saveConfig,
-    createSaveConfigHandler(() => ({ ok: false, error: placeholderError })),
+    createSaveConfigHandler(async (config) => {
+      try {
+        await service.saveConfig(config);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : "could not save configuration" };
+      }
+    }),
   );
-  registerIpcHandler(policy, IPC_CHANNELS.importLegacy, () => ({ ok: false, error: placeholderError }));
-  registerIpcHandler(policy, IPC_CHANNELS.exportConfig, () => ({ ok: false, error: placeholderError }));
-  registerIpcHandler(policy, IPC_CHANNELS.start, () => stoppedStatus);
-  registerIpcHandler(policy, IPC_CHANNELS.stop, () => stoppedStatus);
+  registerIpcHandler(policy, IPC_CHANNELS.importLegacy, async () => {
+    const selected = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+    if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, error: "import canceled" };
+    try {
+      const imported = await configStore.importLegacy(selected.filePaths[0]);
+      await service.stop();
+      service = createService(imported);
+      await configStore.save(imported);
+      return { ok: true, config: imported };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "could not import legacy configuration" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.exportConfig, async () => {
+    const selected = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
+    if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, error: "export canceled" };
+    try {
+      await configStore.exportLegacy(service.getConfig(), selected.filePaths[0]);
+      return { ok: true, path: selected.filePaths[0] };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "could not export configuration" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.start, () => service.start());
+  registerIpcHandler(policy, IPC_CHANNELS.stop, () => service.stop());
   registerIpcHandler(policy, IPC_CHANNELS.status, () => {
     if (smokeMode) {
+      console.log("forwarder-ready");
       setTimeout(() => app.quit(), 0);
     }
-    return stoppedStatus;
+    return service.status();
   });
-  registerIpcHandler(policy, IPC_CHANNELS.logs, (): LogEntry[] => []);
+  registerIpcHandler(policy, IPC_CHANNELS.logs, (): LogEntry[] => service.getLogs());
+}
+
+function createService(config: AppConfig): ForwardingService {
+  return new ForwardingService({ config, configStore });
+}
+
+async function loadService(): Promise<void> {
+  const filePath = path.join(app.getPath("userData"), "config.json");
+  configStore = new ConfigStore(filePath);
+  let config: AppConfig;
+  try {
+    config = await configStore.load();
+  } catch (error) {
+    if ((error as { cause?: { code?: string } }).cause?.code !== "ENOENT") throw error;
+    config = createDefaultConfig();
+    config.cache.rootDir = path.join(app.getPath("userData"), "cache");
+    await configStore.save(config);
+  }
+  service = createService(config);
 }
 
 function createWindow(policy: RendererSecurityPolicy): void {
@@ -105,8 +134,13 @@ const rendererSecurityPolicy = createRendererSecurityPolicy({
 });
 
 app.whenReady().then(() => {
-  registerIpcHandlers(rendererSecurityPolicy);
-  createWindow(rendererSecurityPolicy);
+  void loadService().then(() => {
+    registerIpcHandlers(rendererSecurityPolicy);
+    createWindow(rendererSecurityPolicy);
+  }).catch((error) => {
+    dialog.showErrorBox("Local Forwarder", error instanceof Error ? error.message : "could not load configuration");
+    app.quit();
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -119,4 +153,11 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("before-quit", (event) => {
+  if (quitting || service === undefined || service.status().state === "stopped") return;
+  event.preventDefault();
+  quitting = true;
+  void service.stop().finally(() => app.quit());
 });

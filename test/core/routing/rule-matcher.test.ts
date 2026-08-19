@@ -39,11 +39,11 @@ test("returns undefined when no enabled rule includes the URL", () => {
 });
 
 test("replaces supported local variable placeholder encodings case-insensitively", () => {
-  const input = "/path/($TOKEN)/%28$mobile%29/%28%24Account%29/($UNKNOWN)/$TOKEN";
+  const input = "/path/($TOKEN)/$(mobile)/%28$mobile%29/%28%24Account%29/($UNKNOWN)/$TOKEN";
 
   assert.equal(
     substituteVariables(input, { token: "abc", MOBILE: "13800000000", account: "acct" }),
-    "/path/abc/13800000000/acct/($UNKNOWN)/$TOKEN",
+    "/path/abc/13800000000/13800000000/acct/($UNKNOWN)/$TOKEN",
   );
 });
 

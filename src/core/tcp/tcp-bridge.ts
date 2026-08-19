@@ -80,6 +80,10 @@ export class TcpBridgePool {
     for (const connection of connections) this.failConnection(connection, new Error("TCP bridge closed"));
   }
 
+  public getConnectionCount(): number {
+    return this.connections.size;
+  }
+
   private nextSerial(): number {
     this.serial = this.serial === 0xffffffff ? 1 : this.serial + 1;
     return this.serial;

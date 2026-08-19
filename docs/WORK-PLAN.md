@@ -39,10 +39,22 @@
 - 测试已覆盖固定向量、中文/长数据、拆包/粘包、连接复用、连接失败、请求超时、迟到响应、非法帧和关闭清理。
 - 全量构建与测试：`npm test` 通过，90/90；`git diff --check` 通过。
 
+### 任务 5～9 已完成；任务 10 的发布验证受本机 Electron GUI/打包环境阻塞
+
+- 任务 5：`src/core/http/http-proxy.ts` 已实现 HTTP/HTTPS 转发、`$(KEY)`/`$(url)` 变量替换、gzip/deflate、二进制响应、413/502/504 和 `/reqlocal`、`/reqsavemap`、`/reqreadmap`、`/reqsavefile`、`/reqreadfile`、`/login`、`/reqxml`。
+- 任务 6：`src/core/cache/file-cache.ts` 已实现路径穿越防护、并发下载锁、原子写入、失败清理以及 `.d` RC4/gzip 处理；HTTP 资源路径已实际接入缓存下载、命中和解码。
+- 任务 7：`src/core/runtime/forwarding-service.ts` 已实现启动/停止/状态/配置/日志编排；Electron 主进程已接入真实 ConfigStore、ForwardingService 和白名单 IPC。
+- 任务 8：renderer 已升级为规则优先控制台，包含运行状态、规则搜索/启停、变量掩码、缓存、日志过滤、设置和旧配置导入导出页面。
+- 任务 9：已补充 HTTP、TCP、缓存、服务生命周期和 renderer 验收清单；`scripts/smoke-electron.mjs` 已检查 renderer 资源、`forwarder-ready` 和 status IPC。
+- 任务 10：`electron-builder.yml` 已固定 DMG/x64 构建入口、`resources/protocol` 资源和 asar 文件范围；Electron 已移入 devDependencies。
+- 当前验证：`npm test` 通过 99/99，`npm run build` 通过，`git diff --check` 通过；`npm install` 已补齐 Electron 43.4.0 x64 二进制。
+- smoke 验证：`npm run smoke` 和 `FORWARDER_SMOKE_NO_SANDBOX=1 npm run smoke` 均因 Electron GUI 进程直接 `SIGABRT` 失败；最小 BrowserWindow 复现同样失败，故已定位为当前 Electron GUI 运行环境，不是应用 IPC 握手失败。
+- 打包验证：`npm run package:x64`、禁用自动签名身份后的重试以及 `electron-builder --mac dir --x64` 均进入 `platform=darwin arch=x64 electron=43.4.0` 后长期无产物、无退出结果，已安全中止；`release/*.dmg`、安装后启动和安装后 HTTP/TCP 验证尚未完成。
+
 ## 明日优先事项
 
-1. 实现 HTTP/HTTPS 代理及 `/reqlocal`、`/reqsavemap`、`/reqreadmap`、`/reqsavefile`、`/reqreadfile`、`/login`、`/reqxml`。
-2. 继续实现缓存、服务编排、界面、端到端测试和 Intel x64 打包。
+1. 在 Electron GUI 可正常启动且 electron-builder 不阻塞的 Intel Mac 环境运行 `npm run smoke`。
+2. 运行 `npm run package:x64`，检查 `release/*.dmg` 并完成安装后验证。
 
 ## 验证纪律
 
@@ -54,6 +66,6 @@
 ## 当前工作区
 
 - 分支：`local-forwarder`
-- 当前 HEAD：任务 4 提交已落地。
+- 当前 HEAD：任务 4 提交已落地；任务 5～9 的源码和测试尚待提交。
 - 参考目录未修改。
-- 任务 5 可从 HTTP/HTTPS 代理和特殊本地接口继续。
+- 任务 10 只剩真实 Electron smoke、DMG 产物和安装后验证。
