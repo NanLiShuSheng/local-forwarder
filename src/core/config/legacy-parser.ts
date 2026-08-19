@@ -330,14 +330,20 @@ function applyCanonicalRules(config: InternalConfig, raw: UnknownRecord, filenam
       if (protocol !== undefined && protocol !== "http" && protocol !== "https") throw new ConfigParseError(filename, `tcpTargets[${index}].protocol`, "expected http or https");
       const enabled = valueOf(value, "enabled");
       if (enabled !== undefined && typeof enabled !== "boolean") throw new ConfigParseError(filename, `tcpTargets[${index}].enabled`, "expected a boolean");
+      const basePath = valueOf(value, "basepath");
+      if (basePath !== undefined && (typeof basePath !== "string" || !basePath.startsWith("/"))) throw new ConfigParseError(filename, `tcpTargets[${index}].basePath`, "expected an absolute path");
+      const transport = valueOf(value, "transport");
+      if (transport !== undefined && transport !== "tcp" && transport !== "http") throw new ConfigParseError(filename, `tcpTargets[${index}].transport`, "expected tcp or http");
       const normalizedHost = normalizeHost(host);
-      if (isRecord(value)) preserveUnknown(config, value, ["id", "name", "host", "port", "protocol", "enabled"], `tcpTargets[${index}]`);
+      if (isRecord(value)) preserveUnknown(config, value, ["id", "name", "host", "port", "protocol", "basePath", "transport", "enabled"], `tcpTargets[${index}]`);
       return {
         id: id === undefined ? `tcp-${index + 1}` : id,
         name: name === undefined ? normalizedHost : name,
         host: normalizedHost,
         port: parsedPort,
         ...(protocol === undefined ? {} : { protocol }),
+        ...(basePath === undefined ? {} : { basePath }),
+        ...(transport === undefined ? {} : { transport }),
         enabled: enabled === undefined ? true : enabled,
       };
     });
@@ -353,10 +359,12 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
   const existingTcpTargets = config.tcpTargets;
   for (const [match, entry] of Object.entries(value)) {
     const rule = isRecord(entry) ? entry : { target: entry };
-    if (isRecord(entry)) preserveUnknown(config, entry, ["target", "url", "id", "name", "rewrite", "enabled"], `conifg.${match}`);
+    if (isRecord(entry)) preserveUnknown(config, entry, ["target", "url", "id", "name", "rewrite", "enabled", "useHttp"], `conifg.${match}`);
     const target = valueOf(rule, "target");
     if (match.toLowerCase() === "/reqxml") {
       const targetItems = Array.isArray(target) ? target : [target];
+      const useHttp = valueOf(rule, "usehttp");
+      if (useHttp !== undefined && typeof useHttp !== "boolean") throw new ConfigParseError(filename, `conifg.${match}.useHttp`, "expected a boolean");
       for (const [index, item] of targetItems.entries()) {
         const field = Array.isArray(target) ? `conifg.${match}.target[${index}]` : `conifg.${match}.target`;
         if (typeof item !== "string") throw new ConfigParseError(filename, field, "expected a string");
@@ -381,6 +389,8 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
           host: normalizeHost(url.hostname),
           port: parsePort(port, filename, `${field}.port`),
           protocol: url.protocol === "https:" ? "https" : "http",
+          ...(url.pathname === "/" ? {} : { basePath: url.pathname.replace(/\/+$/, "") }),
+          ...(useHttp === true ? { transport: "http" as const } : {}),
           enabled: metadata?.enabled ?? true,
         });
       }
@@ -463,6 +473,11 @@ function preserveUnknown(
 }
 
 function applyRawObject(config: InternalConfig, raw: UnknownRecord, filename: string): InternalConfig {
+  const projectPath = valueOf(raw, "path") ?? valueOf(raw, "projectpath");
+  if (projectPath !== undefined) {
+    if (typeof projectPath !== "string") throw new ConfigParseError(filename, "projectPath", "expected a string");
+    config.projectPath = projectPath;
+  }
   applyServer(config, raw, filename);
   applyCache(config, raw, filename);
   applyAccounts(config, raw, filename);
@@ -471,7 +486,7 @@ function applyRawObject(config: InternalConfig, raw: UnknownRecord, filename: st
   applyCanonicalRules(config, raw, filename);
   applyLegacyConifg(config, raw, filename);
 
-  const known = new Set(["server", "cache", "accounts", "account", "localvalues", "local", "mapvalues", "map", "httprules", "tcptargets", "conifg", "config", "legacy", "islog", "timeout", "port", "bindhost"]);
+  const known = new Set(["server", "path", "projectpath", "cache", "accounts", "account", "localvalues", "local", "mapvalues", "map", "httprules", "tcptargets", "conifg", "config", "legacy", "islog", "timeout", "port", "bindhost"]);
   for (const [key, value] of Object.entries(raw)) {
     const normalized = keyOf(key);
     if (!known.has(normalized)) {
@@ -753,6 +768,7 @@ export async function importLegacyConfig(directory: string): Promise<InternalCon
   applyRawObject(config, jsonRaw.legacy.files["config.json"] as UnknownRecord ?? {}, "config.json");
   applySysConfig(config, sysValues, "sysconfig.ini");
   applyRawObject(config, jsRaw.legacy.files["config.js"] as UnknownRecord ?? {}, "config.js");
+  if (config.projectPath !== undefined && !path.isAbsolute(config.projectPath)) config.projectPath = path.resolve(directory, config.projectPath);
   config.legacy.files = {
     "config.js": cloneUnknown(jsRaw.legacy.files["config.js"]),
     "config.json": cloneUnknown(jsonRaw.legacy.files["config.json"]),

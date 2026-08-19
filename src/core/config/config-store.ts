@@ -102,6 +102,8 @@ function exportTcpTarget(target: InternalConfig["tcpTargets"][number], index: nu
   setSafePath(output, ["host"], target.host, `tcpTargets[${index}].host`);
   setSafePath(output, ["port"], target.port, `tcpTargets[${index}].port`);
   if (target.protocol !== undefined) setSafePath(output, ["protocol"], target.protocol, `tcpTargets[${index}].protocol`);
+  if (target.basePath !== undefined) setSafePath(output, ["basePath"], target.basePath, `tcpTargets[${index}].basePath`);
+  if (target.transport !== undefined) setSafePath(output, ["transport"], target.transport, `tcpTargets[${index}].transport`);
   setSafePath(output, ["enabled"], target.enabled, `tcpTargets[${index}].enabled`);
   return output;
 }
@@ -214,10 +216,11 @@ export function parseInternalJson(text: string, filename = "internal.json"): Int
 
 function legacyExportObject(config: InternalConfig, filename = "config.js"): Record<string, unknown> {
   const conifg = nullRecord();
-  const reqxmlTargets = config.tcpTargets.map((target) => `${target.protocol ?? "http"}://${formatTcpHost(target.host)}:${target.port}`);
+  const reqxmlTargets = config.tcpTargets.map((target) => `${target.protocol ?? "http"}://${formatTcpHost(target.host)}:${target.port}${target.basePath ?? ""}`);
   if (reqxmlTargets.length > 0) {
     const reqxml = nullRecord();
     setSafePath(reqxml, ["target"], reqxmlTargets.length === 1 ? reqxmlTargets[0] : reqxmlTargets, "conifg./reqxml.target");
+    if (config.tcpTargets.some((target) => target.transport === "http")) setSafePath(reqxml, ["useHttp"], true, "conifg./reqxml.useHttp");
     setSafePath(conifg, ["/reqxml"], reqxml, "conifg./reqxml");
   }
   const canonicalHttpIndices = new Set<number>();
@@ -229,6 +232,7 @@ function legacyExportObject(config: InternalConfig, filename = "config.js"): Rec
     if (rule.match.toLowerCase() === "/reqxml") canonicalHttpIndices.add(index);
   }
   const output = nullRecord();
+  if (config.projectPath !== undefined) setSafePath(output, ["path"], config.projectPath, "path");
   for (const [index, rule] of config.httpRules.entries()) {
     if (canonicalHttpIndices.has(index)) continue;
     const entry = nullRecord();

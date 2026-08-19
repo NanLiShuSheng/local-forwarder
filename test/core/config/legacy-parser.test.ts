@@ -34,6 +34,18 @@ test("imports legacy config and normalizes keys case-insensitively", async () =>
   });
 });
 
+test("imports the legacy project path and generated _local login cache", () => {
+  const config = parseLegacyConfigJs(`
+    let _local = "\\nTOKEN = cached-token\\nSessionNo = 4\\n";
+    const values = Object.fromEntries(_local.split(/\\n/).filter(Boolean).map((line) => line.split(" = ")));
+    module.exports = { path: "/fixture/project", local: values };
+  `);
+
+  assert.equal(config.projectPath, "/fixture/project");
+  assert.equal(config.localValues.TOKEN, "cached-token");
+  assert.equal(config.localValues.SESSIONNO, "4");
+});
+
 test("parses sysconfig with uppercase keys and last duplicate value", () => {
   const parsed = parseSysConfig("# comment\ntoken = old\nTOKEN = new ; comment\nFlag=on");
 
@@ -162,6 +174,17 @@ test("converts reqxml targets with protocol default ports to tcp targets", () =>
   ]);
   assert.deepEqual(httpsConfig.tcpTargets.map(({ host, port }) => ({ host, port })), [
     { host: "127.0.0.1", port: 443 },
+  ]);
+});
+
+test("preserves legacy HTTP reqxml transport and target base paths", () => {
+  const config = parseLegacyConfigJs(`module.exports = {
+    conifg: { "/reqxml": { useHttp: true, target: ["http://hq.example.test:7778", "https://jy.example.test/ant"] } }
+  }`);
+
+  assert.deepEqual(config.tcpTargets.map(({ host, port, protocol, basePath, transport }) => ({ host, port, protocol, basePath, transport })), [
+    { host: "hq.example.test", port: 7778, protocol: "http", basePath: undefined, transport: "http" },
+    { host: "jy.example.test", port: 443, protocol: "https", basePath: "/ant", transport: "http" },
   ]);
 });
 

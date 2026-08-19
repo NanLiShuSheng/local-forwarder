@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 import { HttpProxy } from "../../../src/core/http/http-proxy";
 import { FileCache } from "../../../src/core/cache/file-cache";
@@ -63,6 +63,64 @@ test("forwards GET and POST, substitutes variables, decompresses gzip, and prese
     const binary = await fetch(`http://127.0.0.1:${address.port}/api/binary`);
     assert.deepEqual([...new Uint8Array(await binary.arrayBuffer())], [0, 255, 1]);
     assert.equal(binary.headers.get("content-encoding"), null);
+  } finally {
+    await proxy.stop();
+    await close(target);
+  }
+});
+
+test("serves the configured project directory and captures login values from an action 100 response", async () => {
+  const projectPath = await mkdtemp(path.join(os.tmpdir(), "forwarder-project-"));
+  await writeFile(path.join(projectPath, "index.html"), "project-home", "utf8");
+  const target = http.createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ACTION: "100", TOKEN: "updated-token", SessionNo: "9" }));
+  });
+  const targetPort = await listen(target);
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    projectPath,
+    rules: [{ id: "login", name: "login", match: "/login-cache", target: `http://127.0.0.1:${targetPort}`, enabled: true }],
+    localValues: { TOKEN: "old-token" },
+    timeoutMs: 500,
+  });
+
+  try {
+    const address = await proxy.start();
+    const home = await fetch(`http://127.0.0.1:${address.port}/`);
+    assert.equal(await home.text(), "project-home");
+    const login = await fetch(`http://127.0.0.1:${address.port}/login-cache`);
+    assert.equal(login.status, 200);
+    assert.equal(proxy.getValues().localValues.TOKEN, "updated-token");
+    assert.equal(proxy.getValues().localValues.SESSIONNO, "9");
+  } finally {
+    await proxy.stop();
+    await close(target);
+    await rm(projectPath, { recursive: true, force: true });
+  }
+});
+
+test("forwards reqxml through an HTTP target base path", async () => {
+  const target = http.createServer((request, response) => {
+    assert.equal(request.url, "/ant/reqxml?REQLINKTYPE=0&Action=100");
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ACTION: "100", TOKEN: "http-token" }));
+  });
+  const targetPort = await listen(target);
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    rules: [],
+    tcpTargets: [{ id: "hq", name: "hq", host: "127.0.0.1", port: targetPort, protocol: "http", basePath: "/ant", transport: "http", enabled: true }],
+    timeoutMs: 500,
+  });
+
+  try {
+    const address = await proxy.start();
+    const result = await fetch(`http://127.0.0.1:${address.port}/reqxml?REQLINKTYPE=0&Action=100`);
+    assert.deepEqual(await result.json(), { ACTION: "100", TOKEN: "http-token" });
+    assert.equal(proxy.getValues().localValues.TOKEN, "http-token");
   } finally {
     await proxy.stop();
     await close(target);

@@ -1,5 +1,7 @@
+import { readFile, stat } from "node:fs/promises";
 import http, { type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from "node:http";
 import https from "node:https";
+import path from "node:path";
 import { inflateSync, gunzipSync } from "node:zlib";
 import type { AppConfig, ForwardRule, LogEntry } from "../../shared/contracts";
 import { decodeCachedResource, type CacheResult } from "../cache/file-cache";
@@ -16,6 +18,7 @@ export interface HttpProxyOptions {
   bindHost: string;
   port: number;
   timeoutMs: number;
+  projectPath?: string;
   rules: ForwardRule[];
   localValues?: Record<string, string>;
   mapValues?: Record<string, string>;
@@ -27,6 +30,7 @@ export interface HttpProxyOptions {
   cacheConfig?: Pick<AppConfig["cache"], "downloadTarget" | "autoDownload" | "decryptEnabled">;
   cacheCodec?: Pick<TztCodec, "rc4">;
   onLog?: (entry: LogEntry) => void;
+  onLocalValuesChanged?: (values: Record<string, string>) => void;
 }
 
 export interface ResourceCacheLike {
@@ -130,6 +134,15 @@ function cacheKeyFor(requestUrl: string): string {
   return normalized.toLowerCase().endsWith(".d") ? normalized : `${normalized}.d`;
 }
 
+function joinProjectPath(rootDir: string, requestPath: string): { absolute: string; relative: string } {
+  const pathname = decodeURIComponent(new URL(requestPath, "http://local-forwarder.invalid").pathname);
+  const relative = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
+  const root = path.resolve(rootDir);
+  const absolute = path.resolve(root, relative);
+  if (absolute !== root && !absolute.startsWith(`${root}${path.sep}`)) throw new Error("project path escapes configured directory");
+  return { absolute, relative };
+}
+
 export class HttpProxy {
   private readonly options: HttpProxyOptions;
   private readonly localValues: Record<string, string>;
@@ -216,7 +229,9 @@ export class HttpProxy {
         }
         statusCode = response.statusCode;
       } else if (url.pathname === "/reqxml" || url.pathname === "/login") {
-        await this.handleTcp(request.url ?? "/reqxml", body, response, url.pathname === "/login");
+        await this.handleTcp(request.url ?? "/reqxml", body, response, url.pathname === "/login", request.method ?? "GET", request.headers);
+        statusCode = response.statusCode;
+      } else if (await this.serveProjectFile(url.pathname, response)) {
         statusCode = response.statusCode;
       } else {
         await this.forward(request, response, body);
@@ -233,8 +248,7 @@ export class HttpProxy {
     }
   }
 
-  private async handleTcp(route: string, body: Buffer, response: ServerResponse, login = false): Promise<void> {
-    if (this.options.tcpBridge === undefined) return writeJson(response, { error: "TCP bridge is unavailable" }, 502);
+  private async handleTcp(route: string, body: Buffer, response: ServerResponse, login = false, method = "GET", headers: IncomingHttpHeaders = {}): Promise<void> {
     let params = parseParams(route, body);
     if (!login) {
       const substituted = substituteVariables(new URLSearchParams(params).toString(), this.localValues);
@@ -247,15 +261,108 @@ export class HttpProxy {
       params.REQLINKTYPE = "1";
     }
     const targets = (this.options.tcpTargets ?? []).filter((target) => target.enabled);
-    const index = Number((uppercaseParams(params).REQLINKTYPE ?? 0));
+    const index = Number((uppercaseParams(params).REQLINKTYPE ?? (targets.length > 2 ? 2 : 0)));
     const target = targets[index] ?? targets[0];
     if (target === undefined) return writeJson(response, { error: "TCP target is unavailable" }, 502);
+    if (target.transport === "http") {
+      await this.forwardReqxmlOverHttp(target, route, params, response, method, headers, login);
+      return;
+    }
+    if (this.options.tcpBridge === undefined) return writeJson(response, { error: "TCP bridge is unavailable" }, 502);
     try {
       const result = await this.options.tcpBridge.request({ host: target.host, port: target.port }, params);
+      this.captureLocalValues(result);
       writeJson(response, result);
     } catch (error) {
       writeJson(response, { error: error instanceof Error ? error.message : "TCP request failed" }, /timeout/i.test(String(error)) ? 504 : 502);
     }
+  }
+
+  private async forwardReqxmlOverHttp(target: NonNullable<HttpProxyOptions["tcpTargets"]>[number], route: string, params: Record<string, string>, response: ServerResponse, method: string, headers: IncomingHttpHeaders, login: boolean): Promise<void> {
+    const requestUrl = new URL(route, "http://local-forwarder.invalid");
+    const requestPath = login ? "/reqxml" : requestUrl.pathname;
+    const basePath = target.basePath ?? "";
+    const targetPath = `${basePath}${requestPath.startsWith("/") ? requestPath : `/${requestPath}`}`;
+    const query = new URLSearchParams(params).toString();
+    const outgoingPath = method === "GET" && query.length > 0 ? `${targetPath}?${query}` : targetPath;
+    const outgoingHeaders = { ...headers, host: target.host };
+    delete outgoingHeaders.connection;
+    delete outgoingHeaders["content-length"];
+    if (method !== "GET") {
+      outgoingHeaders["content-type"] ??= "application/x-www-form-urlencoded";
+      outgoingHeaders["content-length"] = String(Buffer.byteLength(query));
+    }
+    const client = target.protocol === "https" ? https : http;
+    await new Promise<void>((resolve) => {
+      const outbound = client.request({ hostname: target.host, port: target.port, path: outgoingPath, method, headers: outgoingHeaders, rejectUnauthorized: false }, (upstream) => {
+        const chunks: Buffer[] = [];
+        upstream.on("data", (chunk: Buffer) => chunks.push(chunk));
+        upstream.once("end", () => {
+          const data = decodeResponseBody(Buffer.concat(chunks), typeof upstream.headers["content-encoding"] === "string" ? upstream.headers["content-encoding"] : undefined);
+          this.captureLocalValues(data);
+          response.writeHead(upstream.statusCode ?? 502, cleanResponseHeaders(upstream.headers));
+          response.end(data);
+          resolve();
+        });
+      });
+      let settled = false;
+      const finish = (status: number, message: string) => {
+        if (settled) return;
+        settled = true;
+        outbound.destroy();
+        if (!response.headersSent) writeJson(response, { error: message }, status);
+        resolve();
+      };
+      outbound.once("error", () => finish(502, "upstream request failed"));
+      outbound.setTimeout(this.options.timeoutMs, () => finish(504, "upstream request timeout"));
+      if (method !== "GET") outbound.write(query);
+      outbound.end();
+    });
+  }
+
+  private captureLocalValues(value: unknown): void {
+    let record: Record<string, unknown> | undefined;
+    if (Buffer.isBuffer(value)) {
+      try { record = JSON.parse(value.toString("utf8")) as Record<string, unknown>; } catch { return; }
+    } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      record = value as Record<string, unknown>;
+    }
+    if (record === undefined) return;
+    const normalized = uppercaseParams(Object.fromEntries(Object.entries(record).filter(([, entry]) => typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean").map(([key, entry]) => [key, String(entry)])));
+    let changed = false;
+    if (normalized.ACTION === "100") {
+      for (const [key, entry] of Object.entries(normalized)) {
+        if (this.localValues[key] !== entry) { this.localValues[key] = entry; changed = true; }
+      }
+    } else if (normalized.TOKEN !== undefined && this.localValues.TOKEN !== normalized.TOKEN) {
+      this.localValues.TOKEN = normalized.TOKEN;
+      changed = true;
+    }
+    if (changed) this.options.onLocalValuesChanged?.({ ...this.localValues });
+  }
+
+  private async serveProjectFile(requestPath: string, response: ServerResponse): Promise<boolean> {
+    if (!this.options.projectPath) return false;
+    const paths = joinProjectPath(this.options.projectPath, requestPath);
+    let actual = paths.absolute;
+    try {
+      const details = await stat(actual);
+      if (!details.isFile()) return false;
+    } catch {
+      const encoded = `${actual}.d`;
+      try {
+        const details = await stat(encoded);
+        if (!details.isFile()) return false;
+        actual = encoded;
+      } catch {
+        return false;
+      }
+    }
+    let data: Buffer = Buffer.from(await readFile(actual));
+    if (actual.endsWith(".d") && this.options.cacheCodec !== undefined) data = Buffer.from(decodeCachedResource(paths.relative, data, this.options.cacheCodec, true));
+    response.writeHead(200, { "content-type": contentTypeFor(paths.relative), "content-length": data.length });
+    response.end(data);
+    return true;
   }
 
   private async forward(request: IncomingMessage, response: ServerResponse, body: Buffer): Promise<void> {
@@ -281,6 +388,7 @@ export class HttpProxy {
         upstream.once("end", () => {
           try {
             const decoded = decodeResponseBody(Buffer.concat(chunks), typeof upstream.headers["content-encoding"] === "string" ? upstream.headers["content-encoding"] : undefined);
+            this.captureLocalValues(decoded);
             const headers = cleanResponseHeaders(upstream.headers);
             response.writeHead(upstream.statusCode ?? 502, headers);
             response.end(decoded);

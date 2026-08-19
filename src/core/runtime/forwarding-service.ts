@@ -39,6 +39,7 @@ export class ForwardingService {
   private state: RuntimeStatus["state"] = "stopped";
   private error: string | undefined;
   private readonly logBuffer: LogEntry[] = [];
+  private configSaveQueue: Promise<void> = Promise.resolve();
   private address: HttpProxyAddress | undefined;
 
   public constructor(options: ForwardingServiceOptions) {
@@ -71,6 +72,7 @@ export class ForwardingService {
         bindHost: this.config.server.bindHost,
         port: this.config.server.port,
         timeoutMs: this.config.server.timeoutMs,
+        projectPath: this.config.projectPath,
         rules: this.config.httpRules,
         localValues: this.config.localValues,
         mapValues: this.config.mapValues,
@@ -82,6 +84,7 @@ export class ForwardingService {
         cacheConfig: this.config.cache,
         cacheCodec: this.config.cache.decryptEnabled ? createTztCodec() : undefined,
         onLog: (entry) => this.appendLogEntry(entry),
+        onLocalValuesChanged: (values) => this.persistLocalValues(values),
       });
       created.push(async () => { await this.http?.stop(); this.http = undefined; });
       this.address = await this.http.start();
@@ -152,5 +155,14 @@ export class ForwardingService {
     if (!this.config.server.loggingEnabled && entry.level !== "error") return;
     this.logBuffer.push(entry);
     if (this.logBuffer.length > 2000) this.logBuffer.splice(0, this.logBuffer.length - 2000);
+  }
+
+  private persistLocalValues(values: Record<string, string>): void {
+    this.config.localValues = { ...values };
+    if (this.configStore === undefined) return;
+    const snapshot = cloneConfig(this.config);
+    this.configSaveQueue = this.configSaveQueue
+      .then(() => this.configStore?.save(snapshot))
+      .catch((error) => this.appendLog("error", error instanceof Error ? error.message : "login cache save failed"));
   }
 }

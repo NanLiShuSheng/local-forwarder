@@ -16,6 +16,7 @@ export interface AppConfig {
     timeoutMs: number;
     loggingEnabled: boolean;
   };
+  projectPath?: string;
   httpRules: ForwardRule[];
   tcpTargets: Array<{
     id: string;
@@ -23,6 +24,8 @@ export interface AppConfig {
     host: string;
     port: number;
     protocol?: "http" | "https";
+    basePath?: string;
+    transport?: "tcp" | "http";
     enabled: boolean;
   }>;
   localValues: Record<string, string>;

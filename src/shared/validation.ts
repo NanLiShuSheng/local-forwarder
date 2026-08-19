@@ -62,7 +62,7 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
     "mapValues",
     "accounts",
     "cache",
-  ], ["legacy"])) return "root";
+  ], ["legacy", "projectPath"])) return "root";
 
   const server = value.server;
   if (!isRecord(server)) return "server";
@@ -94,14 +94,18 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
   for (const [index, target] of value.tcpTargets.entries()) {
     const prefix = `tcpTargets[${index}]`;
     if (!isRecord(target)) return prefix;
-    if (!hasOnlyKeys(target, ["id", "name", "host", "port", "enabled"], ["protocol"])) return prefix;
+    if (!hasOnlyKeys(target, ["id", "name", "host", "port", "enabled"], ["protocol", "basePath", "transport"])) return prefix;
     if (typeof target.id !== "string" || target.id.length === 0) return `${prefix}.id`;
     if (typeof target.name !== "string" || target.name.length === 0) return `${prefix}.name`;
     if (typeof target.host !== "string" || target.host.length === 0) return `${prefix}.host`;
     if (typeof target.port !== "number" || !Number.isInteger(target.port) || target.port < 1 || target.port > 65535) return `${prefix}.port`;
     if (target.protocol !== undefined && target.protocol !== "http" && target.protocol !== "https") return `${prefix}.protocol`;
+    if (target.basePath !== undefined && (typeof target.basePath !== "string" || !target.basePath.startsWith("/"))) return `${prefix}.basePath`;
+    if (target.transport !== undefined && target.transport !== "tcp" && target.transport !== "http") return `${prefix}.transport`;
     if (typeof target.enabled !== "boolean") return `${prefix}.enabled`;
   }
+
+  if (value.projectPath !== undefined && typeof value.projectPath !== "string") return "projectPath";
 
   if (!isRecord(value.localValues)) return "localValues";
   for (const [key, entry] of Object.entries(value.localValues)) {
