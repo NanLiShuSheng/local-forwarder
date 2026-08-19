@@ -1,5 +1,6 @@
 appId: com.localforwarder.mac
 productName: Local Forwarder
+electronDist: node_modules/electron/dist
 asar: true
 files:
   - dist/**
