@@ -1,5 +1,5 @@
 import type { AppConfig } from "../src/shared/contracts";
-import { isValidAppConfig } from "../src/shared/validation";
+import { getAppConfigValidationError, isValidAppConfig } from "../src/shared/validation";
 
 export interface IpcInvokeEvent {
   senderFrame?: { url: string } | null;
@@ -28,7 +28,7 @@ export function createSaveConfigHandler(
 ): IpcHandler {
   return (_event, payload) => {
     if (!isValidAppConfig(payload)) {
-      return { ok: false, error: "Invalid configuration payload." };
+      return { ok: false, error: `Invalid configuration payload: ${getAppConfigValidationError(payload) ?? "unknown field"}` };
     }
     return onValidPayload(payload);
   };

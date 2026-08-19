@@ -36,7 +36,24 @@ test("save config handler rejects invalid payload and accepts valid payload", ()
 
   assert.deepEqual(handler(trustedEvent, null), {
     ok: false,
-    error: "Invalid configuration payload.",
+    error: "Invalid configuration payload: root",
   });
   assert.deepEqual(handler(trustedEvent, validConfig), { ok: true });
+});
+
+test("save config handler reports the rejected configuration field", () => {
+  const handler = createTrustedIpcHandler(
+    policy,
+    createSaveConfigHandler(() => ({ ok: true })),
+  );
+  const trustedEvent = { senderFrame: { url: "http://localhost:5173/" } };
+  const invalidConfig = {
+    ...validConfig,
+    tcpTargets: [{ id: "hq", name: "hq", host: "127.0.0.1", port: 0, enabled: true }],
+  };
+
+  assert.deepEqual(handler(trustedEvent, invalidConfig), {
+    ok: false,
+    error: "Invalid configuration payload: tcpTargets[0].port",
+  });
 });
