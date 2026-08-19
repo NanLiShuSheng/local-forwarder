@@ -16,27 +16,27 @@
 - 创建：`src/shared/local-cache.ts`
 - 创建：`test/shared/local-cache.test.ts`
 
-- [ ] **步骤 1：编写失败测试**
+- [x] **步骤 1：编写失败测试**
 
 测试 `parseLocalCacheText` 支持空行、首个等号分割、值中的等号、重复键以后者为准，并拒绝没有等号或空键的非空行。
 
-- [ ] **步骤 2：运行测试确认失败**
+- [x] **步骤 2：运行测试确认失败**
 
 运行：`node --import tsx --test test/shared/local-cache.test.ts`
 
 预期：因 `src/shared/local-cache.ts` 和 `parseLocalCacheText` 尚不存在而失败。
 
-- [ ] **步骤 3：实现最少解析逻辑**
+- [x] **步骤 3：实现最少解析逻辑**
 
 导出 `parseLocalCacheText(text: string): Record<string, string>`：逐行处理，跳过空行；使用首个 `=` 分割；键 `trim()` 后必须非空；值只去除首尾空白；重复键覆盖前值；格式错误抛出包含行号的中文无关错误信息即可由 UI 转换。
 
-- [ ] **步骤 4：运行测试确认通过**
+- [x] **步骤 4：运行测试确认通过**
 
 运行：`node --import tsx --test test/shared/local-cache.test.ts`
 
 预期：全部缓存解析测试通过。
 
-- [ ] **步骤 5：提交**
+- [x] **步骤 5：提交**
 
 ```bash
 git add src/shared/local-cache.ts test/shared/local-cache.test.ts
@@ -149,4 +149,3 @@ git status --short
 ```
 
 预期：工作区无未提交源码改动；DMG 保留在 `release/`。
-
