@@ -7,7 +7,7 @@ interface ConfigPagesProps { page: Page; config: AppConfig; logs: LogEntry[]; on
 const sensitive = /password|token|secret|account|authorization|mobile/i;
 const addressLabels = ["hq", "jy", "zx"];
 
-interface AddressDraft { id: string; name: string; address: string; enabled: boolean; }
+export interface AddressDraft { id: string; name: string; address: string; enabled: boolean; }
 
 function addressForTarget(target: AppConfig["tcpTargets"][number]): string {
   const protocol = target.transport === "tcp" ? "tcp" : target.protocol ?? "http";
@@ -27,20 +27,26 @@ function draftsForTargets(targets: AppConfig["tcpTargets"]): AddressDraft[] {
   });
 }
 
-function targetFromDraft(draft: AddressDraft, index: number): AppConfig["tcpTargets"][number] {
+export function normalizeTargetBasePath(pathname: string): string | undefined {
+  const basePath = pathname.replace(/\/+$/, "");
+  return basePath === "" ? undefined : basePath;
+}
+
+export function targetFromDraft(draft: AddressDraft, index: number): AppConfig["tcpTargets"][number] {
   const raw = draft.address.trim();
   const parsed = new URL(raw.includes("://") ? raw : `tcp://${raw}`);
   if (parsed.protocol !== "tcp:" && parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error(`${addressLabels[index] ?? "地址"} 地址协议不受支持`);
   if (!parsed.hostname) throw new Error(`${addressLabels[index] ?? "地址"} 地址缺少主机名`);
   const port = parsed.port === "" ? (parsed.protocol === "https:" ? 443 : parsed.protocol === "http:" ? 80 : 0) : Number(parsed.port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error(`${addressLabels[index] ?? "地址"} 地址端口无效`);
+  const basePath = normalizeTargetBasePath(parsed.pathname);
   return {
     id: draft.id,
     name: draft.name,
     host: parsed.hostname,
     port,
     ...(parsed.protocol === "http:" || parsed.protocol === "https:" ? { protocol: parsed.protocol.slice(0, -1) as "http" | "https" } : {}),
-    ...(parsed.pathname !== "/" ? { basePath: parsed.pathname.replace(/\/+$/, "") } : {}),
+    ...(basePath === undefined ? {} : { basePath }),
     ...(parsed.protocol === "http:" || parsed.protocol === "https:" ? { transport: "http" as const } : {}),
     enabled: draft.enabled,
   };
