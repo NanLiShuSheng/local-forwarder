@@ -10,6 +10,7 @@ test("IPC channels expose stable runtime commands", () => {
     exportConfig: "config:export",
     selectProjectDirectory: "config:select-project-directory",
     selectEncryptionDirectory: "encryption:select-directory",
+    getEncryptionPreferences: "encryption:get-preferences",
     encryptDirectory: "encryption:run",
     start: "runtime:start",
     stop: "runtime:stop",

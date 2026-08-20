@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AppConfig, EncryptionDirectoryKind, EncryptionResult, LogEntry } from "../../shared/contracts";
+import type { AppConfig, EncryptionDirectoryKind, EncryptionPreferences, EncryptionResult, LogEntry } from "../../shared/contracts";
 import { parseLocalCacheText } from "../../shared/local-cache";
 
 export type Page = "runtime" | "rules" | "addresses" | "local" | "values" | "cache" | "encryption" | "logs" | "settings";
@@ -11,6 +11,7 @@ interface ConfigPagesProps {
   onImport: () => Promise<void>;
   onExport: () => Promise<void>;
   onChooseProjectDirectory: () => Promise<boolean>;
+  encryptionPreferences: EncryptionPreferences;
   onSelectEncryptionDirectory: (kind: EncryptionDirectoryKind) => Promise<string | undefined>;
   onEncryptDirectory: (inputDir: string, outputDir: string) => Promise<EncryptionResult>;
 }
@@ -61,15 +62,15 @@ export function targetFromDraft(draft: AddressDraft, index: number): AppConfig["
   };
 }
 
-export function ConfigPages({ page, config, logs, onChange, onImport, onExport, onChooseProjectDirectory, onSelectEncryptionDirectory, onEncryptDirectory }: ConfigPagesProps) {
+export function ConfigPages({ page, config, logs, onChange, onImport, onExport, onChooseProjectDirectory, encryptionPreferences, onSelectEncryptionDirectory, onEncryptDirectory }: ConfigPagesProps) {
   const [addressDrafts, setAddressDrafts] = useState(() => draftsForTargets(config.tcpTargets));
   const [addressError, setAddressError] = useState("");
   const [localText, setLocalText] = useState(() => config.localText ?? "");
   const [localError, setLocalError] = useState("");
   const [cacheText, setCacheText] = useState("");
   const [cacheError, setCacheError] = useState("");
-  const [encryptionInputDir, setEncryptionInputDir] = useState("");
-  const [encryptionOutputDir, setEncryptionOutputDir] = useState("");
+  const [encryptionInputDir, setEncryptionInputDir] = useState(() => encryptionPreferences.inputDir);
+  const [encryptionOutputDir, setEncryptionOutputDir] = useState(() => encryptionPreferences.outputDir);
   const [encryptionRunning, setEncryptionRunning] = useState(false);
   const [encryptionStatus, setEncryptionStatus] = useState("未开始");
   const [encryptionError, setEncryptionError] = useState("");
@@ -77,6 +78,7 @@ export function ConfigPages({ page, config, logs, onChange, onImport, onExport, 
   const [encryptionTotal, setEncryptionTotal] = useState(0);
   useEffect(() => { setAddressDrafts(draftsForTargets(config.tcpTargets)); }, [config.tcpTargets]);
   useEffect(() => { setLocalText(config.localText ?? ""); }, [config.localText]);
+  useEffect(() => { setEncryptionInputDir(encryptionPreferences.inputDir); setEncryptionOutputDir(encryptionPreferences.outputDir); }, [encryptionPreferences]);
 
   const saveLocalValues = async () => {
     try {
@@ -94,6 +96,18 @@ export function ConfigPages({ page, config, logs, onChange, onImport, onExport, 
       }
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : "本地变量格式无效");
+    }
+  };
+
+  const saveAddressDrafts = async () => {
+    try {
+      const firstEmpty = addressDrafts.findIndex((draft) => draft.address.trim() === "");
+      const laterFilled = firstEmpty >= 0 && addressDrafts.slice(firstEmpty + 1).some((draft) => draft.address.trim() !== "");
+      if (laterFilled) throw new Error("请按 hq、jy、zx 顺序填写地址");
+      const saved = await onChange({ ...config, tcpTargets: addressDrafts.filter((draft) => draft.address.trim() !== "").map((draft, index) => targetFromDraft(draft, index)) });
+      setAddressError(saved ? "" : "配置未保存，请先停止服务");
+    } catch (error) {
+      setAddressError(error instanceof Error ? error.message : "地址配置无效");
     }
   };
 
@@ -137,7 +151,7 @@ export function ConfigPages({ page, config, logs, onChange, onImport, onExport, 
     }
   };
 
-  if (page === "addresses") return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">/reqxml</p><h2>转发地址</h2></div></div><p className="muted">按 hq、jy、zx 顺序配置旧版 Node 转发地址。直接填写主机:端口时按 TCP 处理；HTTP、HTTPS 地址请保留协议前缀。</p>{addressDrafts.map((draft, index) => <div className="address-editor" key={draft.id}><label>{addressLabels[index] ?? `地址${index + 1}`} 地址<input value={draft.address} placeholder={index === 0 ? "主机:端口" : "http://主机:端口"} onChange={(event) => setAddressDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, address: event.target.value } : item))} /></label><label className="address-enabled"><input type="checkbox" checked={draft.enabled} onChange={(event) => setAddressDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: event.target.checked } : item))} />启用</label></div>)}{addressError && <p className="error-box" role="alert">{addressError}</p>}<div className="button-row"><button className="primary" onClick={() => { try { const firstEmpty = addressDrafts.findIndex((draft) => draft.address.trim() === ""); const laterFilled = firstEmpty >= 0 && addressDrafts.slice(firstEmpty + 1).some((draft) => draft.address.trim() !== ""); if (laterFilled) throw new Error("请按 hq、jy、zx 顺序填写地址"); void onChange({ ...config, tcpTargets: addressDrafts.filter((draft) => draft.address.trim() !== "").map((draft, index) => targetFromDraft(draft, index)) }); setAddressError(""); } catch (error) { setAddressError(error instanceof Error ? error.message : "地址配置无效"); } }}>保存转发地址</button></div></section>;
+  if (page === "addresses") return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">/reqxml</p><h2>转发地址</h2></div></div>{addressDrafts.map((draft, index) => <div className="address-editor" key={draft.id}><label>{addressLabels[index] ?? `地址${index + 1}`} 地址<input value={draft.address} placeholder={index === 0 ? "主机:端口" : "http://主机:端口"} onChange={(event) => setAddressDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, address: event.target.value } : item))} onBlur={() => void saveAddressDrafts()} /></label><label className="address-enabled"><input type="checkbox" checked={draft.enabled} onChange={(event) => setAddressDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: event.target.checked } : item))} />启用</label></div>)}{addressError && <p className="error-box" role="alert">{addressError}</p>}</section>;
   if (page === "local") return <section className="panel"><p className="eyebrow">本地变量</p><h2>本地变量</h2><p className="muted">可直接输入本地变量，按“键 = 值”逐行填写，离开输入框后自动保存。</p><textarea className="local-values-input" aria-label="本地变量输入" value={localText} onChange={(event) => setLocalText(event.target.value)} onBlur={() => void saveLocalValues()} placeholder="localKey = value\nAnotherKey = another value" rows={10} />{localError && <p className="error-box" role="alert">{localError}</p>}</section>;
   if (page === "values") return <section className="panel"><p className="eyebrow">登录状态</p><h2>登录缓存</h2><p className="muted">可直接粘贴旧版 _local 内容，按“键 = 值”逐行填写。</p><textarea aria-label="粘贴登录缓存" value={cacheText} onChange={(event) => setCacheText(event.target.value)} placeholder="Token = xxx\nSessionNo = 123" rows={8} />{cacheError && <p className="error-box" role="alert">{cacheError}</p>}<div className="button-row"><button className="primary" onClick={() => { try { const pasted = parseLocalCacheText(cacheText); if (Object.keys(pasted).length === 0) throw new Error("请输入登录缓存内容"); void onChange({ ...config, localValues: { ...config.localValues, ...pasted } }).then((saved) => { if (saved) { setCacheText(""); setCacheError(""); } else setCacheError("配置未保存，请先停止服务"); }); } catch (error) { setCacheError(error instanceof Error ? error.message : "登录缓存格式无效"); } }}>保存登录缓存</button></div><p className="muted">当前缓存 {Object.keys(config.localValues).length} 项。</p></section>;
   if (page === "cache") return <section className="panel"><p className="eyebrow">资源管理</p><h2>缓存</h2><dl className="settings-list"><div><dt>根目录</dt><dd>{config.cache.rootDir || "默认应用缓存"}</dd></div><div><dt>下载目标</dt><dd>{config.cache.downloadTarget || "未配置"}</dd></div><div><dt>解密 .d 资源</dt><dd>{config.cache.decryptEnabled ? "已启用" : "已停用"}</dd></div></dl></section>;

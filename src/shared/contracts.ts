@@ -71,6 +71,11 @@ export interface OperationResult {
 
 export type EncryptionDirectoryKind = "input" | "output";
 
+export interface EncryptionPreferences {
+  inputDir: string;
+  outputDir: string;
+}
+
 export interface EncryptionFileResult {
   relativePath: string;
   outputPath: string;
@@ -89,6 +94,7 @@ export interface ForwarderApi {
   exportConfig(): Promise<OperationResult & { path?: string }>;
   selectProjectDirectory(): Promise<OperationResult & { path?: string; canceled?: boolean }>;
   selectEncryptionDirectory(kind: EncryptionDirectoryKind): Promise<OperationResult & { path?: string; canceled?: boolean }>;
+  getEncryptionPreferences(): Promise<EncryptionPreferences>;
   encryptDirectory(inputDir: string, outputDir: string): Promise<EncryptionResult>;
   start(): Promise<RuntimeStatus>;
   stop(): Promise<RuntimeStatus>;
@@ -103,6 +109,7 @@ export const IPC_CHANNELS = {
   exportConfig: "config:export",
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
+  getEncryptionPreferences: "encryption:get-preferences",
   encryptDirectory: "encryption:run",
   start: "runtime:start",
   stop: "runtime:stop",

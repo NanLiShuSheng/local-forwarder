@@ -12,3 +12,7 @@ export function getEncryptionEncoderPath(compiledMainDir: string, isPackaged: bo
   const resourceRoot = isPackaged ? resourcesPath : path.resolve(compiledMainDir, "../../resources");
   return path.join(resourceRoot, "protocol", "encode", "h5encode-mac-amd64");
 }
+
+export function getEncryptionPreferencesPath(userDataPath: string): string {
+  return path.join(userDataPath, "encryption-preferences.json");
+}

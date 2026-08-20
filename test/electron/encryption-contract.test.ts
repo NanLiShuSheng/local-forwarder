@@ -4,14 +4,16 @@ import { constants } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { IPC_CHANNELS } from "../../src/shared/contracts";
-import { getEncryptionEncoderPath } from "../../electron/paths";
+import { getEncryptionEncoderPath, getEncryptionPreferencesPath } from "../../electron/paths";
 
 test("IPC contracts expose directory selection and encryption execution", async () => {
   assert.equal(IPC_CHANNELS.selectEncryptionDirectory, "encryption:select-directory");
+  assert.equal(IPC_CHANNELS.getEncryptionPreferences, "encryption:get-preferences");
   assert.equal(IPC_CHANNELS.encryptDirectory, "encryption:run");
   const preload = await readFile("electron/preload.ts", "utf8");
   const main = await readFile("electron/main.ts", "utf8");
   assert.match(preload, /selectEncryptionDirectory/);
+  assert.match(preload, /getEncryptionPreferences/);
   assert.match(preload, /encryptDirectory/);
   assert.match(main, /selectEncryptionDirectory/);
   assert.match(main, /encryptDirectory/);
@@ -26,6 +28,7 @@ test("encoder path resolves to project resources in development and app resource
     getEncryptionEncoderPath("/project/dist-electron/electron", true, "/packed/Contents/Resources"),
     path.join("/packed/Contents/Resources", "protocol", "encode", "h5encode-mac-amd64"),
   );
+  assert.equal(getEncryptionPreferencesPath("/Users/test/Library/Application Support/Local Forwarder"), path.join("/Users/test/Library/Application Support/Local Forwarder", "encryption-preferences.json"));
 });
 
 test("the encoder binary is included as an executable application resource", async () => {

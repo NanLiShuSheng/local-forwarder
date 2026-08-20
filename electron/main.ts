@@ -1,11 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { encryptDirectory } from "../src/core/encryption/encryptor";
+import { readEncryptionPreferences, saveEncryptionPreferences } from "../src/core/encryption/preferences";
 import type { AppConfig, LogEntry } from "../src/shared/contracts";
 import { ConfigStore } from "../src/core/config/config-store";
 import { createDefaultConfig } from "../src/core/config/model";
 import { ForwardingService } from "../src/core/runtime/forwarding-service";
-import { getEncryptionEncoderPath, getPreloadPath, getRendererIndexPath } from "./paths";
+import { getEncryptionEncoderPath, getEncryptionPreferencesPath, getPreloadPath, getRendererIndexPath } from "./paths";
 import { createRendererSecurityPolicy, type RendererSecurityPolicy } from "./security";
 import { createSaveConfigHandler, createTrustedIpcHandler, type IpcHandler } from "./ipc";
 
@@ -16,6 +17,7 @@ const IPC_CHANNELS = {
   exportConfig: "config:export",
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
+  getEncryptionPreferences: "encryption:get-preferences",
   encryptDirectory: "encryption:run",
   start: "runtime:start",
   stop: "runtime:stop",
@@ -85,7 +87,22 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       title: kind === "input" ? "选择加密前文件夹目录" : "选择加密后文件夹目录",
     });
     if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, canceled: true };
-    return { ok: true, path: selected.filePaths[0] };
+    try {
+      const preferences = await saveEncryptionPreferences(
+        getEncryptionPreferencesPath(app.getPath("userData")),
+        kind === "input" ? { inputDir: selected.filePaths[0] } : { outputDir: selected.filePaths[0] },
+      );
+      return { ok: true, path: selected.filePaths[0], preferences };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "保存加密目录失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.getEncryptionPreferences, async () => {
+    try {
+      return readEncryptionPreferences(getEncryptionPreferencesPath(app.getPath("userData")));
+    } catch {
+      return { inputDir: "", outputDir: "" };
+    }
   });
   registerIpcHandler(policy, IPC_CHANNELS.encryptDirectory, async (_event, inputDir, outputDir) => {
     if (typeof inputDir !== "string" || typeof outputDir !== "string" || !inputDir || !outputDir) {
