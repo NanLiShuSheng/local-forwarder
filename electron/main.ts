@@ -1,11 +1,11 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
-import { access } from "node:fs/promises";
+import { encryptDirectory } from "../src/core/encryption/encryptor";
 import type { AppConfig, LogEntry } from "../src/shared/contracts";
 import { ConfigStore } from "../src/core/config/config-store";
 import { createDefaultConfig } from "../src/core/config/model";
 import { ForwardingService } from "../src/core/runtime/forwarding-service";
-import { getPreloadPath, getRendererIndexPath } from "./paths";
+import { getEncryptionEncoderPath, getPreloadPath, getRendererIndexPath } from "./paths";
 import { createRendererSecurityPolicy, type RendererSecurityPolicy } from "./security";
 import { createSaveConfigHandler, createTrustedIpcHandler, type IpcHandler } from "./ipc";
 
@@ -15,6 +15,8 @@ const IPC_CHANNELS = {
   importLegacy: "config:import-legacy",
   exportConfig: "config:export",
   selectProjectDirectory: "config:select-project-directory",
+  selectEncryptionDirectory: "encryption:select-directory",
+  encryptDirectory: "encryption:run",
   start: "runtime:start",
   stop: "runtime:stop",
   status: "runtime:status",
@@ -75,6 +77,30 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     const selected = await dialog.showOpenDialog({ properties: ["openDirectory"] });
     if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, canceled: true };
     return { ok: true, path: selected.filePaths[0] };
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.selectEncryptionDirectory, async (_event, kind) => {
+    if (kind !== "input" && kind !== "output") return { ok: false, error: "目录类型无效" };
+    const selected = await dialog.showOpenDialog({
+      properties: ["openDirectory", "createDirectory"],
+      title: kind === "input" ? "选择加密前文件夹目录" : "选择加密后文件夹目录",
+    });
+    if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, canceled: true };
+    return { ok: true, path: selected.filePaths[0] };
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.encryptDirectory, async (_event, inputDir, outputDir) => {
+    if (typeof inputDir !== "string" || typeof outputDir !== "string" || !inputDir || !outputDir) {
+      return { ok: false, error: "请选择加密前和加密后文件夹目录" };
+    }
+    try {
+      const result = await encryptDirectory({
+        inputDir,
+        outputDir,
+        encoderPath: getEncryptionEncoderPath(__dirname, app.isPackaged, process.resourcesPath),
+      });
+      return { ok: true, ...result };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "加密失败" };
+    }
   });
   registerIpcHandler(policy, IPC_CHANNELS.start, () => service.start());
   registerIpcHandler(policy, IPC_CHANNELS.stop, () => service.stop());

@@ -28,6 +28,7 @@ export interface AppConfig {
     transport?: "tcp" | "http";
     enabled: boolean;
   }>;
+  localText?: string;
   localValues: Record<string, string>;
   mapValues: Record<string, string>;
   accounts: Record<string, Record<string, string>>;
@@ -68,12 +69,27 @@ export interface OperationResult {
   error?: string;
 }
 
+export type EncryptionDirectoryKind = "input" | "output";
+
+export interface EncryptionFileResult {
+  relativePath: string;
+  outputPath: string;
+}
+
+export interface EncryptionResult extends OperationResult {
+  totalFiles?: number;
+  files?: EncryptionFileResult[];
+  logs?: string[];
+}
+
 export interface ForwarderApi {
   getConfig(): Promise<AppConfig>;
   saveConfig(config: AppConfig): Promise<OperationResult>;
   importLegacy(): Promise<OperationResult & { config?: AppConfig }>;
   exportConfig(): Promise<OperationResult & { path?: string }>;
   selectProjectDirectory(): Promise<OperationResult & { path?: string; canceled?: boolean }>;
+  selectEncryptionDirectory(kind: EncryptionDirectoryKind): Promise<OperationResult & { path?: string; canceled?: boolean }>;
+  encryptDirectory(inputDir: string, outputDir: string): Promise<EncryptionResult>;
   start(): Promise<RuntimeStatus>;
   stop(): Promise<RuntimeStatus>;
   status(): Promise<RuntimeStatus>;
@@ -86,6 +102,8 @@ export const IPC_CHANNELS = {
   importLegacy: "config:import-legacy",
   exportConfig: "config:export",
   selectProjectDirectory: "config:select-project-directory",
+  selectEncryptionDirectory: "encryption:select-directory",
+  encryptDirectory: "encryption:run",
   start: "runtime:start",
   stop: "runtime:stop",
   status: "runtime:status",

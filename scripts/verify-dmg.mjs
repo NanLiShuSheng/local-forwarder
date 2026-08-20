@@ -49,6 +49,7 @@ try {
     path.join(appPath, "Contents", "Resources", "app.asar"),
     path.join(appPath, "Contents", "Resources", "protocol"),
     path.join(appPath, "Contents", "Resources", "protocol", "tzt.bytecode-16.13.0"),
+    path.join(appPath, "Contents", "Resources", "protocol", "encode", "h5encode-mac-amd64"),
   ];
 
   for (const requiredPath of requiredPaths) {
