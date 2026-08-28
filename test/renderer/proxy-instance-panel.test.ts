@@ -24,3 +24,9 @@ test("original request and encryption navigation remain available", async () => 
   assert.match(app, /onEncryptDirectory/);
   assert.match(app, /onSendRequest/);
 });
+
+test("overview does not repeat runtime status and configuration panels", async () => {
+  const app = await readFile("src/renderer/App.tsx", "utf8");
+  assert.doesNotMatch(app, /<RuntimePanel/);
+  assert.doesNotMatch(app, /summary-panel/);
+});
