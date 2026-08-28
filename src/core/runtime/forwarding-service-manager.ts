@@ -167,6 +167,7 @@ export class ForwardingServiceManager {
     return {
       id: instance.id,
       name: instance.name,
+      selected: instance.id === this.workspace.selectedInstanceId,
       bindHost: config.server.bindHost,
       port: config.server.port,
       target: targetForConfig(config),

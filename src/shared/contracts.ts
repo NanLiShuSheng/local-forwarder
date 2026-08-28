@@ -115,6 +115,7 @@ export interface ProxyWorkspace {
 export interface ProxyInstanceSummary {
   id: string;
   name: string;
+  selected: boolean;
   bindHost: string;
   port: number;
   target: string;
