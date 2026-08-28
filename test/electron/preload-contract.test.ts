@@ -13,7 +13,9 @@ test("compiled sandbox preload has no runtime dependency on shared contracts", (
   assert.doesNotMatch(preload, /require\([^)]*contracts/);
   assert.match(preload, /selectProjectDirectory/);
   assert.match(preload, /selectEncryptionDirectory/);
+  assert.match(preload, /saveEncryptionPreferences/);
   assert.match(preload, /encryptDirectory/);
+  assert.match(preload, /sendRequest/);
 });
 
 test("compiled Electron entrypoints have no runtime dependency on shared contracts", () => {

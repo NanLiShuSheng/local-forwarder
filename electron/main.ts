@@ -2,13 +2,16 @@ import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { encryptDirectory } from "../src/core/encryption/encryptor";
 import { readEncryptionPreferences, saveEncryptionPreferences } from "../src/core/encryption/preferences";
-import type { AppConfig, LogEntry } from "../src/shared/contracts";
+import type { AppConfig, EncryptionMode, LogEntry, ProxyInstanceSummary } from "../src/shared/contracts";
 import { ConfigStore } from "../src/core/config/config-store";
 import { createDefaultConfig } from "../src/core/config/model";
-import { ForwardingService } from "../src/core/runtime/forwarding-service";
+import { ForwardingServiceManager } from "../src/core/runtime/forwarding-service-manager";
+import { ProxyWorkspaceStore } from "../src/core/runtime/proxy-workspace-store";
 import { getEncryptionEncoderPath, getEncryptionPreferencesPath, getPreloadPath, getRendererIndexPath } from "./paths";
 import { createRendererSecurityPolicy, type RendererSecurityPolicy } from "./security";
 import { createSaveConfigHandler, createTrustedIpcHandler, type IpcHandler } from "./ipc";
+import { extractManualLoginValues, sendManualRequest } from "../src/core/request/manual-request";
+import { getManualRequestConfigValidationError, isValidManualRequestConfig } from "../src/shared/validation";
 
 const IPC_CHANNELS = {
   getConfig: "config:get",
@@ -18,7 +21,13 @@ const IPC_CHANNELS = {
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
   getEncryptionPreferences: "encryption:get-preferences",
+  saveEncryptionPreferences: "encryption:save-preferences",
   encryptDirectory: "encryption:run",
+  sendRequest: "request:send",
+  listProxyInstances: "proxy-instances:list",
+  selectProxyInstance: "proxy-instances:select",
+  createProxyInstance: "proxy-instances:create",
+  duplicateProxyInstance: "proxy-instances:duplicate",
   start: "runtime:start",
   stop: "runtime:stop",
   status: "runtime:status",
@@ -26,8 +35,9 @@ const IPC_CHANNELS = {
 } as const;
 
 const smokeMode = process.argv.includes("--smoke");
-let service: ForwardingService;
+let manager: ForwardingServiceManager;
 let configStore: ConfigStore;
+let workspaceStore: ProxyWorkspaceStore;
 let quitting = false;
 
 function registerIpcHandler(
@@ -39,26 +49,50 @@ function registerIpcHandler(
 }
 
 function registerIpcHandlers(policy: RendererSecurityPolicy): void {
-  registerIpcHandler(policy, IPC_CHANNELS.getConfig, () => service.getConfig());
+  registerIpcHandler(policy, IPC_CHANNELS.getConfig, () => manager.getConfig());
   registerIpcHandler(
     policy,
     IPC_CHANNELS.saveConfig,
     createSaveConfigHandler(async (config) => {
       try {
-        await service.saveConfig(config);
+        await manager.saveConfig(config);
         return { ok: true };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : "could not save configuration" };
       }
     }),
   );
+  registerIpcHandler(policy, IPC_CHANNELS.listProxyInstances, (): ProxyInstanceSummary[] => manager.list());
+  registerIpcHandler(policy, IPC_CHANNELS.selectProxyInstance, async (_event, id) => {
+    if (typeof id !== "string" || id.length === 0) return { ok: false, error: "代理实例参数无效" };
+    try {
+      await manager.select(id);
+      return { ok: true, instanceId: id };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "代理实例切换失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.createProxyInstance, async () => {
+    try {
+      return { ok: true, instance: await manager.create() };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "新增代理实例失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.duplicateProxyInstance, async () => {
+    try {
+      return { ok: true, instance: await manager.duplicate() };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "复制代理实例失败" };
+    }
+  });
   registerIpcHandler(policy, IPC_CHANNELS.importLegacy, async () => {
     const selected = await dialog.showOpenDialog({ properties: ["openDirectory"] });
     if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, error: "import canceled" };
     try {
       const imported = await configStore.importLegacy(selected.filePaths[0]);
-      await service.stop();
-      service = createService(imported);
+      await manager.stop();
+      await manager.saveConfig(imported);
       await configStore.save(imported);
       return { ok: true, config: imported };
     } catch (error) {
@@ -69,7 +103,7 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     const selected = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
     if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, error: "export canceled" };
     try {
-      await configStore.exportLegacy(service.getConfig(), selected.filePaths[0]);
+      await configStore.exportLegacy(manager.getConfig(), selected.filePaths[0]);
       return { ok: true, path: selected.filePaths[0] };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "could not export configuration" };
@@ -104,14 +138,32 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       return { inputDir: "", outputDir: "" };
     }
   });
-  registerIpcHandler(policy, IPC_CHANNELS.encryptDirectory, async (_event, inputDir, outputDir) => {
+  registerIpcHandler(policy, IPC_CHANNELS.saveEncryptionPreferences, async (_event, patch) => {
+    if (typeof patch !== "object" || patch === null || Array.isArray(patch)) return { ok: false, error: "加密目录参数无效" };
+    const value = patch as Record<string, unknown>;
+    if (Object.keys(value).some((key) => key !== "inputDir" && key !== "outputDir")) return { ok: false, error: "加密目录参数无效" };
+    if (value.inputDir !== undefined && typeof value.inputDir !== "string") return { ok: false, error: "加密前目录参数无效" };
+    if (value.outputDir !== undefined && typeof value.outputDir !== "string") return { ok: false, error: "加密后目录参数无效" };
+    try {
+      const preferences = await saveEncryptionPreferences(
+        getEncryptionPreferencesPath(app.getPath("userData")),
+        { inputDir: value.inputDir as string | undefined, outputDir: value.outputDir as string | undefined },
+      );
+      return { ok: true, preferences };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "保存加密目录失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.encryptDirectory, async (_event, inputDir, outputDir, mode) => {
     if (typeof inputDir !== "string" || typeof outputDir !== "string" || !inputDir || !outputDir) {
       return { ok: false, error: "请选择加密前和加密后文件夹目录" };
     }
+    if (mode !== "full" && mode !== "incremental") return { ok: false, error: "加密模式无效" };
     try {
       const result = await encryptDirectory({
         inputDir,
         outputDir,
+        mode: mode as EncryptionMode,
         encoderPath: getEncryptionEncoderPath(__dirname, app.isPackaged, process.resourcesPath),
       });
       return { ok: true, ...result };
@@ -119,35 +171,56 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       return { ok: false, error: error instanceof Error ? error.message : "加密失败" };
     }
   });
-  registerIpcHandler(policy, IPC_CHANNELS.start, () => service.start());
-  registerIpcHandler(policy, IPC_CHANNELS.stop, () => service.stop());
+  registerIpcHandler(policy, IPC_CHANNELS.sendRequest, async (_event, payload) => {
+    if (!isValidManualRequestConfig(payload)) {
+      return { ok: false, error: `Invalid request payload: ${getManualRequestConfigValidationError(payload) ?? "request"}` };
+    }
+    try {
+      const result = await sendManualRequest({ ...payload, timeoutMs: manager.getConfig().server.timeoutMs });
+      if (result.body !== undefined) {
+        const loginValues = extractManualLoginValues(payload.paramsText, result.body);
+        if (loginValues !== undefined) manager.mergeLocalValues(loginValues);
+      }
+      return { ok: true, ...result };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "请求失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.start, () => manager.start());
+  registerIpcHandler(policy, IPC_CHANNELS.stop, () => manager.stop());
   registerIpcHandler(policy, IPC_CHANNELS.status, () => {
     if (smokeMode) {
       console.log("forwarder-ready");
       setTimeout(() => app.quit(), 0);
     }
-    return service.status();
+    return manager.status();
   });
-  registerIpcHandler(policy, IPC_CHANNELS.logs, (): LogEntry[] => service.getLogs());
-}
-
-function createService(config: AppConfig): ForwardingService {
-  return new ForwardingService({ config, configStore });
+  registerIpcHandler(policy, IPC_CHANNELS.logs, (): LogEntry[] => manager.getLogs());
 }
 
 async function loadService(): Promise<void> {
   const filePath = path.join(app.getPath("userData"), "config.json");
   configStore = new ConfigStore(filePath);
-  let config: AppConfig;
-  try {
-    config = await configStore.load();
-  } catch (error) {
-    if ((error as { cause?: { code?: string } }).cause?.code !== "ENOENT") throw error;
-    config = createDefaultConfig();
-    config.cache.rootDir = path.join(app.getPath("userData"), "cache");
-    await configStore.save(config);
-  }
-  service = createService(config);
+  workspaceStore = new ProxyWorkspaceStore(path.join(app.getPath("userData"), "proxy-instances.json"));
+  const workspace = await workspaceStore.load(async () => {
+    let config: AppConfig;
+    try {
+      config = await configStore.load();
+    } catch (error) {
+      if ((error as { cause?: { code?: string } }).cause?.code !== "ENOENT") throw error;
+      config = createDefaultConfig();
+      await configStore.save(config);
+    }
+    if (config.cache.rootDir === "") {
+      config.cache.rootDir = path.join(app.getPath("userData"), "cache", "default");
+    }
+    return config;
+  });
+  manager = new ForwardingServiceManager({
+    workspace,
+    workspaceStore,
+    defaultCacheRoot: path.join(app.getPath("userData"), "cache"),
+  });
 }
 
 function createWindow(policy: RendererSecurityPolicy): void {
@@ -205,8 +278,8 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", (event) => {
-  if (quitting || service === undefined || service.status().state === "stopped") return;
+  if (quitting || manager === undefined || manager.list().every((instance) => instance.status.state === "stopped")) return;
   event.preventDefault();
   quitting = true;
-  void service.stop().finally(() => app.quit());
+  void manager.stopAll().finally(() => app.quit());
 });
