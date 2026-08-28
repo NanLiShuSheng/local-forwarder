@@ -38,7 +38,8 @@ function hostsConflict(left: string, right: string): boolean {
 }
 
 function targetForConfig(config: AppConfig): string {
-  const tcpTarget = config.tcpTargets.find((target) => target.enabled) ?? config.tcpTargets[0];
+  const jyTarget = config.tcpTargets.find((target) => target.id.toLowerCase() === "jy" || target.name.toLowerCase() === "jy");
+  const tcpTarget = jyTarget ?? config.tcpTargets[1] ?? config.tcpTargets.find((target) => target.enabled) ?? config.tcpTargets[0];
   if (tcpTarget !== undefined) return `${tcpTarget.host}:${tcpTarget.port}`;
   const httpTarget = config.httpRules.find((rule) => rule.enabled)?.target ?? config.httpRules[0]?.target;
   return httpTarget ?? "未配置";

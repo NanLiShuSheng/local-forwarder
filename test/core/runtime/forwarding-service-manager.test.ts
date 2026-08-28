@@ -7,7 +7,10 @@ import type { AppConfig, ProxyWorkspace, RuntimeStatus } from "../../../src/shar
 function workspaceWithTwoInstances(): ProxyWorkspace {
   const first = createDefaultConfig();
   first.server.port = 18080;
-  first.tcpTargets = [{ id: "first-target", name: "行情", host: "market.example.com", port: 7778, enabled: true }];
+  first.tcpTargets = [
+    { id: "hq", name: "hq", host: "market.example.com", port: 7778, enabled: true },
+    { id: "jy", name: "jy", host: "business.example.com", port: 7779, enabled: true },
+  ];
   const second = createDefaultConfig();
   second.server.port = 18081;
   second.tcpTargets = [{ id: "second-target", name: "业务", host: "business.example.com", port: 7779, enabled: true }];
@@ -47,6 +50,12 @@ test("starts two proxy instances independently", async () => {
   const summaries = manager.list();
   assert.equal(summaries.find((item) => item.id === "first")?.status.state, "running");
   assert.equal(summaries.find((item) => item.id === "second")?.status.state, "running");
+});
+
+test("uses the jy forwarding address in the instance summary", () => {
+  const manager = new ForwardingServiceManager({ workspace: workspaceWithTwoInstances(), workspaceStore: { save: async () => undefined }, serviceFactory: fakeFactory() });
+
+  assert.equal(manager.list().find((item) => item.id === "first")?.target, "business.example.com:7779");
 });
 
 test("rejects a port conflict without stopping the running instance", async () => {
