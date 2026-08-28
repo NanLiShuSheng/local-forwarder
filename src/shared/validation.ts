@@ -1,4 +1,4 @@
-import type { AppConfig } from "./contracts";
+import type { AppConfig, ManualRequestConfig, ProxyWorkspace } from "./contracts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -24,6 +24,30 @@ function isLegacyData(value: unknown): boolean {
     isRecord(value.files) &&
     isRecord(value.extra)
   );
+}
+
+export function getManualRequestConfigValidationError(value: unknown): string | undefined {
+  if (!isRecord(value)) return "request";
+  if (!hasOnlyKeys(value, ["host", "port", "paramsText"], ["transport"])) return "request";
+  if (typeof value.host !== "string" || value.host.trim().length === 0) return "request.host";
+  if (typeof value.port !== "number" || !Number.isInteger(value.port) || value.port < 1 || value.port > 65535) return "request.port";
+  if (typeof value.paramsText !== "string") return "request.paramsText";
+  if (value.transport !== undefined && value.transport !== "tzt" && value.transport !== "http") return "request.transport";
+  return undefined;
+}
+
+export function isValidManualRequestConfig(value: unknown): value is ManualRequestConfig {
+  return getManualRequestConfigValidationError(value) === undefined;
+}
+
+function getStringToolConfigValidationError(value: unknown): string | undefined {
+  if (!isRecord(value)) return "stringTool";
+  if (!hasOnlyKeys(value, ["inputText", "outputText", "operation", "findText", "replaceText"])) return "stringTool";
+  for (const field of ["inputText", "outputText", "findText", "replaceText"] as const) {
+    if (typeof value[field] !== "string") return `stringTool.${field}`;
+  }
+  if (!["replace", "remove", "uppercase", "lowercase", "url-encode", "url-decode", "json-format"].includes(value.operation as string)) return "stringTool.operation";
+  return undefined;
 }
 
 function invalidHttpTargetField(target: string, field: string): string | undefined {
@@ -62,7 +86,7 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
     "mapValues",
     "accounts",
     "cache",
-  ], ["legacy", "projectPath"])) return "root";
+  ], ["legacy", "projectPath", "localText", "request", "stringTool", "forwardingAddressHistory"])) return "root";
 
   const server = value.server;
   if (!isRecord(server)) return "server";
@@ -105,7 +129,35 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
     if (typeof target.enabled !== "boolean") return `${prefix}.enabled`;
   }
 
+  if (value.forwardingAddressHistory !== undefined) {
+    if (Array.isArray(value.forwardingAddressHistory)) {
+      if (value.forwardingAddressHistory.length > 10) return "forwardingAddressHistory";
+      for (const [index, address] of value.forwardingAddressHistory.entries()) {
+        if (typeof address !== "string" || address.trim().length === 0) return `forwardingAddressHistory[${index}]`;
+      }
+    } else {
+      const history = value.forwardingAddressHistory;
+      if (!isRecord(history) || !hasOnlyKeys(history, ["hq", "jy", "zx"])) return "forwardingAddressHistory";
+      for (const key of ["hq", "jy", "zx"] as const) {
+        const addresses = history[key];
+        if (!Array.isArray(addresses) || addresses.length > 10) return `forwardingAddressHistory.${key}`;
+        for (const [index, address] of addresses.entries()) {
+          if (typeof address !== "string" || address.trim().length === 0) return `forwardingAddressHistory.${key}[${index}]`;
+        }
+      }
+    }
+  }
+
   if (value.projectPath !== undefined && typeof value.projectPath !== "string") return "projectPath";
+  if (value.localText !== undefined && typeof value.localText !== "string") return "localText";
+  if (value.request !== undefined) {
+    const requestField = getManualRequestConfigValidationError(value.request);
+    if (requestField !== undefined) return requestField;
+  }
+  if (value.stringTool !== undefined) {
+    const stringToolField = getStringToolConfigValidationError(value.stringTool);
+    if (stringToolField !== undefined) return stringToolField;
+  }
 
   if (!isRecord(value.localValues)) return "localValues";
   for (const [key, entry] of Object.entries(value.localValues)) {
@@ -136,4 +188,17 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
 
 export function isValidAppConfig(value: unknown): value is AppConfig {
   return getAppConfigValidationError(value) === undefined;
+}
+
+export function isValidProxyWorkspace(value: unknown): value is ProxyWorkspace {
+  if (!isRecord(value) || !hasOnlyKeys(value, ["version", "selectedInstanceId", "instances"])) return false;
+  if (value.version !== 1 || typeof value.selectedInstanceId !== "string" || !Array.isArray(value.instances) || value.instances.length === 0) return false;
+  const ids = new Set<string>();
+  for (const instance of value.instances) {
+    if (!isRecord(instance) || !hasOnlyKeys(instance, ["id", "name", "config"])) return false;
+    if (typeof instance.id !== "string" || instance.id.length === 0 || ids.has(instance.id)) return false;
+    if (typeof instance.name !== "string" || instance.name.trim().length === 0 || !isValidAppConfig(instance.config)) return false;
+    ids.add(instance.id);
+  }
+  return ids.has(value.selectedInstanceId);
 }

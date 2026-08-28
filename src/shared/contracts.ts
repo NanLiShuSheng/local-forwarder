@@ -9,6 +9,36 @@ export interface ForwardRule {
   enabled: boolean;
 }
 
+export interface ManualRequestConfig {
+  host: string;
+  port: number;
+  paramsText: string;
+  transport?: "tzt" | "http";
+}
+
+export interface ManualRequestResponse extends OperationResult {
+  statusCode?: number;
+  statusMessage?: string;
+  body?: string;
+  durationMs?: number;
+}
+
+export type StringToolOperation = "replace" | "remove" | "uppercase" | "lowercase" | "url-encode" | "url-decode" | "json-format";
+
+export interface StringToolConfig {
+  inputText: string;
+  outputText: string;
+  operation: StringToolOperation;
+  findText: string;
+  replaceText: string;
+}
+
+export interface ForwardingAddressHistory {
+  hq: string[];
+  jy: string[];
+  zx: string[];
+}
+
 export interface AppConfig {
   server: {
     bindHost: string;
@@ -28,6 +58,7 @@ export interface AppConfig {
     transport?: "tcp" | "http";
     enabled: boolean;
   }>;
+  forwardingAddressHistory?: ForwardingAddressHistory | string[];
   localText?: string;
   localValues: Record<string, string>;
   mapValues: Record<string, string>;
@@ -38,6 +69,8 @@ export interface AppConfig {
     decryptEnabled: boolean;
     autoDownload: boolean;
   };
+  request?: ManualRequestConfig;
+  stringTool?: StringToolConfig;
   legacy?: LegacyData;
 }
 
@@ -55,6 +88,9 @@ export interface LogEntry {
   ruleId?: string;
   statusCode?: number;
   durationMs?: number;
+  requestType?: "fetch" | "xhr";
+  requestParams?: string;
+  responseData?: string;
 }
 
 export interface RuntimeStatus {
@@ -64,10 +100,33 @@ export interface RuntimeStatus {
   error?: string;
 }
 
+export interface ProxyInstance {
+  id: string;
+  name: string;
+  config: AppConfig;
+}
+
+export interface ProxyWorkspace {
+  version: 1;
+  selectedInstanceId: string;
+  instances: ProxyInstance[];
+}
+
+export interface ProxyInstanceSummary {
+  id: string;
+  name: string;
+  bindHost: string;
+  port: number;
+  target: string;
+  status: RuntimeStatus;
+}
+
 export interface OperationResult {
   ok: boolean;
   error?: string;
 }
+
+export type EncryptionMode = "full" | "incremental";
 
 export type EncryptionDirectoryKind = "input" | "output";
 
@@ -82,7 +141,11 @@ export interface EncryptionFileResult {
 }
 
 export interface EncryptionResult extends OperationResult {
+  mode?: EncryptionMode;
   totalFiles?: number;
+  processedFiles?: number;
+  skippedFiles?: number;
+  removedFiles?: number;
   files?: EncryptionFileResult[];
   logs?: string[];
 }
@@ -90,12 +153,18 @@ export interface EncryptionResult extends OperationResult {
 export interface ForwarderApi {
   getConfig(): Promise<AppConfig>;
   saveConfig(config: AppConfig): Promise<OperationResult>;
+  listProxyInstances(): Promise<ProxyInstanceSummary[]>;
+  selectProxyInstance(id: string): Promise<OperationResult & { instanceId?: string }>;
+  createProxyInstance(): Promise<OperationResult & { instance?: ProxyInstanceSummary }>;
+  duplicateProxyInstance(): Promise<OperationResult & { instance?: ProxyInstanceSummary }>;
   importLegacy(): Promise<OperationResult & { config?: AppConfig }>;
   exportConfig(): Promise<OperationResult & { path?: string }>;
   selectProjectDirectory(): Promise<OperationResult & { path?: string; canceled?: boolean }>;
   selectEncryptionDirectory(kind: EncryptionDirectoryKind): Promise<OperationResult & { path?: string; canceled?: boolean }>;
   getEncryptionPreferences(): Promise<EncryptionPreferences>;
-  encryptDirectory(inputDir: string, outputDir: string): Promise<EncryptionResult>;
+  saveEncryptionPreferences(patch: Partial<EncryptionPreferences>): Promise<OperationResult & { preferences?: EncryptionPreferences }>;
+  encryptDirectory(inputDir: string, outputDir: string, mode: EncryptionMode): Promise<EncryptionResult>;
+  sendRequest(request: ManualRequestConfig): Promise<ManualRequestResponse>;
   start(): Promise<RuntimeStatus>;
   stop(): Promise<RuntimeStatus>;
   status(): Promise<RuntimeStatus>;
@@ -110,7 +179,13 @@ export const IPC_CHANNELS = {
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
   getEncryptionPreferences: "encryption:get-preferences",
+  saveEncryptionPreferences: "encryption:save-preferences",
   encryptDirectory: "encryption:run",
+  sendRequest: "request:send",
+  listProxyInstances: "proxy-instances:list",
+  selectProxyInstance: "proxy-instances:select",
+  createProxyInstance: "proxy-instances:create",
+  duplicateProxyInstance: "proxy-instances:duplicate",
   start: "runtime:start",
   stop: "runtime:stop",
   status: "runtime:status",
