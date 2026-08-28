@@ -2,11 +2,11 @@ import os from "node:os";
 import path from "node:path";
 import type { AppConfig, LogEntry, RuntimeStatus } from "../../shared/contracts";
 import { getAppConfigValidationError, isValidAppConfig } from "../../shared/validation";
-import { ConfigStore } from "../config/config-store";
 import { FileCache } from "../cache/file-cache";
 import { HttpProxy, type HttpProxyAddress, type HttpProxyOptions, type HttpProxyStats, type TcpBridgeLike } from "../http/http-proxy";
 import { TcpBridgePool } from "../tcp/tcp-bridge";
 import { createTztCodec } from "../tcp/tzt-codec";
+import { isAutoRecoverablePort, recoverOccupiedPort } from "./port-recovery";
 
 interface HttpRuntime extends TcpBridgeLike {
   start(): Promise<HttpProxyAddress>;
@@ -17,10 +17,11 @@ interface HttpRuntime extends TcpBridgeLike {
 
 export interface ForwardingServiceOptions {
   config: AppConfig;
-  configStore?: ConfigStore;
+  configStore?: { save(config: AppConfig): Promise<void> };
   httpFactory?: (options: HttpProxyOptions) => HttpRuntime;
   tcpFactory?: (options: ConstructorParameters<typeof TcpBridgePool>[0]) => TcpBridgeLike & { close(): Promise<void>; getConnectionCount?: () => number };
   cacheFactory?: (options: { rootDir: string }) => Pick<FileCache, "close" | "getOrDownload" | "remove">;
+  recoverOccupiedPort?: (port: number) => Promise<void>;
 }
 
 function cloneConfig(config: AppConfig): AppConfig {
@@ -33,6 +34,7 @@ export class ForwardingService {
   private readonly httpFactory: (options: HttpProxyOptions) => HttpRuntime;
   private readonly tcpFactory: NonNullable<ForwardingServiceOptions["tcpFactory"]>;
   private readonly cacheFactory: NonNullable<ForwardingServiceOptions["cacheFactory"]>;
+  private readonly recoverOccupiedPort: NonNullable<ForwardingServiceOptions["recoverOccupiedPort"]>;
   private http: HttpRuntime | undefined;
   private tcp: (TcpBridgeLike & { close(): Promise<void>; getConnectionCount?: () => number }) | undefined;
   private cache: Pick<FileCache, "close" | "getOrDownload" | "remove"> | undefined;
@@ -40,6 +42,7 @@ export class ForwardingService {
   private error: string | undefined;
   private readonly logBuffer: LogEntry[] = [];
   private configSaveQueue: Promise<void> = Promise.resolve();
+  private lifecycleQueue: Promise<void> = Promise.resolve();
   private address: HttpProxyAddress | undefined;
 
   public constructor(options: ForwardingServiceOptions) {
@@ -48,9 +51,14 @@ export class ForwardingService {
     this.httpFactory = options.httpFactory ?? ((httpOptions) => new HttpProxy(httpOptions) as unknown as HttpRuntime);
     this.tcpFactory = options.tcpFactory ?? ((tcpOptions) => new TcpBridgePool(tcpOptions));
     this.cacheFactory = options.cacheFactory ?? ((cacheOptions) => new FileCache(cacheOptions));
+    this.recoverOccupiedPort = options.recoverOccupiedPort ?? recoverOccupiedPort;
   }
 
   public async start(): Promise<RuntimeStatus> {
+    return this.enqueueLifecycle(() => this.startInternal());
+  }
+
+  private async startInternal(): Promise<RuntimeStatus> {
     if (this.state === "running" || this.state === "starting") return this.status();
     const validationError = getAppConfigValidationError(this.config);
     if (validationError !== undefined || !isValidAppConfig(this.config)) {
@@ -87,7 +95,7 @@ export class ForwardingService {
         onLocalValuesChanged: (values) => this.persistLocalValues(values),
       });
       created.push(async () => { await this.http?.stop(); this.http = undefined; });
-      this.address = await this.http.start();
+      this.address = await this.startHttpWithRecovery(this.http);
       this.state = "running";
       this.appendLog("info", `Forwarding service started on ${this.address.host}:${this.address.port}`);
       return this.status();
@@ -101,7 +109,21 @@ export class ForwardingService {
     }
   }
 
+  private async startHttpWithRecovery(http: HttpRuntime): Promise<HttpProxyAddress> {
+    try {
+      return await http.start();
+    } catch (error) {
+      if (!isAddressInUse(error) || !isAutoRecoverablePort(this.config.server.port)) throw error;
+      await this.recoverOccupiedPort(this.config.server.port);
+      return http.start();
+    }
+  }
+
   public async stop(): Promise<RuntimeStatus> {
+    return this.enqueueLifecycle(() => this.stopInternal());
+  }
+
+  private async stopInternal(): Promise<RuntimeStatus> {
     if (this.state === "stopped") return this.status();
     this.state = "stopping";
     await this.http?.stop().catch(() => undefined);
@@ -114,6 +136,12 @@ export class ForwardingService {
     this.state = "stopped";
     this.error = undefined;
     return this.status();
+  }
+
+  private enqueueLifecycle<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.lifecycleQueue.then(operation, operation);
+    this.lifecycleQueue = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   public status(): RuntimeStatus {
@@ -143,6 +171,14 @@ export class ForwardingService {
     await this.configStore?.save(this.config);
   }
 
+  public mergeLocalValues(values: Record<string, string>): void {
+    const activeValues = this.http?.getValues().localValues;
+    const current = activeValues ?? this.config.localValues;
+    const merged = { ...current, ...values };
+    if (activeValues !== undefined) Object.assign(activeValues, values);
+    this.persistLocalValues(merged);
+  }
+
   public getLogs(): LogEntry[] {
     return this.logBuffer.map((entry) => ({ ...entry }));
   }
@@ -152,6 +188,7 @@ export class ForwardingService {
   }
 
   private appendLogEntry(entry: LogEntry): void {
+    if (entry.requestType === undefined) return;
     if (!this.config.server.loggingEnabled && entry.level !== "error") return;
     this.logBuffer.push(entry);
     if (this.logBuffer.length > 2000) this.logBuffer.splice(0, this.logBuffer.length - 2000);
@@ -165,4 +202,8 @@ export class ForwardingService {
       .then(() => this.configStore?.save(snapshot))
       .catch((error) => this.appendLog("error", error instanceof Error ? error.message : "login cache save failed"));
   }
+}
+
+function isAddressInUse(error: unknown): boolean {
+  return (error as { code?: string }).code === "EADDRINUSE";
 }
