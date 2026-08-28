@@ -30,3 +30,9 @@ test("overview does not repeat runtime status and configuration panels", async (
   assert.doesNotMatch(app, /<RuntimePanel/);
   assert.doesNotMatch(app, /summary-panel/);
 });
+
+test("tabs do not render the global localhost address chip", async () => {
+  const app = await readFile("src/renderer/App.tsx", "utf8");
+  assert.doesNotMatch(app, /content-toolbar/);
+  assert.doesNotMatch(app, /address-chip/);
+});
