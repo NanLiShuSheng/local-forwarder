@@ -27,5 +27,5 @@ test("log panel keeps the list visible beside the selected detail", async () => 
   assert.match(styleSource, /\.log-workspace[^\{]*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(320px, 1\.05fr\)/);
   assert.match(styleSource, /\.log-list[^}]*max-height:\s*520px/);
   assert.match(styleSource, /\.log-list[^}]*overflow-y:\s*auto/);
-  assert.match(styleSource, /@media\s*\(max-width:\s*820px\)[^{]*\{[^{}]*\.log-workspace[^{}]*grid-template-columns:\s*1fr/);
+  assert.match(styleSource, /@media\s*\(max-width:\s*820px\)[\s\S]*?\.log-workspace[\s\S]*?grid-template-columns:\s*1fr/);
 });
