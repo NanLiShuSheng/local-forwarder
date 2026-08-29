@@ -36,3 +36,10 @@ test("tabs do not render the global localhost address chip", async () => {
   assert.doesNotMatch(app, /content-toolbar/);
   assert.doesNotMatch(app, /address-chip/);
 });
+
+test("proxy sidebar shows three cards before scrolling", async () => {
+  const styles = await readFile("src/renderer/styles.css", "utf8");
+  assert.match(styles, /\.proxy-instance-sidebar-list[^}]*grid-auto-rows:\s*64px/);
+  assert.match(styles, /\.proxy-instance-sidebar-list[^}]*max-height:\s*calc\(\(64px \* 3\) \+ \(8px \* 2\) \+ 6px\)/);
+  assert.match(styles, /\.proxy-instance-sidebar-list[^}]*overflow-y:\s*auto/);
+});
