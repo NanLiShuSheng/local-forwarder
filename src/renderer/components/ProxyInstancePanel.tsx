@@ -1,37 +1,96 @@
-import type { ProxyInstanceSummary, RuntimeStatus } from "../../shared/contracts";
+import { useEffect, useState } from "react";
+import type { AppConfig, ProxyInstanceSummary, RuntimeStatus } from "../../shared/contracts";
+import { parseDirectoryInput } from "../../shared/directory-path";
 
 interface ProxyInstancePanelProps {
   instances: ProxyInstanceSummary[];
   status: RuntimeStatus;
-  onSelect: (id: string) => Promise<void>;
-  onCreate: () => Promise<void>;
-  onDuplicate: () => Promise<void>;
+  config: AppConfig;
+  onChange: (config: AppConfig) => Promise<boolean>;
+  onChooseProjectDirectory: () => Promise<boolean>;
+  onRename: (id: string, name: string) => Promise<boolean>;
   onStart: () => Promise<void>;
   onStop: () => Promise<void>;
 }
 
-export function ProxyInstancePanel({ instances, status, onSelect, onCreate, onDuplicate, onStart, onStop }: ProxyInstancePanelProps) {
+export function ProxyInstancePanel({ instances, status, config, onChange, onChooseProjectDirectory, onRename, onStart, onStop }: ProxyInstancePanelProps) {
   const selected = instances.find((instance) => instance.selected) ?? instances[0];
   const busy = status.state === "starting" || status.state === "stopping";
+  const running = status.state === "running";
+  const [nameDraft, setNameDraft] = useState(selected?.name ?? "");
+  const [projectPathDraft, setProjectPathDraft] = useState(config.projectPath ?? "");
+  const [projectDirectoryError, setProjectDirectoryError] = useState("");
+  const [bindHostDraft, setBindHostDraft] = useState(config.server.bindHost);
+  const [portDraft, setPortDraft] = useState(String(config.server.port));
+  const [timeoutDraft, setTimeoutDraft] = useState(String(config.server.timeoutMs));
+
+  useEffect(() => {
+    setNameDraft(selected?.name ?? "");
+    setProjectPathDraft(config.projectPath ?? "");
+    setBindHostDraft(config.server.bindHost);
+    setPortDraft(String(config.server.port));
+    setTimeoutDraft(String(config.server.timeoutMs));
+  }, [selected?.id, selected?.name, config.projectPath, config.server.bindHost, config.server.port, config.server.timeoutMs]);
+
+  const commitName = async () => {
+    if (!selected) return;
+    const draft = nameDraft.trim();
+    if (draft === "") {
+      setNameDraft(selected.name);
+      return;
+    }
+    if (draft === selected.name) return;
+    const saved = await onRename(selected.id, draft);
+    if (!saved) setNameDraft(selected.name);
+  };
+
+  const saveProjectDirectory = async () => {
+    try {
+      const projectPath = parseDirectoryInput(projectPathDraft);
+      const saved = await onChange({ ...config, projectPath });
+      if (!saved) {
+        setProjectPathDraft(config.projectPath ?? "");
+        setProjectDirectoryError("配置未保存，请先停止服务");
+        return;
+      }
+      setProjectPathDraft(projectPath);
+      setProjectDirectoryError("");
+    } catch (error) {
+      setProjectPathDraft(config.projectPath ?? "");
+      setProjectDirectoryError(error instanceof Error ? error.message : "项目目录路径无效");
+    }
+  };
+
+  const saveServerPatch = async (patch: Partial<AppConfig["server"]>) => {
+    const saved = await onChange({ ...config, server: { ...config.server, ...patch } });
+    if (saved) {
+      setProjectDirectoryError("");
+      return;
+    }
+    setBindHostDraft(config.server.bindHost);
+    setPortDraft(String(config.server.port));
+    setTimeoutDraft(String(config.server.timeoutMs));
+  };
+
   return <section className="panel proxy-instance-panel">
-    <div className="proxy-instance-heading">
-      <div><p className="eyebrow">代理实例</p><h2>多代理并行转发</h2><p className="proxy-instance-subtitle">每个实例使用独立端口和转发地址，可同时运行</p></div>
-      <button className="primary-button" type="button" onClick={() => void onCreate()}>＋ 新增代理</button>
-    </div>
-    <div className="proxy-instance-layout">
-      <div className="proxy-instance-list">
-        {instances.map((instance) => <button key={instance.id} type="button" className={`proxy-instance-card ${instance.selected ? "selected" : ""}`} onClick={() => void onSelect(instance.id)}>
-          <span className="proxy-instance-card-title"><span className={`status-dot ${instance.status.state}`} />{instance.name}<code>:{instance.port}</code></span>
-          <small>上游地址</small><code className="proxy-instance-target">{instance.target}</code>
-          <span className="proxy-instance-card-status">{instance.status.state === "running" ? `运行中 · ${instance.status.requestCount} 请求` : instance.status.state === "error" ? "启动失败" : "已停止"}</span>
-        </button>)}
+    {selected ? <>
+      <div className="proxy-instance-overview-heading">
+        <span className={`status-pill ${status.state}`}><span className="status-dot" />{status.state === "running" ? "运行中" : status.state === "error" ? "异常" : "已停止"}</span>
+        <div className="proxy-instance-overview-title"><input className="proxy-instance-overview-name-input" aria-label="编辑代理名称" value={nameDraft} onChange={function (event) { setNameDraft(event.target.value); }} onBlur={function () { void commitName(); }} onKeyDown={function (event) { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } else if (event.key === "Escape") { setNameDraft(selected.name); event.currentTarget.blur(); } }} disabled={running || busy} /></div>
+        <div className="proxy-instance-actions"><button className={running ? "proxy-instance-sidebar-action stop" : "primary-button"} type="button" disabled={busy} onClick={() => { if (status.state === "running") void onStop(); else void onStart(); }}>{status.state === "running" ? "停止代理" : "启动代理"}</button></div>
       </div>
-      {selected && <div className="proxy-instance-detail">
-        <div className="proxy-instance-detail-heading"><div><p className="eyebrow">当前实例</p><h3>{selected.name}</h3></div><span className={`status-pill ${status.state}`}><span className="status-dot" />{status.state === "running" ? "运行中" : status.state === "error" ? "异常" : "已停止"}</span></div>
-        <p className="proxy-instance-endpoint">监听 {selected.bindHost}:{selected.port}</p>
-        <p className="proxy-instance-endpoint">上游 {selected.target}</p>
-        <div className="proxy-instance-actions"><button className="primary-button" type="button" disabled={busy || status.state === "running"} onClick={() => void onStart()}>启动代理</button><button className="secondary-button" type="button" disabled={busy || status.state === "stopped"} onClick={() => void onStop()}>停止代理</button><button className="secondary-button" type="button" onClick={() => void onDuplicate()}>复制当前代理</button></div>
-      </div>}
-    </div>
+      <div className="proxy-instance-project-card">
+        <div className="proxy-instance-project-field input-with-button">
+          <input aria-label="项目目录" value={projectPathDraft} placeholder="请选择项目目录" onChange={function (event) { setProjectPathDraft(event.target.value); }} onBlur={function () { void saveProjectDirectory(); }} onKeyDown={function (event) { if (event.key === "Enter") { event.preventDefault(); void saveProjectDirectory(); } }} disabled={running || busy} />
+          <button type="button" onClick={function () { void onChooseProjectDirectory(); }} disabled={running || busy}>选择项目目录</button>
+        </div>
+      </div>
+      {projectDirectoryError && <p className="error-box" role="alert">{projectDirectoryError}</p>}
+      <div className="proxy-instance-overview-fields">
+        <label className="proxy-instance-overview-field"><span>监听主机 <small>HOST</small></span><input className="overview-config-input" aria-label="监听主机" value={bindHostDraft} onChange={function (event) { setBindHostDraft(event.target.value); }} onBlur={function () { void saveServerPatch({ bindHost: bindHostDraft }); }} disabled={running || busy} /><small className="overview-config-hint good">本机访问地址</small></label>
+        <label className="proxy-instance-overview-field"><span>监听端口 <small>PORT</small></span><input className="overview-config-input" aria-label="监听端口" type="number" value={portDraft} onChange={function (event) { setPortDraft(event.target.value); }} onBlur={function () { void saveServerPatch({ port: Number(portDraft) }); }} disabled={running || busy} /><small className="overview-config-hint">范围 1 - 65535</small></label>
+        <label className="proxy-instance-overview-field"><span>超时时间（毫秒） <small>MS</small></span><input className="overview-config-input" aria-label="超时时间" type="number" value={timeoutDraft} onChange={function (event) { setTimeoutDraft(event.target.value); }} onBlur={function () { void saveServerPatch({ timeoutMs: Number(timeoutDraft) }); }} disabled={running || busy} /><small className="overview-config-hint">请求等待上限</small></label>
+      </div>
+    </> : <p className="empty">暂无代理实例</p>}
   </section>;
 }
