@@ -136,6 +136,7 @@ test("proxy sidebar keeps status after the name and pins the port to the right",
   assert.ok(title.indexOf("proxy-instance-sidebar-name") < title.indexOf("proxy-instance-sidebar-status"));
   assert.ok(title.indexOf("proxy-instance-sidebar-status") < title.indexOf("instance.port"));
   assert.match(styles, /\.proxy-instance-sidebar-title code[^}]*flex:\s*0 0 auto/);
+  assert.match(styles, /\.proxy-instance-sidebar-title code[^}]*min-width:\s*44px/);
   assert.match(styles, /\.proxy-instance-sidebar-title code[^}]*text-align:\s*right/);
 });
 
