@@ -77,7 +77,7 @@ export function ProxyInstancePanel({ instances, status, config, onChange, onChoo
       <div className="proxy-instance-overview-heading">
         <span className={`status-pill ${status.state}`}><span className="status-dot" />{status.state === "running" ? "运行中" : status.state === "error" ? "异常" : "已停止"}</span>
         <div className="proxy-instance-overview-title"><input className="proxy-instance-overview-name-input" aria-label="编辑代理名称" value={nameDraft} onChange={function (event) { setNameDraft(event.target.value); }} onBlur={function () { void commitName(); }} onKeyDown={function (event) { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } else if (event.key === "Escape") { setNameDraft(selected.name); event.currentTarget.blur(); } }} disabled={running || busy} /></div>
-        <div className="proxy-instance-actions"><button className={running ? "proxy-instance-sidebar-action stop" : "primary-button"} type="button" disabled={busy} onClick={() => { if (status.state === "running") void onStop(); else void onStart(); }}>{status.state === "running" ? "停止代理" : "启动代理"}</button></div>
+        <div className="proxy-instance-actions"><button className={`proxy-instance-sidebar-action ${running ? "stop" : "start"}`} type="button" disabled={busy} onClick={() => { if (status.state === "running") void onStop(); else void onStart(); }}>{status.state === "running" ? "停止代理" : "启动代理"}</button></div>
       </div>
       <div className="proxy-instance-project-card">
         <div className="proxy-instance-project-field input-with-button">

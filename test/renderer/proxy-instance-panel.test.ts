@@ -57,7 +57,7 @@ test("overview disables editable data while the proxy is running", async () => {
   assert.match(panel, /<input(?=[^>]*aria-label="监听主机")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
   assert.match(panel, /<input(?=[^>]*aria-label="监听端口")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
   assert.match(panel, /<input(?=[^>]*aria-label="超时时间")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
-  assert.match(panel, /className=\{running \? "proxy-instance-sidebar-action stop" : "primary-button"\}/);
+  assert.match(panel, /className=\{`proxy-instance-sidebar-action \$\{running \? "stop" : "start"\}`\}/);
 });
 
 test("settings tab and legacy config actions are removed from the renderer", async () => {
@@ -158,7 +158,7 @@ test("proxy sidebar supports editing names and bulk runtime actions", async () =
   assert.match(app, /onRename={renameProxyInstance}/);
   assert.match(panel, /编辑代理名称/);
   assert.match(panel, /onRename/);
-  assert.match(panel, /<button className=\{running \? "proxy-instance-sidebar-action stop" : "primary-button"\} type="button" disabled=\{busy\}/);
+  assert.match(panel, /<button className=\{`proxy-instance-sidebar-action \$\{running \? "stop" : "start"\}`\} type="button" disabled=\{busy\}/);
   assert.match(panel, /if \(status\.state === "running"\) void onStop\(\);/);
   assert.match(panel, /else void onStart\(\);/);
   assert.doesNotMatch(sidebar, /proxy-instance-sidebar-name-input/);
