@@ -51,8 +51,12 @@ test("overview places the proxy name and status above the project directory", as
 
 test("overview disables editable data while the proxy is running", async () => {
   const panel = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");
-  const disabledControls = panel.match(/disabled=\{running \|\| busy\}/g) ?? [];
-  assert.equal(disabledControls.length, 6);
+  assert.match(panel, /<input(?=[^>]*aria-label="编辑代理名称")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
+  assert.match(panel, /<input(?=[^>]*aria-label="项目目录")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
+  assert.match(panel, /<button(?=[^>]*disabled=\{running \|\| busy\})[^>]*>选择项目目录<\/button>/);
+  assert.match(panel, /<input(?=[^>]*aria-label="监听主机")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
+  assert.match(panel, /<input(?=[^>]*aria-label="监听端口")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
+  assert.match(panel, /<input(?=[^>]*aria-label="超时时间")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
   assert.match(panel, /className=\{running \? "proxy-instance-sidebar-action stop" : "primary-button"\}/);
 });
 
@@ -124,8 +128,13 @@ test("proxy sidebar keeps status beside the name without showing the jy address"
 test("proxy sidebar keeps status after the name and pins the port to the right", async () => {
   const sidebar = await readFile("src/renderer/components/ProxyInstanceSidebar.tsx", "utf8");
   const styles = await readFile("src/renderer/styles.css", "utf8");
-  assert.ok(sidebar.indexOf("proxy-instance-sidebar-name") < sidebar.indexOf("proxy-instance-sidebar-status"));
-  assert.ok(sidebar.indexOf("proxy-instance-sidebar-status") < sidebar.indexOf("instance.port"));
+  const title = sidebar.match(/<span className="proxy-instance-sidebar-title">[\s\S]*?<code>:\{instance\.port\}<\/code><\/span>/)?.[0];
+  assert.ok(title);
+  assert.match(title, /proxy-instance-sidebar-name/);
+  assert.match(title, /proxy-instance-sidebar-status/);
+  assert.match(title, /instance\.port/);
+  assert.ok(title.indexOf("proxy-instance-sidebar-name") < title.indexOf("proxy-instance-sidebar-status"));
+  assert.ok(title.indexOf("proxy-instance-sidebar-status") < title.indexOf("instance.port"));
   assert.match(styles, /\.proxy-instance-sidebar-title code[^}]*flex:\s*0 0 auto/);
   assert.match(styles, /\.proxy-instance-sidebar-title code[^}]*text-align:\s*right/);
 });
