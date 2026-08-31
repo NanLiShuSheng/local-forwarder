@@ -140,6 +140,11 @@ test("proxy sidebar keeps status after the name and pins the port to the right",
   assert.match(styles, /\.proxy-instance-sidebar-title code[^}]*text-align:\s*right/);
 });
 
+test("proxy sidebar leaves room for the port to stay at the far right", async () => {
+  const styles = await readFile("src/renderer/styles.css", "utf8");
+  assert.match(styles, /\.proxy-instance-sidebar-name[^}]*flex:\s*0 1 auto/);
+});
+
 test("proxy sidebar supports editing names and bulk runtime actions", async () => {
   const [app, panel, sidebar, styles] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),

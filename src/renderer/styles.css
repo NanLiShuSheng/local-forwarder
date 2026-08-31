@@ -30,7 +30,7 @@ button { cursor: pointer; }
 .proxy-instance-context-menu button:hover:not(:disabled), .proxy-instance-context-menu button:focus-visible { color: #79e2c0; background: #1a304c; outline: none; }
 .proxy-instance-context-menu button:disabled { cursor: not-allowed; color: #657993; }
 .proxy-instance-sidebar-title { display: flex; align-items: center; gap: 7px; min-width: 0; }
-.proxy-instance-sidebar-name { min-width: 0; flex: 1; overflow: hidden; color: #e9f0fb; font-size: 0.79rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.proxy-instance-sidebar-name { min-width: 0; flex: 0 1 auto; overflow: hidden; color: #e9f0fb; font-size: 0.79rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .proxy-instance-sidebar-title code { flex: 0 0 auto; min-width: 44px; margin-left: auto; color: #8fa4c0; font: 0.68rem ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
 .proxy-instance-sidebar-target { display: block; margin-top: 8px; min-width: 0; }
 .proxy-instance-sidebar-target code { display: block; max-width: 100%; min-width: 0; overflow: hidden; color: #b6c7dc; font: 0.66rem ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
