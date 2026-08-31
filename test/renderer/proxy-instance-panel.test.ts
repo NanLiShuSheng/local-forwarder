@@ -153,6 +153,9 @@ test("proxy sidebar supports editing names and bulk runtime actions", async () =
   assert.match(app, /onRename={renameProxyInstance}/);
   assert.match(panel, /编辑代理名称/);
   assert.match(panel, /onRename/);
+  assert.match(panel, /<button className=\{running \? "proxy-instance-sidebar-action stop" : "primary-button"\} type="button" disabled=\{busy\}/);
+  assert.match(panel, /if \(status\.state === "running"\) void onStop\(\);/);
+  assert.match(panel, /else void onStart\(\);/);
   assert.doesNotMatch(sidebar, /proxy-instance-sidebar-name-input/);
   assert.match(sidebar, /onStartAll/);
   assert.match(sidebar, /onStopAll/);
