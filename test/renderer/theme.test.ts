@@ -9,6 +9,7 @@ import {
   writeThemeMode,
   type ThemeStorage,
 } from "../../src/renderer/theme";
+import { readSystemIsDark, subscribeToSystemTheme } from "../../src/renderer/useTheme";
 
 const themeTokens = [
   "app-background",
@@ -115,6 +116,20 @@ function statefulStorage(initialValue: string | null): ThemeStorage {
   };
 }
 
+function withWindow<T>(windowValue: unknown, callback: () => T): T {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: windowValue });
+  try {
+    return callback();
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(globalThis, "window", descriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "window");
+    }
+  }
+}
+
 test("readThemeMode returns system when the stored value is missing", () => {
   assert.equal(readThemeMode(statefulStorage(null)), "system");
 });
@@ -190,6 +205,61 @@ test("writeThemeMode does not throw when storage setItem throws", () => {
   assert.doesNotThrow(() => writeThemeMode(storage, "light"));
 });
 
+test("readSystemIsDark reads the initial matchMedia matches value", () => {
+  const mediaQuery = { matches: false } as MediaQueryList;
+  const fakeWindow = {
+    matchMedia: (query: string) => {
+      assert.equal(query, "(prefers-color-scheme: dark)");
+      return mediaQuery;
+    },
+  };
+
+  assert.equal(withWindow(fakeWindow, () => readSystemIsDark()), false);
+});
+
+test("subscribeToSystemTheme forwards change event matches to its callback", () => {
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const mediaQuery = {
+    matches: false,
+    addEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => listeners.add(listener),
+    removeEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
+  } as unknown as MediaQueryList;
+  const fakeWindow = { matchMedia: () => mediaQuery };
+  const received: boolean[] = [];
+
+  withWindow(fakeWindow, () => subscribeToSystemTheme((matches) => received.push(matches)));
+  for (const matches of [true, false]) {
+    for (const listener of listeners) listener({ matches } as MediaQueryListEvent);
+  }
+
+  assert.deepEqual(received, [true, false]);
+});
+
+test("subscribeToSystemTheme cleanup stops future change notifications", () => {
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const mediaQuery = {
+    matches: false,
+    addEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => listeners.add(listener),
+    removeEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
+  } as unknown as MediaQueryList;
+  const fakeWindow = { matchMedia: () => mediaQuery };
+  const received: boolean[] = [];
+  const cleanup = withWindow(fakeWindow, () => subscribeToSystemTheme((matches) => received.push(matches)));
+
+  assert.ok(cleanup);
+  cleanup?.();
+  for (const listener of listeners) listener({ matches: true } as MediaQueryListEvent);
+
+  assert.deepEqual(received, []);
+});
+
+test("system theme adapter falls back to dark when matchMedia is unavailable or throws", () => {
+  assert.equal(withWindow({}, () => readSystemIsDark()), true);
+  assert.equal(withWindow({ matchMedia: () => { throw new Error("matchMedia unavailable"); } }, () => readSystemIsDark()), true);
+  assert.doesNotThrow(() => withWindow({}, () => subscribeToSystemTheme(() => undefined)));
+  assert.doesNotThrow(() => withWindow({ matchMedia: () => { throw new Error("matchMedia unavailable"); } }, () => subscribeToSystemTheme(() => undefined)));
+});
+
 test("App wires the appearance page and resolved theme to the app shell", async () => {
   const source = await readFile("src/renderer/App.tsx", "utf8");
 
@@ -245,9 +315,30 @@ test("AppearancePage delegates theme preview colors to CSS", async () => {
 test("useTheme listens for system theme changes and persists the selected mode", async () => {
   const source = await readFile("src/renderer/useTheme.ts", "utf8").catch(() => "");
 
-  assert.match(source, /prefers-color-scheme: dark/);
-  assert.match(source, /addEventListener\("change"/);
+  assert.match(source, /readSystemIsDark/);
+  assert.match(source, /subscribeToSystemTheme/);
   assert.match(source, /writeThemeMode/);
+});
+
+test("theme focus rings are opaque and meet 3:1 contrast against app backgrounds", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+  const themes = [
+    { name: "dark", rule: extractCssRule(source, ".app-shell") },
+    { name: "light", rule: extractCssRule(source, ".app-shell[data-theme=\"light\"]") },
+  ];
+  const focusRule = extractCssRule(source, ".appearance-theme-card:focus-visible");
+
+  assert.match(focusRule, /outline:\s*2px\s+solid\s+var\(--focus-ring\)/);
+  for (const theme of themes) {
+    const focusRing = parseCssColor(extractCssToken(theme.rule, "focus-ring"));
+    const appBackground = parseCssColor(extractCssToken(theme.rule, "app-background"));
+
+    assert.equal(focusRing.alpha, 1, `${theme.name} focus ring must be opaque`);
+    assert.ok(
+      contrastRatio(focusRing, appBackground) >= 3,
+      `${theme.name} focus ring contrast: ${contrastRatio(focusRing, appBackground).toFixed(2)}`,
+    );
+  }
 });
 
 test("styles define independent light and dark theme scopes and tokens", async () => {

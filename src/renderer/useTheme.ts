@@ -3,6 +3,17 @@ import { readThemeMode, resolveTheme, writeThemeMode, type ResolvedTheme, type T
 
 const SYSTEM_THEME_QUERY = "(prefers-color-scheme: dark)";
 
+export function getSystemThemeQuery(): MediaQueryList | undefined {
+  if (typeof window === "undefined") return undefined;
+
+  try {
+    if (typeof window.matchMedia !== "function") return undefined;
+    return window.matchMedia(SYSTEM_THEME_QUERY);
+  } catch {
+    return undefined;
+  }
+}
+
 function getThemeStorage(): ThemeStorage | undefined {
   if (typeof window === "undefined") return undefined;
 
@@ -30,14 +41,44 @@ function getThemeStorage(): ThemeStorage | undefined {
   }
 }
 
-function readSystemIsDark(): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return true;
-
+export function readSystemIsDark(): boolean {
   try {
-    return window.matchMedia(SYSTEM_THEME_QUERY).matches;
+    return getSystemThemeQuery()?.matches ?? true;
   } catch {
     return true;
   }
+}
+
+export function subscribeToSystemTheme(onChange: (isDark: boolean) => void): (() => void) | undefined {
+  const mediaQuery = getSystemThemeQuery();
+  if (!mediaQuery) return undefined;
+
+  const handleChange = (event: MediaQueryListEvent) => onChange(event.matches);
+  try {
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+      return () => {
+        try {
+          mediaQuery.removeEventListener("change", handleChange);
+        } catch {
+          // Media query cleanup is best effort in restricted browser contexts.
+        }
+      };
+    }
+    if (typeof mediaQuery.addListener === "function") {
+      mediaQuery.addListener(handleChange);
+      return () => {
+        try {
+          mediaQuery.removeListener(handleChange);
+        } catch {
+          // Media query cleanup is best effort in restricted browser contexts.
+        }
+      };
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 export interface UseThemeResult {
@@ -50,21 +91,7 @@ export function useTheme(): UseThemeResult {
   const [mode, setModeState] = useState<ThemeMode>(() => readThemeMode(getThemeStorage()));
   const [systemIsDark, setSystemIsDark] = useState(readSystemIsDark);
 
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
-
-    let mediaQuery: MediaQueryList;
-    try {
-      mediaQuery = window.matchMedia(SYSTEM_THEME_QUERY);
-    } catch {
-      return undefined;
-    }
-
-    const handleChange = (event: MediaQueryListEvent) => setSystemIsDark(event.matches);
-    if (typeof mediaQuery.addEventListener !== "function") return undefined;
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
+  useEffect(() => subscribeToSystemTheme((isDark) => setSystemIsDark(isDark)), []);
 
   const setMode = (nextMode: ThemeMode) => {
     setModeState(nextMode);

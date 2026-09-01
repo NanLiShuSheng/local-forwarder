@@ -47,6 +47,7 @@ button { cursor: pointer; }
   --success-soft: rgb(121 226 192 / 12%);
   --success-faint: rgb(121 226 192 / 13%);
   --focus-background: rgb(121 226 192 / 10%);
+  --focus-ring: #79e2c0;
   --warning: #f3c67f;
   --danger: #f78383;
   --danger-text: #ffb8bd;
@@ -124,6 +125,7 @@ button { cursor: pointer; }
   --success-soft: rgb(20 135 107 / 12%);
   --success-faint: rgb(20 135 107 / 13%);
   --focus-background: rgb(20 135 107 / 12%);
+  --focus-ring: #0c634d;
   --warning: #8a5a00;
   --danger: #c33d4d;
   --danger-text: #a93545;
@@ -241,7 +243,7 @@ h2 { font-size: 1.35rem; }
 .appearance-theme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
 .appearance-theme-card { display: flex; align-items: stretch; gap: 12px; min-width: 0; border: 1px solid var(--border-default); border-radius: 12px; padding: 12px; color: var(--text-primary); background: var(--surface-background); text-align: left; transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease; }
 .appearance-theme-card:hover { border-color: var(--border-strong); background: var(--surface-alt-background); transform: translateY(-1px); }
-.appearance-theme-card:focus-visible { border-color: var(--border-selected); outline: 2px solid var(--focus-background); outline-offset: 2px; }
+.appearance-theme-card:focus-visible { border-color: var(--border-selected); outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .appearance-theme-card.selected, .appearance-theme-card[aria-pressed="true"] { border-color: var(--border-selected); background: var(--surface-selected-background); box-shadow: 0 0 0 2px var(--focus-background); }
 .appearance-theme-preview { position: relative; display: block; flex: 0 0 58px; width: 58px; height: 64px; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--preview-content); box-shadow: inset 0 0 0 1px var(--preview-shadow); }
 .appearance-theme-preview::before { position: absolute; inset: 0 auto 0 0; width: 28%; background: var(--preview-sidebar); content: ""; }
