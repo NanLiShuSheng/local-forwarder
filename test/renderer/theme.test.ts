@@ -58,6 +58,10 @@ test("resolveTheme follows the system dark-mode state for system mode", () => {
   assert.equal(resolveTheme("system", false), "light");
 });
 
+test("uses the expected theme storage key", () => {
+  assert.equal(THEME_STORAGE_KEY, "local-forwarder.theme-mode");
+});
+
 test("writeThemeMode and readThemeMode round-trip through stateful storage", () => {
   const storage = statefulStorage(null);
 
