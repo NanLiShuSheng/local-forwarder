@@ -298,6 +298,15 @@ test("theme text tokens meet AA against actual dark and light backgrounds", asyn
       }
     }
   }
+
+  const lightThemeRule = themes.find((theme) => theme.name === "light")?.rule;
+  assert.ok(lightThemeRule, "missing light theme rule");
+  const accentText = parseCssColor(extractCssToken(lightThemeRule, "text-on-accent"));
+  for (const accentBackgroundToken of ["success", "success-hover"]) {
+    const accentBackground = parseCssColor(extractCssToken(lightThemeRule, accentBackgroundToken));
+    const ratio = contrastRatio(accentText, accentBackground);
+    assert.ok(ratio >= 4.5, `light text-on-accent on ${accentBackgroundToken}: ${ratio.toFixed(2)}`);
+  }
 });
 
 test("AppearancePage structure and theme CSS interactions stay accessible and responsive", async () => {

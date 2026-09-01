@@ -117,10 +117,10 @@ button { cursor: pointer; }
   --border-hover: #91b8ab;
   --border-selected: #14876b;
   --selection-background: #d7eee7;
-  --success: #14876b;
+  --success: #0f745b;
   --text-success: #086b53;
   --text-description: #4e6078;
-  --success-hover: #0f755d;
+  --success-hover: #0c634d;
   --success-soft: rgb(20 135 107 / 12%);
   --success-faint: rgb(20 135 107 / 13%);
   --focus-background: rgb(20 135 107 / 12%);
