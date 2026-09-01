@@ -297,15 +297,12 @@ test("theme text tokens meet AA against actual dark and light backgrounds", asyn
         assert.ok(ratio >= 4.5, `${theme.name} ${textToken} on ${backgroundToken}: ${ratio.toFixed(2)}`);
       }
     }
-  }
-
-  const lightThemeRule = themes.find((theme) => theme.name === "light")?.rule;
-  assert.ok(lightThemeRule, "missing light theme rule");
-  const accentText = parseCssColor(extractCssToken(lightThemeRule, "text-on-accent"));
-  for (const accentBackgroundToken of ["success", "success-hover"]) {
-    const accentBackground = parseCssColor(extractCssToken(lightThemeRule, accentBackgroundToken));
-    const ratio = contrastRatio(accentText, accentBackground);
-    assert.ok(ratio >= 4.5, `light text-on-accent on ${accentBackgroundToken}: ${ratio.toFixed(2)}`);
+    const accentText = parseCssColor(extractCssToken(theme.rule, "text-on-accent"));
+    for (const accentBackgroundToken of ["success", "success-hover"]) {
+      const accentBackground = parseCssColor(extractCssToken(theme.rule, accentBackgroundToken));
+      const ratio = contrastRatio(accentText, accentBackground);
+      assert.ok(ratio >= 4.5, `${theme.name} text-on-accent on ${accentBackgroundToken}: ${ratio.toFixed(2)}`);
+    }
   }
 });
 
