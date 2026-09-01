@@ -9,19 +9,33 @@ import {
   type ThemeStorage,
 } from "../../src/renderer/theme";
 
-function storageWithValue(value: string | null): ThemeStorage {
+function statefulStorage(initialValue: string | null): ThemeStorage {
+  let value = initialValue;
+
   return {
-    getItem: () => value,
-    setItem: () => undefined,
+    getItem: (key) => {
+      assert.equal(key, THEME_STORAGE_KEY);
+      return value;
+    },
+    setItem: (key, nextValue) => {
+      assert.equal(key, THEME_STORAGE_KEY);
+      value = nextValue;
+    },
   };
 }
 
 test("readThemeMode returns system when the stored value is missing", () => {
-  assert.equal(readThemeMode(storageWithValue(null)), "system");
+  assert.equal(readThemeMode(statefulStorage(null)), "system");
 });
 
 test("readThemeMode returns system when the stored value is invalid", () => {
-  assert.equal(readThemeMode(storageWithValue("sepia")), "system");
+  assert.equal(readThemeMode(statefulStorage("sepia")), "system");
+});
+
+test("readThemeMode returns each legal stored theme mode", () => {
+  for (const mode of ["system", "light", "dark"] as const) {
+    assert.equal(readThemeMode(statefulStorage(mode)), mode);
+  }
 });
 
 test("isThemeMode recognizes system, light, and dark", () => {
@@ -44,17 +58,19 @@ test("resolveTheme follows the system dark-mode state for system mode", () => {
   assert.equal(resolveTheme("system", false), "light");
 });
 
-test("writeThemeMode stores the mode under the theme storage key", () => {
-  const writes: Array<[string, string]> = [];
-  const storage: ThemeStorage = {
-    getItem: () => null,
-    setItem: (key, value) => writes.push([key, value]),
-  };
+test("writeThemeMode and readThemeMode round-trip through stateful storage", () => {
+  const storage = statefulStorage(null);
 
   writeThemeMode(storage, "dark");
 
-  assert.equal(THEME_STORAGE_KEY, "local-forwarder.theme-mode");
-  assert.deepEqual(writes, [["local-forwarder.theme-mode", "dark"]]);
+  assert.equal(readThemeMode(storage), "dark");
+});
+
+test("theme storage helpers tolerate an absent storage adapter", () => {
+  const storage: ThemeStorage | undefined = undefined;
+
+  assert.equal(readThemeMode(storage), "system");
+  assert.doesNotThrow(() => writeThemeMode(storage, "light"));
 });
 
 test("readThemeMode returns system when storage getItem throws", () => {

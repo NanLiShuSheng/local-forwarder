@@ -12,18 +12,18 @@ export function isThemeMode(value: unknown): value is ThemeMode {
   return value === "system" || value === "light" || value === "dark";
 }
 
-export function readThemeMode(storage: ThemeStorage): ThemeMode {
+export function readThemeMode(storage: ThemeStorage | undefined): ThemeMode {
   try {
-    const value = storage.getItem(THEME_STORAGE_KEY);
+    const value = storage?.getItem(THEME_STORAGE_KEY);
     return isThemeMode(value) ? value : "system";
   } catch {
     return "system";
   }
 }
 
-export function writeThemeMode(storage: ThemeStorage, mode: ThemeMode): void {
+export function writeThemeMode(storage: ThemeStorage | undefined, mode: ThemeMode): void {
   try {
-    storage.setItem(THEME_STORAGE_KEY, mode);
+    storage?.setItem(THEME_STORAGE_KEY, mode);
   } catch {
     // Storage can be unavailable in restricted browser contexts.
   }
