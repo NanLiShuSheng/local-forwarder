@@ -28,6 +28,7 @@ export function AppearancePage({ mode, theme, onModeChange }: AppearancePageProp
       {themeOptions.map((option) => <button
         type="button"
         key={option.mode}
+        data-mode={option.mode}
         className={`appearance-theme-card ${mode === option.mode ? "selected" : ""}`}
         aria-pressed={mode === option.mode}
         onClick={() => onModeChange(option.mode)}

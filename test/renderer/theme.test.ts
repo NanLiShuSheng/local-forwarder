@@ -40,6 +40,29 @@ function extractCssRule(source: string, selector: string): string {
   return source.slice(start, end + 1);
 }
 
+function extractHexToken(rule: string, token: string): string {
+  const match = rule.match(new RegExp(`--${token}\\s*:\\s*(#[0-9a-f]{3,6})`, "i"));
+  assert.ok(match, `missing hex token: ${token}`);
+  return match[1];
+}
+
+function relativeLuminance(hex: string): number {
+  const value = hex.slice(1).length === 3
+    ? hex.slice(1).split("").map((part) => `${part}${part}`).join("")
+    : hex.slice(1);
+  const channels = [0, 2, 4].map((offset) => Number.parseInt(value.slice(offset, offset + 2), 16) / 255);
+  const linear = channels.map((channel) => channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  return (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2]);
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 function statefulStorage(initialValue: string | null): ThemeStorage {
   let value = initialValue;
 
@@ -144,6 +167,21 @@ test("AppearancePage offers system, light, and dark theme choices", async () => 
   for (const label of ["跟随系统", "浅色", "深色"]) assert.match(source, new RegExp(label));
 });
 
+test("AppearancePage exposes three accessible theme cards", async () => {
+  const source = await readFile("src/renderer/components/AppearancePage.tsx", "utf8").catch(() => "");
+  const modes = [...source.matchAll(/\{ mode: "(system|light|dark)"/g)].map((match) => match[1]);
+
+  assert.deepEqual(modes, ["system", "light", "dark"]);
+  assert.match(source, /themeOptions\.map\(\(option\) => <button/);
+  assert.match(source, /type="button"/);
+  assert.match(source, /className=\{`appearance-theme-card/);
+  assert.match(source, /data-mode=\{option\.mode\}/);
+  assert.match(source, /aria-pressed=\{mode === option\.mode\}/);
+  assert.match(source, /onClick=\{\(\) => onModeChange\(option\.mode\)\}/);
+  assert.match(source, /mode === option\.mode && <span className="appearance-theme-card-check"/);
+  assert.match(source, /option\.mode === "system" && <em className="appearance-theme-default"/);
+});
+
 test("AppearancePage renders the theme choices inside the actual theme grid", async () => {
   const source = await readFile("src/renderer/components/AppearancePage.tsx", "utf8").catch(() => "");
 
@@ -194,6 +232,15 @@ test("styles define semantic light and dark theme contracts", async () => {
   assert.match(lightThemeRule, /--text-success\s*:\s*#086b53/);
   assert.match(defaultThemeRule, /--text-description\s*:\s*#8597b0/);
   assert.match(lightThemeRule, /--text-description\s*:\s*#4e6078/);
+  for (const token of ["text-muted", "warning", "text-tertiary"] as const) {
+    const foreground = extractHexToken(lightThemeRule, token);
+    for (const background of ["#f4f7fb", "#f1f5f9", "#fff", "#e7edf4"]) {
+      assert.ok(
+        contrastRatio(foreground, background) >= 4.5,
+        `${token} must meet AA on ${background}: ${contrastRatio(foreground, background).toFixed(2)}`,
+      );
+    }
+  }
   assert.match(defaultThemeRule, /--preview-shadow\s*:/);
   assert.match(lightThemeRule, /--preview-shadow\s*:/);
   assert.match(source, /\.sidebar\s*\{[^}]*background:\s*var\(--sidebar-background\)/s);
@@ -207,10 +254,17 @@ test("styles define semantic light and dark theme contracts", async () => {
   assert.match(source, /\.appearance-theme-default\s*\{/);
   assert.match(source, /\.appearance-theme-preview::before\s*\{[^}]*background:\s*var\(--preview-sidebar\)/s);
   assert.match(source, /\.appearance-theme-preview::after\s*\{[^}]*background:\s*var\(--preview-panel\)/s);
+  for (const mode of ["system", "light", "dark"]) {
+    assert.match(source, new RegExp(`\\.appearance-theme-card\\[data-mode="${mode}"\\] \\.appearance-theme-preview`));
+  }
+  assert.doesNotMatch(source, /\.appearance-theme-card:nth-child\(/);
   assert.match(source, /\.appearance-theme-preview\s*\{[^}]*box-shadow:[^}]*var\(--preview-shadow\)/s);
   assert.doesNotMatch(source, /\.appearance-theme-preview\s*\{[^}]*!important/);
-  assert.match(source, /@media \(min-width: 821px\) and \(max-width: 1050px\) \{[^}]*\.appearance-theme-grid \{[^}]*grid-template-columns:\s*repeat\(2,/s);
-  assert.match(source, /@media \(max-width: 820px\) \{[\s\S]*?\.appearance-theme-grid \{[^}]*grid-template-columns:\s*1fr/s);
+  assert.match(source, /@media \(max-width: 900px\) \{[^}]*\.appearance-theme-grid \{[^}]*grid-template-columns:\s*1fr/s);
+  assert.match(source, /@media \(min-width: 901px\) and \(max-width: 1050px\) \{[^}]*\.appearance-theme-grid \{[^}]*grid-template-columns:\s*repeat\(2,/s);
+  assert.doesNotMatch(source, /@media \(min-width: 821px\) and \(max-width: 1050px\)/);
+  assert.match(source, /@media \(max-width: 900px\) \{[\s\S]*?\.appearance-theme-preview\s*\{[^}]*flex:\s*0 1 48px/s);
+  assert.match(source, /@media \(max-width: 900px\) \{[\s\S]*?\.appearance-theme-card-check\s*\{[^}]*width:\s*20px/s);
   assert.match(source, /\.appearance-theme-default\s*\{[^}]*color:\s*var\(--text-success\)/s);
   assert.match(source, /\.appearance-theme-card-copy > span:not\(\.appearance-theme-card-label\)\s*\{[^}]*color:\s*var\(--text-description\)/s);
   assert.match(source, /\.status-pill\.running\s*\{[^}]*color:\s*var\(--text-success\)/s);
