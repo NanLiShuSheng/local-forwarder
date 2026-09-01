@@ -253,6 +253,29 @@ test("subscribeToSystemTheme cleanup stops future change notifications", () => {
   assert.deepEqual(received, []);
 });
 
+test("subscribeToSystemTheme supports the legacy addListener API and cleanup", () => {
+  let listener: ((event: MediaQueryListEvent) => void) | undefined;
+  const mediaQuery = {
+    matches: false,
+    addListener: (nextListener: (event: MediaQueryListEvent) => void) => {
+      listener = nextListener;
+    },
+    removeListener: (nextListener: (event: MediaQueryListEvent) => void) => {
+      if (listener === nextListener) listener = undefined;
+    },
+  } as unknown as MediaQueryList;
+  const fakeWindow = { matchMedia: () => mediaQuery };
+  const received: boolean[] = [];
+  const cleanup = withWindow(fakeWindow, () => subscribeToSystemTheme((matches) => received.push(matches)));
+
+  assert.ok(cleanup);
+  listener?.({ matches: true } as MediaQueryListEvent);
+  cleanup?.();
+  listener?.({ matches: false } as MediaQueryListEvent);
+
+  assert.deepEqual(received, [true]);
+});
+
 test("system theme adapter falls back to dark when matchMedia is unavailable or throws", () => {
   assert.equal(withWindow({}, () => readSystemIsDark()), true);
   assert.equal(withWindow({ matchMedia: () => { throw new Error("matchMedia unavailable"); } }, () => readSystemIsDark()), true);
@@ -320,13 +343,19 @@ test("useTheme listens for system theme changes and persists the selected mode",
   assert.match(source, /writeThemeMode/);
 });
 
-test("theme focus rings are opaque and meet 3:1 contrast against app backgrounds", async () => {
+test("theme focus rings are opaque and meet 3:1 contrast against actual card backgrounds", async () => {
   const source = await readFile("src/renderer/styles.css", "utf8");
   const themes = [
     { name: "dark", rule: extractCssRule(source, ".app-shell") },
     { name: "light", rule: extractCssRule(source, ".app-shell[data-theme=\"light\"]") },
   ];
   const focusRule = extractCssRule(source, ".appearance-theme-card:focus-visible");
+  const backgroundTokens = [
+    "app-background",
+    "panel-background",
+    "surface-background",
+    "surface-selected-background",
+  ] as const;
 
   assert.match(focusRule, /outline:\s*2px\s+solid\s+var\(--focus-ring\)/);
   for (const theme of themes) {
@@ -334,10 +363,11 @@ test("theme focus rings are opaque and meet 3:1 contrast against app backgrounds
     const appBackground = parseCssColor(extractCssToken(theme.rule, "app-background"));
 
     assert.equal(focusRing.alpha, 1, `${theme.name} focus ring must be opaque`);
-    assert.ok(
-      contrastRatio(focusRing, appBackground) >= 3,
-      `${theme.name} focus ring contrast: ${contrastRatio(focusRing, appBackground).toFixed(2)}`,
-    );
+    for (const backgroundToken of backgroundTokens) {
+      const background = compositeColor(parseCssColor(extractCssToken(theme.rule, backgroundToken)), appBackground);
+      const ratio = contrastRatio(focusRing, background);
+      assert.ok(ratio >= 3, `${theme.name} focus ring on ${backgroundToken}: ${ratio.toFixed(2)}`);
+    }
   }
 });
 
