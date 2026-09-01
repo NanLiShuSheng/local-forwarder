@@ -465,6 +465,19 @@ test("theme focus rings are opaque and meet 3:1 contrast against actual card bac
   }
 });
 
+test("sidebar navigation defines active and keyboard focus highlight states", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+  const baseRule = extractCssRule(source, ".sidebar-nav button");
+  const activeRule = extractCssRule(source, ".sidebar-nav button.active");
+  const focusRule = extractCssRule(source, ".sidebar-nav button:focus-visible");
+
+  assert.match(baseRule, /border-left:\s*3px\s+solid\s+transparent/);
+  assert.match(activeRule, /border-left:\s*3px\s+solid\s+var\(--border-selected\)/);
+  assert.match(activeRule, /color:\s*var\(--text-bright\)/);
+  assert.match(activeRule, /background:\s*var\(--surface-selected-background\)/);
+  assert.match(focusRule, /outline:\s*2px\s+solid\s+var\(--focus-ring\)/);
+});
+
 test("styles define independent light and dark theme scopes and tokens", async () => {
   const source = await readFile("src/renderer/styles.css", "utf8");
   const darkThemeRule = extractCssRule(source, ".app-shell");
