@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   THEME_STORAGE_KEY,
@@ -97,4 +98,26 @@ test("writeThemeMode does not throw when storage setItem throws", () => {
   };
 
   assert.doesNotThrow(() => writeThemeMode(storage, "light"));
+});
+
+test("App wires the appearance page and resolved theme to the app shell", async () => {
+  const source = await readFile("src/renderer/App.tsx", "utf8");
+
+  assert.match(source, /id: "appearance", label: "外观"/);
+  assert.match(source, /data-theme=\{theme\}/);
+  assert.match(source, /<AppearancePage/);
+});
+
+test("AppearancePage offers system, light, and dark theme choices", async () => {
+  const source = await readFile("src/renderer/components/AppearancePage.tsx", "utf8").catch(() => "");
+
+  for (const label of ["跟随系统", "浅色", "深色"]) assert.match(source, new RegExp(label));
+});
+
+test("useTheme listens for system theme changes and persists the selected mode", async () => {
+  const source = await readFile("src/renderer/useTheme.ts", "utf8").catch(() => "");
+
+  assert.match(source, /prefers-color-scheme: dark/);
+  assert.match(source, /addEventListener\("change"/);
+  assert.match(source, /writeThemeMode/);
 });
