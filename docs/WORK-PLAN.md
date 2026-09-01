@@ -75,3 +75,11 @@
 - 当前 HEAD：任务 4 和任务 5～9 源码提交已落地；本轮打包脚本和 DMG 验证改动尚待提交。
 - 参考目录未修改。
 - 任务 10 只剩真实 Electron smoke、DMG 安装后启动和业务链路验证。
+
+### 主题设置（2026-09-01）
+
+- 新增“外观”页面，支持跟随系统（默认）、浅色和深色主题；侧栏与主内容区同步切换，主题选择即时生效。
+- 主题选择通过 `localStorage` 持久化，并监听 macOS `prefers-color-scheme` 变化，在跟随系统模式下即时响应系统主题变化。
+- 主题控件保留清晰焦点样式，满足焦点可访问性和 AA 对比度保障。
+- 已完成专项主题测试，以及运行时 hook 和媒体查询监听测试。
+- 本轮验证：`npx tsx --test test/renderer/theme.test.ts`、`npx tsx --test test/renderer/chinese-ui.test.ts`、`npm test`、`npm run build` 和 `git diff --check` 均通过。
