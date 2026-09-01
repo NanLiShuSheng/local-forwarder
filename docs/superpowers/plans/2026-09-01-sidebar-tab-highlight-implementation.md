@@ -34,7 +34,7 @@ test("sidebar navigation selected state uses the theme accent without layout shi
   const focusRule = extractCssRule(source, ".sidebar-nav button:focus-visible");
 
   assert.match(baseRule, /border-left:\s*3px\s+solid\s+transparent/);
-  assert.match(selectedRule, /border-left:\s*3px\s+solid\s+var\(--border-selected\)/);
+  assert.match(selectedRule, /border-left-color:\s*var\(--border-selected\)/);
   assert.match(selectedRule, /color:\s*var\(--text-bright\)/);
   assert.match(selectedRule, /background:\s*var\(--surface-selected-background\)/);
   assert.match(focusRule, /outline:\s*2px\s+solid\s+var\(--focus-ring\)/);
@@ -139,4 +139,3 @@ git log --oneline -4
 ```
 
 预期：diff-check 无输出；主题提交只包含 `styles.css` 和 `theme.test.ts`，既有其他未提交改动仍保留。
-

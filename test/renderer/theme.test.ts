@@ -472,7 +472,7 @@ test("sidebar navigation defines active and keyboard focus highlight states", as
   const focusRule = extractCssRule(source, ".sidebar-nav button:focus-visible");
 
   assert.match(baseRule, /border-left:\s*3px\s+solid\s+transparent/);
-  assert.match(activeRule, /border-left:\s*3px\s+solid\s+var\(--border-selected\)/);
+  assert.match(activeRule, /border-left-color:\s*var\(--border-selected\)/);
   assert.match(activeRule, /color:\s*var\(--text-bright\)/);
   assert.match(activeRule, /background:\s*var\(--surface-selected-background\)/);
   assert.match(focusRule, /outline:\s*2px\s+solid\s+var\(--focus-ring\)/);
