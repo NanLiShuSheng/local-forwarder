@@ -6,10 +6,10 @@ export interface AppearancePageProps {
   onModeChange: (next: ThemeMode) => void;
 }
 
-const themeOptions: Array<{ mode: ThemeMode; label: string; description: string; preview: string }> = [
-  { mode: "system", label: "跟随系统", description: "根据系统外观自动切换", preview: "linear-gradient(135deg, #f7f8fa 50%, #242832 50%)" },
-  { mode: "light", label: "浅色", description: "使用明亮的应用界面", preview: "#f7f8fa" },
-  { mode: "dark", label: "深色", description: "使用深色的应用界面", preview: "#242832" },
+const themeOptions: Array<{ mode: ThemeMode; label: string; description: string }> = [
+  { mode: "system", label: "跟随系统", description: "根据系统外观自动切换" },
+  { mode: "light", label: "浅色", description: "使用明亮的应用界面" },
+  { mode: "dark", label: "深色", description: "使用深色的应用界面" },
 ];
 
 const resolvedThemeLabels: Record<ResolvedTheme, string> = { light: "浅色", dark: "深色" };
@@ -32,7 +32,7 @@ export function AppearancePage({ mode, theme, onModeChange }: AppearancePageProp
         aria-pressed={mode === option.mode}
         onClick={() => onModeChange(option.mode)}
       >
-        <span className="appearance-theme-preview" aria-hidden="true" style={{ background: option.preview }} />
+        <span className="appearance-theme-preview" aria-hidden="true" />
         <span className="appearance-theme-card-copy">
           <strong>{option.label}</strong>
           <span>{option.description}</span>

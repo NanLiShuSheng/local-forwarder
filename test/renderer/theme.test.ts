@@ -10,6 +10,34 @@ import {
   type ThemeStorage,
 } from "../../src/renderer/theme";
 
+const themeTokens = [
+  "app-background",
+  "sidebar-background",
+  "sidebar-border",
+  "panel-background",
+  "surface-background",
+  "input-background",
+  "code-background",
+  "text-primary",
+  "text-secondary",
+  "text-muted",
+  "border-default",
+  "border-strong",
+  "border-selected",
+  "selection-background",
+  "success",
+  "warning",
+  "danger",
+] as const;
+
+function extractCssRule(source: string, selector: string): string {
+  const start = source.indexOf(`${selector} {`);
+  assert.notEqual(start, -1, `missing CSS rule: ${selector}`);
+  const end = source.indexOf("}", start);
+  assert.notEqual(end, -1, `unterminated CSS rule: ${selector}`);
+  return source.slice(start, end + 1);
+}
+
 function statefulStorage(initialValue: string | null): ThemeStorage {
   let value = initialValue;
 
@@ -121,6 +149,13 @@ test("AppearancePage renders the theme choices inside the actual theme grid", as
   assert.match(source, /className="appearance-theme-grid"/);
 });
 
+test("AppearancePage delegates theme preview colors to CSS", async () => {
+  const source = await readFile("src/renderer/components/AppearancePage.tsx", "utf8").catch(() => "");
+
+  assert.doesNotMatch(source, /\bpreview\s*:/);
+  assert.doesNotMatch(source, /style=\{\{\s*background:\s*option\.preview\s*\}\}/);
+});
+
 test("useTheme listens for system theme changes and persists the selected mode", async () => {
   const source = await readFile("src/renderer/useTheme.ts", "utf8").catch(() => "");
 
@@ -131,45 +166,33 @@ test("useTheme listens for system theme changes and persists the selected mode",
 
 test("styles define semantic light and dark theme contracts", async () => {
   const source = await readFile("src/renderer/styles.css", "utf8");
+  const defaultThemeRule = extractCssRule(source, ".app-shell");
+  const lightThemeRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
 
-  assert.match(source, /\.app-shell\[data-theme="light"\]/);
-  for (const token of [
-    "app-background",
-    "sidebar-background",
-    "sidebar-border",
-    "panel-background",
-    "surface-background",
-    "input-background",
-    "code-background",
-    "text-primary",
-    "text-secondary",
-    "text-muted",
-    "border-default",
-    "border-strong",
-    "border-selected",
-    "selection-background",
-    "success",
-    "warning",
-    "danger",
-  ]) {
-    assert.match(source, new RegExp(`--${token}\\s*:`));
+  for (const token of themeTokens) {
+    assert.match(defaultThemeRule, new RegExp(`--${token}\\s*:`), `missing dark token: ${token}`);
+    assert.match(lightThemeRule, new RegExp(`--${token}\\s*:`), `missing light token: ${token}`);
   }
-  assert.match(source, /color-scheme:\s*light/);
-  assert.match(source, /color-scheme:\s*dark/);
+  assert.match(defaultThemeRule, /color-scheme:\s*dark/);
+  assert.match(lightThemeRule, /color-scheme:\s*light/);
+  assert.match(defaultThemeRule, /--inverse\s*:/);
+  assert.match(lightThemeRule, /--inverse\s*:/);
   assert.match(source, /\.sidebar\s*\{[^}]*background:\s*var\(--sidebar-background\)/s);
   assert.match(source, /\.content\s*\{[^}]*background:\s*var\(--app-background\)/s);
   assert.match(source, /\.appearance-theme-panel/);
   assert.match(source, /\.appearance-theme-grid/);
-  assert.match(source, /\.appearance-theme-card/);
-  assert.match(source, /\.appearance-theme-preview/);
+  assert.match(source, /\.appearance-theme-card:hover\s*\{/);
+  assert.match(source, /\.appearance-theme-card:focus-visible\s*\{/);
+  assert.match(source, /\.appearance-theme-card\.selected\s*,/);
+  assert.match(source, /\.appearance-theme-preview::before\s*\{[^}]*background:\s*var\(--preview-sidebar\)/s);
+  assert.match(source, /\.appearance-theme-preview::after\s*\{[^}]*background:\s*var\(--preview-panel\)/s);
   assert.match(source, /\.appearance-page\s*>\s*\.muted:first-of-type/);
   assert.doesNotMatch(source, /\.request-transport-select\s*\{[^}]*color-scheme:\s*dark/s);
-  assert.match(source, /\.app-shell\s*\{[^}]*--inverse\s*:/s);
-  assert.match(source, /\.app-shell\[data-theme="light"\]\s*\{[^}]*--inverse\s*:/s);
   for (const selector of ["address-input", "request-transport-select"]) {
-    assert.match(source, new RegExp(`\\.${selector}\\s*\\{[^}]*color:\\s*var\\(--text-primary\\)`));
-    assert.match(source, new RegExp(`\\.${selector}\\s*\\{[^}]*background:\\s*var\\(--input-background\\)`));
-    assert.doesNotMatch(source, new RegExp(`\\.${selector}\\s*\\{[^}]*color:\\s*#e8effa`));
-    assert.doesNotMatch(source, new RegExp(`\\.${selector}\\s*\\{[^}]*background:\\s*#111e32`));
+    const rule = extractCssRule(source, `.${selector}`);
+    assert.match(rule, /color:\s*var\(--text-primary\)/);
+    assert.match(rule, /background:\s*var\(--input-background\)/);
+    assert.doesNotMatch(rule, /color:\s*#e8effa/);
+    assert.doesNotMatch(rule, /background:\s*#111e32/);
   }
 });
