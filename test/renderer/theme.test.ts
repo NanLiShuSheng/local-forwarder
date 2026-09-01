@@ -121,3 +121,40 @@ test("useTheme listens for system theme changes and persists the selected mode",
   assert.match(source, /addEventListener\("change"/);
   assert.match(source, /writeThemeMode/);
 });
+
+test("styles define semantic light and dark theme contracts", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+
+  assert.match(source, /\.app-shell\[data-theme="light"\]/);
+  for (const token of [
+    "app-background",
+    "sidebar-background",
+    "sidebar-border",
+    "panel-background",
+    "surface-background",
+    "input-background",
+    "code-background",
+    "text-primary",
+    "text-secondary",
+    "text-muted",
+    "border-default",
+    "border-strong",
+    "border-selected",
+    "selection-background",
+    "success",
+    "warning",
+    "danger",
+  ]) {
+    assert.match(source, new RegExp(`--${token}\\s*:`));
+  }
+  assert.match(source, /color-scheme:\s*light/);
+  assert.match(source, /color-scheme:\s*dark/);
+  assert.match(source, /\.sidebar\s*\{[^}]*background:\s*var\(--sidebar-background\)/s);
+  assert.match(source, /\.content\s*\{[^}]*background:\s*var\(--app-background\)/s);
+  assert.match(source, /\.appearance-theme-panel/);
+  assert.match(source, /\.appearance-theme-grid/);
+  assert.match(source, /\.appearance-theme-card/);
+  assert.match(source, /\.appearance-theme-preview/);
+  assert.match(source, /\.appearance-page\s*>\s*\.muted:first-of-type/);
+  assert.doesNotMatch(source, /\.request-transport-select\s*\{[^}]*color-scheme:\s*dark/s);
+});
