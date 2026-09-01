@@ -40,22 +40,59 @@ function extractCssRule(source: string, selector: string): string {
   return source.slice(start, end + 1);
 }
 
-function extractHexToken(rule: string, token: string): string {
-  const match = rule.match(new RegExp(`--${token}\\s*:\\s*(#[0-9a-f]{3,6})`, "i"));
-  assert.ok(match, `missing hex token: ${token}`);
-  return match[1];
+function extractCssToken(rule: string, token: string): string {
+  const match = rule.match(new RegExp(`--${token}\\s*:\\s*([^;]+)`));
+  assert.ok(match, `missing CSS token: ${token}`);
+  return match[1].trim();
 }
 
-function relativeLuminance(hex: string): number {
-  const value = hex.slice(1).length === 3
-    ? hex.slice(1).split("").map((part) => `${part}${part}`).join("")
-    : hex.slice(1);
-  const channels = [0, 2, 4].map((offset) => Number.parseInt(value.slice(offset, offset + 2), 16) / 255);
+interface RgbColor {
+  red: number;
+  green: number;
+  blue: number;
+  alpha: number;
+}
+
+function parseCssColor(value: string): RgbColor {
+  const hex = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    const normalized = hex[1].length === 3
+      ? hex[1].split("").map((part) => `${part}${part}`).join("")
+      : hex[1];
+    return {
+      red: Number.parseInt(normalized.slice(0, 2), 16),
+      green: Number.parseInt(normalized.slice(2, 4), 16),
+      blue: Number.parseInt(normalized.slice(4, 6), 16),
+      alpha: 1,
+    };
+  }
+
+  const rgb = value.match(/^rgb\(\s*(\d+)\s+(\d+)\s+(\d+)(?:\s*\/\s*([\d.]+)%?)?\s*\)$/i);
+  assert.ok(rgb, `unsupported CSS color: ${value}`);
+  return {
+    red: Number(rgb[1]),
+    green: Number(rgb[2]),
+    blue: Number(rgb[3]),
+    alpha: rgb[4] === undefined ? 1 : Number(rgb[4]) / 100,
+  };
+}
+
+function compositeColor(foreground: RgbColor, background: RgbColor): RgbColor {
+  return {
+    red: (foreground.red * foreground.alpha) + (background.red * (1 - foreground.alpha)),
+    green: (foreground.green * foreground.alpha) + (background.green * (1 - foreground.alpha)),
+    blue: (foreground.blue * foreground.alpha) + (background.blue * (1 - foreground.alpha)),
+    alpha: 1,
+  };
+}
+
+function relativeLuminance(color: RgbColor): number {
+  const channels = [color.red, color.green, color.blue].map((channel) => channel / 255);
   const linear = channels.map((channel) => channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
   return (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2]);
 }
 
-function contrastRatio(foreground: string, background: string): number {
+function contrastRatio(foreground: RgbColor, background: RgbColor): number {
   const foregroundLuminance = relativeLuminance(foreground);
   const backgroundLuminance = relativeLuminance(background);
   const lighter = Math.max(foregroundLuminance, backgroundLuminance);
@@ -213,66 +250,102 @@ test("useTheme listens for system theme changes and persists the selected mode",
   assert.match(source, /writeThemeMode/);
 });
 
-test("styles define semantic light and dark theme contracts", async () => {
+test("styles define independent light and dark theme scopes and tokens", async () => {
   const source = await readFile("src/renderer/styles.css", "utf8");
-  const defaultThemeRule = extractCssRule(source, ".app-shell");
+  const darkThemeRule = extractCssRule(source, ".app-shell");
   const lightThemeRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
 
   for (const token of themeTokens) {
-    assert.match(defaultThemeRule, new RegExp(`--${token}\\s*:`), `missing dark token: ${token}`);
+    assert.match(darkThemeRule, new RegExp(`--${token}\\s*:`), `missing dark token: ${token}`);
     assert.match(lightThemeRule, new RegExp(`--${token}\\s*:`), `missing light token: ${token}`);
   }
-  assert.match(defaultThemeRule, /color-scheme:\s*dark/);
+  assert.match(darkThemeRule, /color-scheme:\s*dark/);
   assert.match(lightThemeRule, /color-scheme:\s*light/);
-  assert.match(defaultThemeRule, /--inverse\s*:/);
+  assert.match(darkThemeRule, /--inverse\s*:/);
   assert.match(lightThemeRule, /--inverse\s*:/);
-  assert.match(defaultThemeRule, /--text-subtle\s*:\s*#9fb2ca/);
-  assert.match(lightThemeRule, /--text-subtle\s*:\s*#52647b/);
-  assert.match(defaultThemeRule, /--text-success\s*:\s*#79e2c0/);
-  assert.match(lightThemeRule, /--text-success\s*:\s*#086b53/);
-  assert.match(defaultThemeRule, /--text-description\s*:\s*#8597b0/);
-  assert.match(lightThemeRule, /--text-description\s*:\s*#4e6078/);
-  for (const token of ["text-muted", "warning", "text-tertiary"] as const) {
-    const foreground = extractHexToken(lightThemeRule, token);
-    for (const background of ["#f4f7fb", "#f1f5f9", "#fff", "#e7edf4"]) {
-      assert.ok(
-        contrastRatio(foreground, background) >= 4.5,
-        `${token} must meet AA on ${background}: ${contrastRatio(foreground, background).toFixed(2)}`,
-      );
+  assert.match(darkThemeRule, /--preview-shadow\s*:/);
+  assert.match(lightThemeRule, /--preview-shadow\s*:/);
+});
+
+test("theme text tokens meet AA against actual dark and light backgrounds", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+  const themes = [
+    { name: "dark", rule: extractCssRule(source, ".app-shell") },
+    { name: "light", rule: extractCssRule(source, ".app-shell[data-theme=\"light\"]") },
+  ];
+  const textTokens = ["text-subtle", "text-muted", "warning", "text-tertiary"] as const;
+  const backgroundTokens = [
+    "app-background",
+    "sidebar-background",
+    "panel-background",
+    "surface-background",
+    "surface-alt-background",
+    "surface-elevated-background",
+    "surface-code-background",
+    "input-background",
+    "code-background",
+    "code-surface-background",
+  ];
+
+  for (const theme of themes) {
+    const appBackground = parseCssColor(extractCssToken(theme.rule, "app-background"));
+    for (const textToken of textTokens) {
+      const foreground = parseCssColor(extractCssToken(theme.rule, textToken));
+      for (const backgroundToken of backgroundTokens) {
+        const background = compositeColor(parseCssColor(extractCssToken(theme.rule, backgroundToken)), appBackground);
+        const ratio = contrastRatio(foreground, background);
+        assert.ok(ratio >= 4.5, `${theme.name} ${textToken} on ${backgroundToken}: ${ratio.toFixed(2)}`);
+      }
     }
   }
-  assert.match(defaultThemeRule, /--preview-shadow\s*:/);
-  assert.match(lightThemeRule, /--preview-shadow\s*:/);
-  assert.match(source, /\.sidebar\s*\{[^}]*background:\s*var\(--sidebar-background\)/s);
-  assert.match(source, /\.content\s*\{[^}]*background:\s*var\(--app-background\)/s);
-  assert.match(source, /\.appearance-theme-panel/);
-  assert.match(source, /\.appearance-theme-grid/);
-  assert.match(source, /\.appearance-theme-card:hover\s*\{/);
-  assert.match(source, /\.appearance-theme-card:focus-visible\s*\{/);
-  assert.match(source, /\.appearance-theme-card\.selected\s*,/);
-  assert.match(source, /\.appearance-theme-card-check\s*\{/);
-  assert.match(source, /\.appearance-theme-default\s*\{/);
-  assert.match(source, /\.appearance-theme-preview::before\s*\{[^}]*background:\s*var\(--preview-sidebar\)/s);
-  assert.match(source, /\.appearance-theme-preview::after\s*\{[^}]*background:\s*var\(--preview-panel\)/s);
+});
+
+test("AppearancePage structure and theme CSS interactions stay accessible and responsive", async () => {
+  const [componentSource, styleSource] = await Promise.all([
+    readFile("src/renderer/components/AppearancePage.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+  const modes = [...componentSource.matchAll(/\{ mode: "(system|light|dark)"/g)].map((match) => match[1]);
+  const gridRule = extractCssRule(styleSource, ".appearance-theme-grid");
+
+  assert.deepEqual(modes, ["system", "light", "dark"]);
+  assert.match(componentSource, /themeOptions\.map\(\(option\) => <button/);
+  assert.match(componentSource, /type="button"/);
+  assert.match(componentSource, /className=\{`appearance-theme-card/);
+  assert.match(componentSource, /data-mode=\{option\.mode\}/);
+  assert.match(componentSource, /aria-pressed=\{mode === option\.mode\}/);
+  assert.match(componentSource, /onClick=\{\(\) => onModeChange\(option\.mode\)\}/);
+  assert.match(componentSource, /className="appearance-theme-grid"[^>]*role="group"[^>]*aria-label="主题模式"/);
+  assert.match(componentSource, /mode === option\.mode && <span className="appearance-theme-card-check"/);
+  assert.match(componentSource, /option\.mode === "system" && <em className="appearance-theme-default"/);
+
+  assert.match(gridRule, /grid-template-columns:\s*repeat\(3,/);
   for (const mode of ["system", "light", "dark"]) {
-    assert.match(source, new RegExp(`\\.appearance-theme-card\\[data-mode="${mode}"\\] \\.appearance-theme-preview`));
+    assert.match(styleSource, new RegExp(`\\.appearance-theme-card\\[data-mode="${mode}"\\] \\.appearance-theme-preview`));
   }
-  assert.doesNotMatch(source, /\.appearance-theme-card:nth-child\(/);
-  assert.match(source, /\.appearance-theme-preview\s*\{[^}]*box-shadow:[^}]*var\(--preview-shadow\)/s);
-  assert.doesNotMatch(source, /\.appearance-theme-preview\s*\{[^}]*!important/);
-  assert.match(source, /@media \(max-width: 900px\) \{[^}]*\.appearance-theme-grid \{[^}]*grid-template-columns:\s*1fr/s);
-  assert.match(source, /@media \(min-width: 901px\) and \(max-width: 1050px\) \{[^}]*\.appearance-theme-grid \{[^}]*grid-template-columns:\s*repeat\(2,/s);
-  assert.doesNotMatch(source, /@media \(min-width: 821px\) and \(max-width: 1050px\)/);
-  assert.match(source, /@media \(max-width: 900px\) \{[\s\S]*?\.appearance-theme-preview\s*\{[^}]*flex:\s*0 1 48px/s);
-  assert.match(source, /@media \(max-width: 900px\) \{[\s\S]*?\.appearance-theme-card-check\s*\{[^}]*width:\s*20px/s);
-  assert.match(source, /\.appearance-theme-default\s*\{[^}]*color:\s*var\(--text-success\)/s);
-  assert.match(source, /\.appearance-theme-card-copy > span:not\(\.appearance-theme-card-label\)\s*\{[^}]*color:\s*var\(--text-description\)/s);
-  assert.match(source, /\.status-pill\.running\s*\{[^}]*color:\s*var\(--text-success\)/s);
-  assert.match(source, /\.log-level\s*\{[^}]*color:\s*var\(--text-success\)/s);
-  assert.match(source, /\.appearance-page\s*>\s*\.muted:first-of-type/);
-  assert.doesNotMatch(source, /\.request-transport-select\s*\{[^}]*color-scheme:\s*dark/s);
+  assert.doesNotMatch(styleSource, /\.appearance-theme-card:nth-child\(/);
+  assert.match(styleSource, /\.appearance-theme-panel/);
+  assert.match(styleSource, /\.appearance-theme-card:hover\s*\{/);
+  assert.match(styleSource, /\.appearance-theme-card:focus-visible\s*\{/);
+  assert.match(styleSource, /\.appearance-theme-card\.selected\s*,/);
+  assert.match(styleSource, /\.appearance-theme-preview::before\s*\{[^}]*background:\s*var\(--preview-sidebar\)/s);
+  assert.match(styleSource, /\.appearance-theme-preview::after\s*\{[^}]*background:\s*var\(--preview-panel\)/s);
+  assert.match(styleSource, /\.appearance-theme-preview\s*\{[^}]*box-shadow:[^}]*var\(--preview-shadow\)/s);
+  assert.doesNotMatch(styleSource, /\.appearance-theme-preview\s*\{[^}]*!important/);
+  assert.match(styleSource, /@media \(max-width: 900px\) \{[^}]*\.appearance-theme-grid \{[^}]*grid-template-columns:\s*1fr/s);
+  assert.match(styleSource, /@media \(min-width: 901px\) and \(max-width: 1050px\) \{[^}]*\.appearance-theme-grid \{[^}]*grid-template-columns:\s*repeat\(2,/s);
+  assert.doesNotMatch(styleSource, /@media \(min-width: 821px\) and \(max-width: 1050px\)/);
+  assert.match(styleSource, /@media \(max-width: 900px\) \{[\s\S]*?\.appearance-theme-preview\s*\{[^}]*flex:\s*0 1 48px/s);
+  assert.match(styleSource, /@media \(max-width: 900px\) \{[\s\S]*?\.appearance-theme-card-check\s*\{[^}]*width:\s*20px/s);
+  assert.match(styleSource, /\.appearance-theme-default\s*\{[^}]*color:\s*var\(--text-success\)/s);
+  assert.match(styleSource, /\.appearance-theme-card-copy > span:not\(\.appearance-theme-card-label\)\s*\{[^}]*color:\s*var\(--text-description\)/s);
+  assert.match(styleSource, /\.status-pill\.running\s*\{[^}]*color:\s*var\(--text-success\)/s);
+  assert.match(styleSource, /\.log-level\s*\{[^}]*color:\s*var\(--text-success\)/s);
+  assert.match(styleSource, /\.sidebar\s*\{[^}]*background:\s*var\(--sidebar-background\)/s);
+  assert.match(styleSource, /\.content\s*\{[^}]*background:\s*var\(--app-background\)/s);
+  assert.doesNotMatch(styleSource, /\.request-transport-select\s*\{[^}]*color-scheme:\s*dark/s);
   for (const selector of ["address-input", "request-transport-select"]) {
-    const rule = extractCssRule(source, `.${selector}`);
+    const rule = extractCssRule(styleSource, `.${selector}`);
     assert.match(rule, /color:\s*var\(--text-primary\)/);
     assert.match(rule, /background:\s*var\(--input-background\)/);
     assert.doesNotMatch(rule, /color:\s*#e8effa/);
