@@ -24,7 +24,7 @@ export function AppearancePage({ mode, theme, onModeChange }: AppearancePageProp
     </div>
     <p className="muted">当前解析主题：{resolvedThemeLabels[theme]}</p>
     <p className="muted">切换主题后立即生效，无需重启应用。</p>
-    <div className="appearance-theme-grid" aria-label="主题模式">
+    <div className="appearance-theme-grid" role="group" aria-label="主题模式">
       {themeOptions.map((option) => <button
         type="button"
         key={option.mode}
