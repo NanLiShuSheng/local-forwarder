@@ -186,8 +186,10 @@ button { cursor: pointer; }
 .proxy-instance-sidebar-empty { margin: 12px 8px; color: var(--text-muted); font-size: 0.75rem; }
 .sidebar-nav { display: grid; gap: 4px; margin-top: 16px; border-top: 1px solid var(--sidebar-border); padding-top: 15px; }
 .sidebar-nav-label { margin: 0 10px 3px; color: var(--text-label); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; }
-.sidebar-nav button { border: 0; border-radius: 8px; padding: 10px 10px; color: var(--text-subtle); background: transparent; text-align: left; font-size: 0.86rem; }
-.sidebar-nav button:hover, .sidebar-nav button.active { color: var(--text-bright); background: var(--surface-selected-background); }
+.sidebar-nav button { border: 0; border-left: 3px solid transparent; border-radius: 8px; padding: 10px 10px; color: var(--text-subtle); background: transparent; text-align: left; font-size: 0.86rem; }
+.sidebar-nav button:hover { color: var(--text-bright); background: var(--surface-selected-background); }
+.sidebar-nav button.active { border-left-color: var(--border-selected); color: var(--text-bright); background: var(--surface-selected-background); }
+.sidebar-nav button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .content { flex: 1; min-width: 0; width: min(1180px, 100%); margin: 0 auto; padding: 42px 48px 56px; background: var(--app-background); }
 .request-page-content { padding-top: 28px; }
 .topbar { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 30px; }
