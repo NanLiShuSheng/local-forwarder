@@ -70,3 +70,5 @@ test("renderer gives forwarding address and request transport controls a dark th
   assert.doesNotMatch(styleSource, /\.address-input[^\{]*\{[^}]*background:\s*#111e32/);
   assert.doesNotMatch(styleSource, /\.request-transport-select[^\{]*\{[^}]*background:\s*#111e32/);
   assert.doesNotMatch(styleSource, /\.address-input[^\{]*\{[^}]*color:\s*#e8effa/);
+  assert.doesNotMatch(styleSource, /\.request-transport-select[^\{]*\{[^}]*color:\s*#e8effa/);
+});

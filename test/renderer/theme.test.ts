@@ -149,6 +149,15 @@ test("AppearancePage renders the theme choices inside the actual theme grid", as
   assert.match(source, /className="appearance-theme-grid"/);
 });
 
+test("AppearancePage exposes selected and system-default markers", async () => {
+  const source = await readFile("src/renderer/components/AppearancePage.tsx", "utf8").catch(() => "");
+
+  assert.match(source, /appearance-theme-card-check/);
+  assert.match(source, /✓/);
+  assert.match(source, /appearance-theme-default/);
+  assert.match(source, /option\.mode === "system"/);
+});
+
 test("AppearancePage delegates theme preview colors to CSS", async () => {
   const source = await readFile("src/renderer/components/AppearancePage.tsx", "utf8").catch(() => "");
 
@@ -177,6 +186,10 @@ test("styles define semantic light and dark theme contracts", async () => {
   assert.match(lightThemeRule, /color-scheme:\s*light/);
   assert.match(defaultThemeRule, /--inverse\s*:/);
   assert.match(lightThemeRule, /--inverse\s*:/);
+  assert.match(defaultThemeRule, /--text-subtle\s*:\s*#9fb2ca/);
+  assert.match(lightThemeRule, /--text-subtle\s*:\s*#52647b/);
+  assert.match(defaultThemeRule, /--preview-shadow\s*:/);
+  assert.match(lightThemeRule, /--preview-shadow\s*:/);
   assert.match(source, /\.sidebar\s*\{[^}]*background:\s*var\(--sidebar-background\)/s);
   assert.match(source, /\.content\s*\{[^}]*background:\s*var\(--app-background\)/s);
   assert.match(source, /\.appearance-theme-panel/);
@@ -184,8 +197,14 @@ test("styles define semantic light and dark theme contracts", async () => {
   assert.match(source, /\.appearance-theme-card:hover\s*\{/);
   assert.match(source, /\.appearance-theme-card:focus-visible\s*\{/);
   assert.match(source, /\.appearance-theme-card\.selected\s*,/);
+  assert.match(source, /\.appearance-theme-card-check\s*\{/);
+  assert.match(source, /\.appearance-theme-default\s*\{/);
   assert.match(source, /\.appearance-theme-preview::before\s*\{[^}]*background:\s*var\(--preview-sidebar\)/s);
   assert.match(source, /\.appearance-theme-preview::after\s*\{[^}]*background:\s*var\(--preview-panel\)/s);
+  assert.match(source, /\.appearance-theme-preview\s*\{[^}]*box-shadow:[^}]*var\(--preview-shadow\)/s);
+  assert.doesNotMatch(source, /\.appearance-theme-preview\s*\{[^}]*!important/);
+  assert.match(source, /@media \(min-width: 821px\) and \(max-width: 1050px\) \{[^}]*\.appearance-theme-options, \.appearance-theme-grid \{[^}]*grid-template-columns:\s*repeat\(2,/s);
+  assert.match(source, /@media \(max-width: 820px\) \{[\s\S]*?\.appearance-theme-options, \.appearance-theme-grid \{[^}]*grid-template-columns:\s*1fr/s);
   assert.match(source, /\.appearance-page\s*>\s*\.muted:first-of-type/);
   assert.doesNotMatch(source, /\.request-transport-select\s*\{[^}]*color-scheme:\s*dark/s);
   for (const selector of ["address-input", "request-transport-select"]) {

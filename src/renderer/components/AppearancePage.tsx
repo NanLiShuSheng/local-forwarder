@@ -34,9 +34,13 @@ export function AppearancePage({ mode, theme, onModeChange }: AppearancePageProp
       >
         <span className="appearance-theme-preview" aria-hidden="true" />
         <span className="appearance-theme-card-copy">
-          <strong>{option.label}</strong>
+          <span className="appearance-theme-card-label">
+            <strong>{option.label}</strong>
+            {option.mode === "system" && <em className="appearance-theme-default">默认</em>}
+          </span>
           <span>{option.description}</span>
         </span>
+        {mode === option.mode && <span className="appearance-theme-card-check" aria-hidden="true">✓</span>}
       </button>)}
     </div>
   </section>;
