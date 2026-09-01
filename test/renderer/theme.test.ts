@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import test from "node:test";
+import { createRequire } from "node:module";
+import test, { mock } from "node:test";
+import type * as React from "react";
 import {
   THEME_STORAGE_KEY,
   isThemeMode,
@@ -9,7 +11,9 @@ import {
   writeThemeMode,
   type ThemeStorage,
 } from "../../src/renderer/theme";
-import { readSystemIsDark, subscribeToSystemTheme } from "../../src/renderer/useTheme";
+
+const require = createRequire(import.meta.url);
+const reactModule = require("react") as typeof React;
 
 const themeTokens = [
   "app-background",
@@ -130,6 +134,20 @@ function withWindow<T>(windowValue: unknown, callback: () => T): T {
   }
 }
 
+async function withWindowAsync<T>(windowValue: unknown, callback: () => Promise<T>): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: windowValue });
+  try {
+    return await callback();
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(globalThis, "window", descriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "window");
+    }
+  }
+}
+
 test("readThemeMode returns system when the stored value is missing", () => {
   assert.equal(readThemeMode(statefulStorage(null)), "system");
 });
@@ -205,7 +223,79 @@ test("writeThemeMode does not throw when storage setItem throws", () => {
   assert.doesNotThrow(() => writeThemeMode(storage, "light"));
 });
 
-test("readSystemIsDark reads the initial matchMedia matches value", () => {
+test("useTheme registers system listeners, rerenders on changes, and cleans up on unmount", async () => {
+  let matches = true;
+  const listeners = new Set<(event: MediaQueryListEvent) => void>();
+  const mediaQuery = {
+    get matches() {
+      return matches;
+    },
+    addEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => listeners.add(listener),
+    removeEventListener: (_type: "change", listener: (event: MediaQueryListEvent) => void) => listeners.delete(listener),
+  } as unknown as MediaQueryList;
+  const fakeWindow = { matchMedia: () => mediaQuery };
+  const hookStates: Array<{ value: unknown }> = [];
+  let hookCursor = 0;
+  let effectRegistrations = 0;
+  let mounted = false;
+  let cleanup: (() => void) | undefined;
+
+  try {
+    mock.method(reactModule, "useState", ((initialValue: unknown) => {
+      const stateIndex = hookCursor++;
+      const state = hookStates[stateIndex] ?? {
+        value: typeof initialValue === "function" ? (initialValue as () => unknown)() : initialValue,
+      };
+      hookStates[stateIndex] = state;
+      return [state.value, (nextValue: unknown) => {
+        state.value = typeof nextValue === "function"
+          ? (nextValue as (currentValue: unknown) => unknown)(state.value)
+          : nextValue;
+      }];
+    }) as typeof reactModule.useState);
+    mock.method(reactModule, "useEffect", ((effect: () => void | (() => void)) => {
+      effectRegistrations += 1;
+      if (!mounted) {
+        cleanup = effect() ?? undefined;
+        mounted = true;
+      }
+    }) as typeof reactModule.useEffect);
+
+    await withWindowAsync(fakeWindow, async () => {
+      const { useTheme } = await import("../../src/renderer/useTheme");
+      const render = () => {
+        hookCursor = 0;
+        return useTheme();
+      };
+      const emit = (nextMatches: boolean) => {
+        matches = nextMatches;
+        for (const listener of [...listeners]) listener({ matches: nextMatches } as MediaQueryListEvent);
+      };
+
+      assert.equal(render().theme, "dark");
+      assert.equal(hookStates[1]?.value, true);
+      assert.equal(listeners.size, 1);
+      assert.equal(effectRegistrations, 1);
+
+      emit(false);
+      assert.equal(render().theme, "light");
+      assert.equal(hookStates[1]?.value, false);
+      assert.equal(effectRegistrations, 2);
+
+      cleanup?.();
+      cleanup = undefined;
+      assert.equal(listeners.size, 0);
+
+      emit(true);
+      assert.equal(hookStates[1]?.value, false);
+    });
+  } finally {
+    mock.restoreAll();
+  }
+});
+
+test("readSystemIsDark reads the initial matchMedia matches value", async () => {
+  const { readSystemIsDark } = await import("../../src/renderer/useTheme");
   const mediaQuery = { matches: false } as MediaQueryList;
   const fakeWindow = {
     matchMedia: (query: string) => {
@@ -217,7 +307,8 @@ test("readSystemIsDark reads the initial matchMedia matches value", () => {
   assert.equal(withWindow(fakeWindow, () => readSystemIsDark()), false);
 });
 
-test("subscribeToSystemTheme forwards change event matches to its callback", () => {
+test("subscribeToSystemTheme forwards change event matches to its callback", async () => {
+  const { subscribeToSystemTheme } = await import("../../src/renderer/useTheme");
   const listeners = new Set<(event: MediaQueryListEvent) => void>();
   const mediaQuery = {
     matches: false,
@@ -235,7 +326,8 @@ test("subscribeToSystemTheme forwards change event matches to its callback", () 
   assert.deepEqual(received, [true, false]);
 });
 
-test("subscribeToSystemTheme cleanup stops future change notifications", () => {
+test("subscribeToSystemTheme cleanup stops future change notifications", async () => {
+  const { subscribeToSystemTheme } = await import("../../src/renderer/useTheme");
   const listeners = new Set<(event: MediaQueryListEvent) => void>();
   const mediaQuery = {
     matches: false,
@@ -253,7 +345,8 @@ test("subscribeToSystemTheme cleanup stops future change notifications", () => {
   assert.deepEqual(received, []);
 });
 
-test("subscribeToSystemTheme supports the legacy addListener API and cleanup", () => {
+test("subscribeToSystemTheme supports the legacy addListener API and cleanup", async () => {
+  const { subscribeToSystemTheme } = await import("../../src/renderer/useTheme");
   let listener: ((event: MediaQueryListEvent) => void) | undefined;
   const mediaQuery = {
     matches: false,
@@ -276,7 +369,8 @@ test("subscribeToSystemTheme supports the legacy addListener API and cleanup", (
   assert.deepEqual(received, [true]);
 });
 
-test("system theme adapter falls back to dark when matchMedia is unavailable or throws", () => {
+test("system theme adapter falls back to dark when matchMedia is unavailable or throws", async () => {
+  const { readSystemIsDark, subscribeToSystemTheme } = await import("../../src/renderer/useTheme");
   assert.equal(withWindow({}, () => readSystemIsDark()), true);
   assert.equal(withWindow({ matchMedia: () => { throw new Error("matchMedia unavailable"); } }, () => readSystemIsDark()), true);
   assert.doesNotThrow(() => withWindow({}, () => subscribeToSystemTheme(() => undefined)));
