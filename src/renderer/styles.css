@@ -138,6 +138,7 @@ button { cursor: pointer; }
   --progress-end: #3b9acb;
   --disabled-border: #a9b6c5;
   --disabled-text: #52647b;
+  --inverse: #152033;
   color-scheme: light;
 }
 .app-shell ::selection { color: var(--text-primary); background: var(--selection-background); }
@@ -259,7 +260,7 @@ h2 { font-size: 1.35rem; }
 .request-endpoint { display: grid; grid-template-columns: minmax(0, 1fr) 180px auto; gap: 12px; align-items: end; margin-bottom: 18px; }
 .request-endpoint label { display: grid; gap: 8px; color: var(--text-label); font-size: 0.8rem; }
 .request-endpoint input { border: 1px solid var(--border-input); border-radius: 8px; padding: 9px 10px; color: var(--text-primary); background: var(--input-background); outline: none; }
-.request-transport-select { border: 1px solid var(--border-input); border-radius: 8px; padding: 9px 10px; color: #e8effa; color: var(--text-primary); background: #111e32; background: var(--input-background); outline: none; }
+.request-transport-select { border: 1px solid var(--border-input); border-radius: 8px; padding: 9px 10px; color: var(--text-primary); background: var(--input-background); outline: none; }
 .request-transport-select:focus { border-color: var(--border-selected); }
 .request-url { display: flex; align-items: center; gap: 7px; min-height: 40px; border: 1px solid var(--border-field); border-radius: 8px; padding: 0 12px; color: var(--success); background: var(--code-surface-background); font: 0.78rem ui-monospace, SFMono-Regular, Menlo, monospace; }
 .request-url span { color: var(--text-subtle); }
@@ -348,7 +349,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--success); }
 .address-editor label span { color: var(--text-label); }
 .address-field { min-width: 0; }
 .address-input-shell { position: relative; }
-.address-input { width: 100%; border: 1px solid var(--border-input); border-radius: 8px; padding: 9px 42px 9px 10px; color: #e8effa; color: var(--text-primary); background: #111e32; background: var(--input-background); outline: none; }
+.address-input { width: 100%; border: 1px solid var(--border-input); border-radius: 8px; padding: 9px 42px 9px 10px; color: var(--text-primary); background: var(--input-background); outline: none; }
 .address-input:focus { border-color: var(--border-selected); }
 .address-history-toggle { position: absolute; top: 1px; right: 1px; bottom: 1px; display: flex; align-items: center; justify-content: center; width: 40px; border: 0; border-left: 1px solid var(--border-input); border-radius: 0 7px 7px 0; padding: 0; color: var(--success); background: transparent; font-size: 1.15rem; line-height: 1; }
 .address-history-chevron { display: block; width: 10px; height: 10px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translate(-2px, -2px); }

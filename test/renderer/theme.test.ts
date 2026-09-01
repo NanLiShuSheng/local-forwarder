@@ -114,6 +114,13 @@ test("AppearancePage offers system, light, and dark theme choices", async () => 
   for (const label of ["跟随系统", "浅色", "深色"]) assert.match(source, new RegExp(label));
 });
 
+test("AppearancePage renders the theme choices inside the actual theme grid", async () => {
+  const source = await readFile("src/renderer/components/AppearancePage.tsx", "utf8").catch(() => "");
+
+  assert.match(source, /className="panel appearance-page appearance-theme-panel"/);
+  assert.match(source, /className="appearance-theme-grid"/);
+});
+
 test("useTheme listens for system theme changes and persists the selected mode", async () => {
   const source = await readFile("src/renderer/useTheme.ts", "utf8").catch(() => "");
 
@@ -157,4 +164,12 @@ test("styles define semantic light and dark theme contracts", async () => {
   assert.match(source, /\.appearance-theme-preview/);
   assert.match(source, /\.appearance-page\s*>\s*\.muted:first-of-type/);
   assert.doesNotMatch(source, /\.request-transport-select\s*\{[^}]*color-scheme:\s*dark/s);
+  assert.match(source, /\.app-shell\s*\{[^}]*--inverse\s*:/s);
+  assert.match(source, /\.app-shell\[data-theme="light"\]\s*\{[^}]*--inverse\s*:/s);
+  for (const selector of ["address-input", "request-transport-select"]) {
+    assert.match(source, new RegExp(`\\.${selector}\\s*\\{[^}]*color:\\s*var\\(--text-primary\\)`));
+    assert.match(source, new RegExp(`\\.${selector}\\s*\\{[^}]*background:\\s*var\\(--input-background\\)`));
+    assert.doesNotMatch(source, new RegExp(`\\.${selector}\\s*\\{[^}]*color:\\s*#e8effa`));
+    assert.doesNotMatch(source, new RegExp(`\\.${selector}\\s*\\{[^}]*background:\\s*#111e32`));
+  }
 });

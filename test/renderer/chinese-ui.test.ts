@@ -54,3 +54,19 @@ test("renderer exposes manual login cache and project directory controls", async
   assert.match(source, /selectProjectDirectory/);
   assert.match(source, /project-directory-field/);
 });
+
+test("renderer gives forwarding address and request transport controls a dark theme", async () => {
+  const [pageSource, requestSource, styleSource] = await Promise.all([
+    readFile("src/renderer/components/ConfigPages.tsx", "utf8"),
+    readFile("src/renderer/components/RequestPage.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+  assert.match(pageSource, /address-input/);
+  assert.match(requestSource, /className="request-transport-select"/);
+  assert.match(styleSource, /\.address-input[^\{]*\{[^}]*background:\s*var\(--input-background\)/);
+  assert.match(styleSource, /\.request-transport-select[^\{]*\{[^}]*background:\s*var\(--input-background\)/);
+  assert.match(styleSource, /\.address-input[^\{]*\{[^}]*color:\s*var\(--text-primary\)/);
+  assert.match(styleSource, /\.request-transport-select[^\{]*\{[^}]*color:\s*var\(--text-primary\)/);
+  assert.doesNotMatch(styleSource, /\.address-input[^\{]*\{[^}]*background:\s*#111e32/);
+  assert.doesNotMatch(styleSource, /\.request-transport-select[^\{]*\{[^}]*background:\s*#111e32/);
+  assert.doesNotMatch(styleSource, /\.address-input[^\{]*\{[^}]*color:\s*#e8effa/);
