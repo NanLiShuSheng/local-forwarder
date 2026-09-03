@@ -250,7 +250,6 @@ function App() {
     <aside className="sidebar">
       <ProxyInstanceSidebar instances={instances} onSelect={selectProxyInstance} onCreate={createProxyInstance} onDelete={deleteProxyInstance} onDuplicate={duplicateProxyInstance} onToggle={toggleProxyInstance} onStartAll={startAll} onStopAll={stopAll} bulkBusy={bulkRuntimeAction !== undefined} />
       <nav className="sidebar-nav" aria-label="功能导航">
-        <span className="sidebar-nav-label">功能</span>
         {pages.map((item) => <button key={item.id} className={page === item.id ? "active" : ""} onClick={() => setPage(item.id)}>{item.label}</button>)}
       </nav>
     </aside>
