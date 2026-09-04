@@ -29,3 +29,43 @@ test("keeps a non-form request body as raw text", () => {
   assert.deepEqual(result.body, []);
   assert.equal(result.rawBody, '{"code":1}');
 });
+
+test("keeps JSON containing an equals sign as raw text", () => {
+  const result = parseLogRequestParams('POST /api\n\n{"expr":"a=b"}');
+
+  assert.deepEqual(result.body, []);
+  assert.equal(result.rawBody, '{"expr":"a=b"}');
+});
+
+test("uses a safe fallback for an invalid request target", () => {
+  const result = parseLogRequestParams('POST http://[invalid\n\n{"code":1}');
+
+  assert.deepEqual(result, {
+    method: "POST",
+    path: "/",
+    query: [],
+    body: [],
+    rawBody: '{"code":1}',
+  });
+});
+
+test("uses a root path for an empty request target", () => {
+  const result = parseLogRequestParams("GET");
+
+  assert.deepEqual(result, {
+    method: "GET",
+    path: "/",
+    query: [],
+    body: [],
+  });
+});
+
+test("keeps repeated form body keys", () => {
+  const result = parseLogRequestParams("POST /api\n\nitem=one&item=two");
+
+  assert.deepEqual(result.body, [
+    { key: "item", value: "one" },
+    { key: "item", value: "two" },
+  ]);
+  assert.equal(result.rawBody, undefined);
+});
