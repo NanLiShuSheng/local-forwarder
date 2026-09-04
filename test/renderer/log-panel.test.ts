@@ -39,7 +39,7 @@ test("log panel exposes source and parsed request detail actions", async () => {
   assert.match(panelSource, /onClear/);
   assert.match(panelSource, /onFillJson/);
   assert.match(panelSource, /清空日志/);
-  assert.match(panelSource, /disabled=\{logs\.length === 0\}/);
+  assert.match(panelSource, /disabled=\{logs\.length === 0 \|\| isClearing\}/);
   assert.match(panelSource, /if\s*\(await onClear\(\)\)\s*\{\s*setSelected\(undefined\)/);
   assert.match(panelSource, /requestView/);
   assert.match(panelSource, /源码/);
@@ -61,4 +61,24 @@ test("log panel exposes source and parsed request detail actions", async () => {
   assert.match(styleSource, /\.log-detail-response-actions[^\{]*\{[^}]*flex-wrap:\s*wrap/);
   assert.match(styleSource, /\.log-detail[^\{]*\{[^}]*overflow-y:\s*auto/);
   assert.match(styleSource, /\.log-toolbar[^\{]*\{[^}]*flex-wrap:\s*wrap/);
+});
+
+test("log panel handles clearing failures and prevents duplicate clear requests", async () => {
+  const panelSource = await readFile("src/renderer/components/LogPanel.tsx", "utf8");
+  const clearHandler = panelSource.match(/const clearLogs = async \(\) => \{([\s\S]*?)\n  \};/)?.[1];
+
+  assert.ok(clearHandler);
+  assert.match(panelSource, /try\s*\{[\s\S]*?await onClear\(\)[\s\S]*?\}\s*catch\s*\{[\s\S]*?\}/);
+  assert.doesNotMatch(clearHandler, /catch[\s\S]*setSelected\(undefined\)/);
+  assert.match(panelSource, /const \[isClearing, setIsClearing\] = useState\(false\)/);
+  assert.match(panelSource, /setIsClearing\(true\)/);
+  assert.match(panelSource, /finally\s*\{[\s\S]*?setIsClearing\(false\)/);
+  assert.match(panelSource, /disabled=\{logs\.length === 0 \|\| isClearing\}/);
+});
+
+test("log panel only offers JSON fill for non-empty response strings", async () => {
+  const panelSource = await readFile("src/renderer/components/LogPanel.tsx", "utf8");
+
+  assert.match(panelSource, /typeof selected\.responseData === "string" && selected\.responseData\.length > 0/);
+  assert.match(panelSource, /回填到 JSON 可视化/);
 });
