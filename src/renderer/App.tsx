@@ -31,7 +31,7 @@ export function createVersionedLogReader(readLogs: () => Promise<LogEntry[]>, ap
   let version = 0;
   return {
     read: async () => {
-      const requestVersion = version;
+      const requestVersion = ++version;
       const logs = await readLogs();
       if (requestVersion === version) applyLogs(logs);
     },

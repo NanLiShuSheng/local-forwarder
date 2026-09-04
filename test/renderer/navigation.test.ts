@@ -86,3 +86,32 @@ test("versioned log reader ignores results from invalidated requests", async () 
 
   assert.deepEqual(applied, []);
 });
+
+test("versioned log reader only applies the newest overlapping request", async () => {
+  const module = await import("../../src/renderer/App") as unknown as {
+    createVersionedLogReader?: unknown;
+  };
+  assert.equal(typeof module.createVersionedLogReader, "function");
+  const createVersionedLogReader = module.createVersionedLogReader as (
+    readLogs: () => Promise<unknown[]>,
+    applyLogs: (logs: unknown[]) => void,
+  ) => { read: () => Promise<void>; invalidate: () => void };
+  let resolveFirst: (logs: unknown[]) => void = () => undefined;
+  let resolveSecond: (logs: unknown[]) => void = () => undefined;
+  let readCount = 0;
+  const applied: unknown[][] = [];
+  const reader = createVersionedLogReader(() => new Promise((resolve) => {
+    if (readCount === 0) resolveFirst = resolve;
+    else resolveSecond = resolve;
+    readCount += 1;
+  }), (logs) => applied.push(logs));
+
+  const first = reader.read();
+  const second = reader.read();
+  resolveSecond(["new"]);
+  await second;
+  resolveFirst(["old"]);
+  await first;
+
+  assert.deepEqual(applied, [["new"]]);
+});
