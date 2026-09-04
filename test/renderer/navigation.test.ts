@@ -16,3 +16,43 @@ test("sidebar navigation removes the visible feature heading without changing it
   assert.doesNotMatch(source, /<span className="sidebar-nav-label">功能<\/span>/);
   assert.match(styles, /\.sidebar-nav::before/);
 });
+
+test("sidebar navigation gives every tab an icon without changing its label", async () => {
+  const source = await readFile("src/renderer/App.tsx", "utf8");
+  const styles = await readFile("src/renderer/styles.css", "utf8");
+
+  assert.match(source, /icon: "runtime"/);
+  assert.match(source, /icon: "request"/);
+  assert.match(source, /icon: "string"/);
+  assert.match(source, /icon: "local"/);
+  assert.match(source, /icon: "values"/);
+  assert.match(source, /icon: "encryption"/);
+  assert.match(source, /icon: "logs"/);
+  assert.match(source, /icon: "appearance"/);
+  assert.match(source, /className="sidebar-nav-icon"/);
+  assert.match(styles, /\.sidebar-nav-icon/);
+});
+
+test("sidebar navigation exposes the JSON visualization page", async () => {
+  const source = await readFile("src/renderer/App.tsx", "utf8");
+  const pagesSource = await readFile("src/renderer/components/ConfigPages.tsx", "utf8");
+
+  assert.match(source, /\{ id: "json", label: "JSON 可视化", icon: "json" \}/);
+  assert.match(source, /<JsonPreviewPage prefillText=\{jsonPrefill\}/);
+  assert.match(pagesSource, /Page = .*"json"/);
+  assert.match(source, /page !== "json"/);
+});
+
+test("App wires log clearing and JSON response fill actions", async () => {
+  const source = await readFile("src/renderer/App.tsx", "utf8");
+
+  assert.match(source, /const \[jsonPrefill, setJsonPrefill\] = useState<string>\(\);/);
+  assert.match(source, /const clearLogs = async \(\): Promise<boolean> => \{/);
+  assert.match(source, /const result = await window\.forwarder\.clearLogs\(\);/);
+  assert.match(source, /setLogs\(\[\]\);/);
+  assert.match(source, /return false;/);
+  assert.match(source, /return true;/);
+  assert.match(source, /const fillJsonPreview = \(text: string\) => \{[\s\S]*?setJsonPrefill\(text\);[\s\S]*?setPage\("json"\);/);
+  assert.match(source, /<JsonPreviewPage prefillText=\{jsonPrefill\} onPrefillApplied=\{\(\) => setJsonPrefill\(undefined\)\} \/>/);
+  assert.match(source, /<LogPanel logs=\{logs\} onClear=\{clearLogs\} onFillJson=\{fillJsonPreview\} \/>/);
+});
