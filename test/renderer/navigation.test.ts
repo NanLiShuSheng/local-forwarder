@@ -56,3 +56,12 @@ test("App wires log clearing and JSON response fill actions", async () => {
   assert.match(source, /<JsonPreviewPage prefillText=\{jsonPrefill\} onPrefillApplied=\{\(\) => setJsonPrefill\(undefined\)\} \/>/);
   assert.match(source, /<LogPanel logs=\{logs\} onClear=\{clearLogs\} onFillJson=\{fillJsonPreview\} \/>/);
 });
+
+test("App reports rejected log clearing IPC calls", async () => {
+  const source = await readFile("src/renderer/App.tsx", "utf8");
+  const clearLogs = source.match(/const clearLogs = async \(\): Promise<boolean> => \{([\s\S]*?)\n  \};/);
+
+  assert.ok(clearLogs);
+  assert.match(clearLogs[1], /try\s*\{[\s\S]*?await window\.forwarder\.clearLogs\(\)/);
+  assert.match(clearLogs[1], /catch \(cause\)\s*\{[\s\S]*?setError\(cause instanceof Error \? cause\.message : "日志清空失败"\);[\s\S]*?return false;/);
+});

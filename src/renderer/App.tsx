@@ -223,14 +223,19 @@ function App() {
   };
 
   const clearLogs = async (): Promise<boolean> => {
-    const result = await window.forwarder.clearLogs();
-    if (!result.ok) {
-      setError(result.error ?? "日志清空失败");
+    try {
+      const result = await window.forwarder.clearLogs();
+      if (!result.ok) {
+        setError(result.error ?? "日志清空失败");
+        return false;
+      }
+      setLogs([]);
+      setError("");
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "日志清空失败");
       return false;
     }
-    setLogs([]);
-    setError("");
-    return true;
   };
 
   const fillJsonPreview = (text: string) => {
