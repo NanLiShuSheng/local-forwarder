@@ -13,17 +13,37 @@ export interface ParsedLogRequest {
 
 const URL_BASE = "http://local-forwarder.invalid";
 const URL_ENCODED_COMPONENT = /^(?:[A-Za-z0-9*._~+\-]|%[0-9A-Fa-f]{2})*$/;
+const ENCODED_PLACEHOLDER = /^\([^()]*%[0-9A-Fa-f]{2}[^()]*\)$/;
 
 function toLogKeyValues(params: URLSearchParams): LogKeyValue[] {
   return Array.from(params, ([key, value]) => ({ key, value }));
 }
 
+function decodeFormComponent(raw: string): string {
+  if (ENCODED_PLACEHOLDER.test(raw)) return raw;
+  try {
+    return decodeURIComponent(raw.replace(/\+/g, " "));
+  } catch {
+    return raw;
+  }
+}
+
+function toFormKeyValues(rawBody: string): LogKeyValue[] {
+  return rawBody.split("&").filter((part) => part !== "").map((part) => {
+    const separator = part.indexOf("=");
+    return {
+      key: decodeFormComponent(part.slice(0, separator)),
+      value: decodeFormComponent(part.slice(separator + 1)),
+    };
+  });
+}
+
 function isUrlEncodedFormBody(rawBody: string): boolean {
-  return rawBody.split("&").every((part) => {
+  const parts = rawBody.split("&").filter((part) => part !== "");
+  return parts.length > 0 && parts.every((part) => {
     const separator = part.indexOf("=");
     if (separator <= 0) return false;
-    return URL_ENCODED_COMPONENT.test(part.slice(0, separator))
-      && URL_ENCODED_COMPONENT.test(part.slice(separator + 1));
+    return URL_ENCODED_COMPONENT.test(part.slice(0, separator));
   });
 }
 
@@ -45,9 +65,7 @@ export function parseLogRequestParams(raw: string): ParsedLogRequest {
   const rawBody = separator === null || separator.index === undefined
     ? ""
     : raw.slice(separator.index + separator[0].length);
-  const body = isUrlEncodedFormBody(rawBody)
-    ? toLogKeyValues(new URLSearchParams(rawBody))
-    : [];
+  const body = isUrlEncodedFormBody(rawBody) ? toFormKeyValues(rawBody) : [];
 
   return {
     method,

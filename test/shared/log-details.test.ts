@@ -69,3 +69,17 @@ test("keeps repeated form body keys", () => {
   ]);
   assert.equal(result.rawBody, undefined);
 });
+
+test("parses placeholder form parameters with empty separators without decoding placeholders", () => {
+  const result = parseLogRequestParams(
+    "POST /api\n\nMobileCode=(%24MobileCode)&&Token=(%24Token)&Reqno=1788498210777&ReqLinkType=1&newindex=1&action=49055&serviceId=esb.ygt.cscx.cxyybywxz&yyb=447&tokentype=0&ywdm=23031&GMGZJK=1&fromXetH5Page=%2Fnewzt%2Ffengmian%2Fywbl_fengmian.html",
+  );
+
+  assert.deepEqual(result.body.slice(0, 2), [
+    { key: "MobileCode", value: "(%24MobileCode)" },
+    { key: "Token", value: "(%24Token)" },
+  ]);
+  assert.equal(result.body.length, 12);
+  assert.equal(result.body.at(-1)?.value, "/newzt/fengmian/ywbl_fengmian.html");
+  assert.equal(result.rawBody, undefined);
+});
