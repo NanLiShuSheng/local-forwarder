@@ -89,7 +89,8 @@ test("JSON preview accepts and consumes one-time prefills", async () => {
   assert.match(source, /import \{ useEffect, useMemo, useRef, useState \} from "react";/);
   assert.match(source, /prefillText\?: string/);
   assert.match(source, /onPrefillApplied\?: \(\) => void/);
-  assert.match(source, /if \(prefillText === undefined\) return;/);
+  assert.match(source, /createJsonPrefillGuard/);
+  assert.match(source, /prefillGuardRef/);
   assert.match(source, /updateInput\(prefillText\);/);
   assert.match(source, /onPrefillApplied\?\.\(\);/);
   assert.match(source, /\}, \[prefillText, onPrefillApplied\]\);/);
@@ -102,4 +103,31 @@ test("JSON preview keeps invalid prefill text while showing its parse error", as
   assert.match(source, /setExpandedPaths\(next\.ok \? defaultExpandedPaths\(next\.value\) : new Set\(\["\$"\]\)\);/);
   assert.match(source, /JSON 解析失败/);
   assert.match(source, /parseResult\.error/);
+});
+
+test("JSON preview prefill guard applies one value once and resets after undefined", async () => {
+  const module = await import("../../src/renderer/components/JsonPreviewPage") as unknown as {
+    createJsonPrefillGuard?: unknown;
+  };
+  assert.equal(typeof module.createJsonPrefillGuard, "function");
+  const createJsonPrefillGuard = module.createJsonPrefillGuard as () => (
+    prefillText: string | undefined,
+    updateInput: (text: string) => void,
+    onPrefillApplied?: () => void,
+  ) => void;
+  const updates: string[] = [];
+  let appliedCount = 0;
+  const guard = createJsonPrefillGuard();
+  const updateInput = (text: string) => updates.push(text);
+  const onPrefillApplied = () => { appliedCount += 1; };
+
+  guard('{"first":1}', updateInput, onPrefillApplied);
+  guard('{"first":1}', updateInput, onPrefillApplied);
+  assert.deepEqual(updates, ['{"first":1}']);
+  assert.equal(appliedCount, 1);
+
+  guard(undefined, updateInput, onPrefillApplied);
+  guard('{"first":1}', updateInput, onPrefillApplied);
+  assert.deepEqual(updates, ['{"first":1}', '{"first":1}']);
+  assert.equal(appliedCount, 2);
 });

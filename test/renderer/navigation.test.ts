@@ -65,3 +65,24 @@ test("App reports rejected log clearing IPC calls", async () => {
   assert.match(clearLogs[1], /try\s*\{[\s\S]*?await window\.forwarder\.clearLogs\(\)/);
   assert.match(clearLogs[1], /catch \(cause\)\s*\{[\s\S]*?setError\(cause instanceof Error \? cause\.message : "日志清空失败"\);[\s\S]*?return false;/);
 });
+
+test("versioned log reader ignores results from invalidated requests", async () => {
+  const module = await import("../../src/renderer/App") as unknown as {
+    createVersionedLogReader?: unknown;
+  };
+  assert.equal(typeof module.createVersionedLogReader, "function");
+  const createVersionedLogReader = module.createVersionedLogReader as (
+    readLogs: () => Promise<unknown[]>,
+    applyLogs: (logs: unknown[]) => void,
+  ) => { read: () => Promise<void>; invalidate: () => void };
+  let resolveRead: (logs: unknown[]) => void = () => undefined;
+  const applied: unknown[][] = [];
+  const reader = createVersionedLogReader(() => new Promise((resolve) => { resolveRead = resolve; }), (logs) => applied.push(logs));
+
+  const pending = reader.read();
+  reader.invalidate();
+  resolveRead(["stale"]);
+  await pending;
+
+  assert.deepEqual(applied, []);
+});

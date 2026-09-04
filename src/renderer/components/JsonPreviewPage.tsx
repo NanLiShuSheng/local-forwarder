@@ -72,6 +72,23 @@ function defaultExpandedPaths(value: JsonPreviewValue): Set<string> {
   return paths;
 }
 
+export function createJsonPrefillGuard() {
+  let lastPrefillText: string | undefined;
+  let hasApplied = false;
+  return (prefillText: string | undefined, updateInput: (text: string) => void, onPrefillApplied?: () => void) => {
+    if (prefillText === undefined) {
+      lastPrefillText = undefined;
+      hasApplied = false;
+      return;
+    }
+    if (hasApplied && lastPrefillText === prefillText) return;
+    updateInput(prefillText);
+    lastPrefillText = prefillText;
+    hasApplied = true;
+    onPrefillApplied?.();
+  };
+}
+
 function matchesSearch(key: string, path: string, value: JsonPreviewValue, search: string): boolean {
   if (search === "") return true;
   const needle = search.toLocaleLowerCase();
@@ -407,6 +424,8 @@ export function JsonPreviewPage({ prefillText, onPrefillApplied }: { prefillText
   const [isExporting, setIsExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLElement>(null);
+  const prefillGuardRef = useRef<ReturnType<typeof createJsonPrefillGuard> | null>(null);
+  if (prefillGuardRef.current === null) prefillGuardRef.current = createJsonPrefillGuard();
 
   const rows = useMemo(() => parseResult.ok ? flattenJsonValue(parseResult.value) : [], [parseResult]);
   const stats = useMemo(() => parseResult.ok ? jsonStats(parseResult.value, rows) : undefined, [parseResult, rows]);
@@ -423,9 +442,7 @@ export function JsonPreviewPage({ prefillText, onPrefillApplied }: { prefillText
   };
 
   useEffect(() => {
-    if (prefillText === undefined) return;
-    updateInput(prefillText);
-    onPrefillApplied?.();
+    prefillGuardRef.current?.(prefillText, updateInput, onPrefillApplied);
   }, [prefillText, onPrefillApplied]);
 
   const importFile = async (file: File | undefined) => {

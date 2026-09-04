@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionProgress, EncryptionResult, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus } from "../shared/contracts";
 import { AppearancePage } from "./components/AppearancePage";
 import { ConfigPages, type Page } from "./components/ConfigPages";
@@ -27,6 +27,18 @@ const sidebarNavIconPaths: Record<SidebarNavIconName, string[]> = {
 };
 const pages: Array<{ id: Page; label: string; icon: SidebarNavIconName }> = [{ id: "runtime", label: "概览", icon: "runtime" }, { id: "request", label: "请求", icon: "request" }, { id: "string", label: "字符串", icon: "string" }, { id: "json", label: "JSON 可视化", icon: "json" }, { id: "local", label: "本地变量", icon: "local" }, { id: "values", label: "登录缓存", icon: "values" }, { id: "encryption", label: "加密", icon: "encryption" }, { id: "logs", label: "日志", icon: "logs" }, { id: "appearance", label: "外观", icon: "appearance" }];
 
+export function createVersionedLogReader(readLogs: () => Promise<LogEntry[]>, applyLogs: (logs: LogEntry[]) => void) {
+  let version = 0;
+  return {
+    read: async () => {
+      const requestVersion = version;
+      const logs = await readLogs();
+      if (requestVersion === version) applyLogs(logs);
+    },
+    invalidate: () => { version += 1; },
+  };
+}
+
 function SidebarNavIcon({ name }: { name: SidebarNavIconName }) {
   return <svg className="sidebar-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{sidebarNavIconPaths[name].map((path) => <path key={path} d={path} />)}</svg>;
 }
@@ -44,16 +56,18 @@ function App() {
   const [error, setError] = useState("");
   const [bulkRuntimeAction, setBulkRuntimeAction] = useState<"start" | "stop">();
   const [jsonPrefill, setJsonPrefill] = useState<string>();
+  const logReaderRef = useRef<ReturnType<typeof createVersionedLogReader> | null>(null);
+  if (logReaderRef.current === null) logReaderRef.current = createVersionedLogReader(() => window.forwarder.logs(), setLogs);
+  const readLogs = () => logReaderRef.current!.read();
 
   const refresh = async () => {
     try {
-      const [nextInstances, nextConfig, nextSharedValues, nextLoginCache, nextStatus, nextLogs, nextEncryptionPreferences] = await Promise.all([window.forwarder.listProxyInstances(), window.forwarder.getConfig(), window.forwarder.getSharedValues(), window.forwarder.getLoginCache(), window.forwarder.status(), window.forwarder.logs(), window.forwarder.getEncryptionPreferences()]);
+      const [nextInstances, nextConfig, nextSharedValues, nextLoginCache, nextStatus, nextEncryptionPreferences] = await Promise.all([window.forwarder.listProxyInstances(), window.forwarder.getConfig(), window.forwarder.getSharedValues(), window.forwarder.getLoginCache(), window.forwarder.status(), window.forwarder.getEncryptionPreferences(), readLogs()]);
       setInstances(nextInstances);
       setConfig(nextConfig);
       setSharedValues(nextSharedValues);
       setLoginCache(nextLoginCache);
       setStatus(nextStatus);
-      setLogs(nextLogs);
       setEncryptionPreferences(nextEncryptionPreferences);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "无法加载运行状态");
@@ -66,7 +80,7 @@ function App() {
       void window.forwarder.listProxyInstances().then(setInstances).catch(() => undefined);
       void window.forwarder.getLoginCache().then(setLoginCache).catch(() => undefined);
       void window.forwarder.status().then(setStatus).catch(() => undefined);
-      void window.forwarder.logs().then(setLogs).catch(() => undefined);
+      void readLogs().catch(() => undefined);
     }, 2000);
     return () => window.clearInterval(timer);
   }, []);
@@ -229,6 +243,7 @@ function App() {
         setError(result.error ?? "日志清空失败");
         return false;
       }
+      logReaderRef.current?.invalidate();
       setLogs([]);
       setError("");
       return true;
