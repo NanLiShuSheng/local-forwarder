@@ -11,6 +11,7 @@ export interface ManagedForwardingService {
   getConfig(): AppConfig;
   saveConfig(config: AppConfig): Promise<void>;
   getLogs(): LogEntry[];
+  clearLogs(): void;
   mergeLocalValues(values: Record<string, string>): void;
 }
 
@@ -130,6 +131,10 @@ export class ForwardingServiceManager {
 
   public getLogs(id = this.workspace.selectedInstanceId): LogEntry[] {
     return this.requireService(id).getLogs();
+  }
+
+  public clearLogs(id = this.workspace.selectedInstanceId): void {
+    this.requireService(id).clearLogs();
   }
 
   public mergeLocalValues(values: Record<string, string>): void {

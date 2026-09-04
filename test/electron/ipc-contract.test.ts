@@ -22,6 +22,7 @@ test("IPC channels expose stable runtime commands", () => {
     stop: "runtime:stop",
     status: "runtime:status",
     logs: "runtime:logs",
+    clearLogs: "runtime:logs:clear",
   });
   const status: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
   assert.equal(status.state, "stopped");

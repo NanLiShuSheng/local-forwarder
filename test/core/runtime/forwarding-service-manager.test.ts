@@ -33,6 +33,7 @@ function fakeFactory() {
       stop: async () => { state = "stopped"; return { state, requestCount: 0, tcpConnections: 0 }; },
       status: () => ({ state, requestCount: 0, tcpConnections: 0 }),
       getLogs: () => [],
+      clearLogs: () => undefined,
       getConfig: () => structuredClone(current),
       saveConfig: async (next) => { current = structuredClone(next); await persistence.save(current); },
       mergeLocalValues: (values) => { current.localValues = { ...current.localValues, ...values }; void persistence.save(current); },
@@ -91,4 +92,22 @@ test("stopping one proxy does not stop another proxy", async () => {
 
   assert.equal(manager.status("first").state, "stopped");
   assert.equal(manager.status("second").state, "running");
+});
+
+test("clears logs on the currently selected proxy instance", async () => {
+  const clearedPorts: number[] = [];
+  const manager = new ForwardingServiceManager({
+    workspace: workspaceWithTwoInstances(),
+    workspaceStore: { save: async () => undefined },
+    serviceFactory: (config, persistence) => {
+      const service = fakeFactory()(config, persistence);
+      return { ...service, clearLogs: () => { clearedPorts.push(config.server.port); } };
+    },
+  });
+
+  manager.clearLogs();
+  await manager.select("second");
+  manager.clearLogs();
+
+  assert.deepEqual(clearedPorts, [18080, 18081]);
 });

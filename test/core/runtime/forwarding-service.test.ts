@@ -6,6 +6,7 @@ import path from "node:path";
 import net from "node:net";
 import { createDefaultConfig } from "../../../src/core/config/model";
 import { ForwardingService } from "../../../src/core/runtime/forwarding-service";
+import type { LogEntry } from "../../../src/shared/contracts";
 
 async function freePort(): Promise<number> {
   const server = net.createServer();
@@ -42,4 +43,35 @@ test("service records start failures and can recover after stop", async () => {
   assert.equal(service.status().state, "error");
   await service.stop();
   assert.equal(service.status().state, "stopped");
+});
+
+test("clears captured logs and accepts new entries afterward", async () => {
+  const config = createDefaultConfig();
+  let onLog: ((entry: LogEntry) => void) | undefined;
+  const service = new ForwardingService({
+    config,
+    httpFactory: (options) => {
+      onLog = options.onLog;
+      return {
+        start: async () => ({ host: "127.0.0.1", port: config.server.port }),
+        stop: async () => undefined,
+        getStats: () => ({ requestCount: 0, successCount: 0, totalDurationMs: 0, tcpConnections: 0 }),
+        getValues: () => ({ localValues: {}, mapValues: {}, fileValues: {} }),
+      } as never;
+    },
+  });
+
+  try {
+    await service.start();
+    onLog?.({ timestamp: "2026-09-04T00:00:00.000Z", level: "info", message: "first", requestType: "fetch" });
+    assert.equal(service.getLogs().length, 1);
+
+    service.clearLogs();
+
+    assert.deepEqual(service.getLogs(), []);
+    onLog?.({ timestamp: "2026-09-04T00:00:01.000Z", level: "info", message: "second", requestType: "xhr" });
+    assert.deepEqual(service.getLogs().map((entry) => entry.message), ["second"]);
+  } finally {
+    await service.stop();
+  }
 });

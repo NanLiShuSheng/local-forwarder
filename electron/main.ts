@@ -32,6 +32,7 @@ const IPC_CHANNELS = {
   stop: "runtime:stop",
   status: "runtime:status",
   logs: "runtime:logs",
+  clearLogs: "runtime:logs:clear",
 } as const;
 
 const smokeMode = process.argv.includes("--smoke");
@@ -196,6 +197,14 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     return manager.status();
   });
   registerIpcHandler(policy, IPC_CHANNELS.logs, (): LogEntry[] => manager.getLogs());
+  registerIpcHandler(policy, IPC_CHANNELS.clearLogs, () => {
+    try {
+      manager.clearLogs();
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "日志清空失败" };
+    }
+  });
 }
 
 async function loadService(): Promise<void> {

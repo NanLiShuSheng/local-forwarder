@@ -20,6 +20,7 @@ const IPC_CHANNELS = {
   stop: "runtime:stop",
   status: "runtime:status",
   logs: "runtime:logs",
+  clearLogs: "runtime:logs:clear",
 } as const;
 
 const api: ForwarderApi = {
@@ -41,6 +42,7 @@ const api: ForwarderApi = {
   stop: () => ipcRenderer.invoke(IPC_CHANNELS.stop),
   status: () => ipcRenderer.invoke(IPC_CHANNELS.status),
   logs: () => ipcRenderer.invoke(IPC_CHANNELS.logs),
+  clearLogs: () => ipcRenderer.invoke(IPC_CHANNELS.clearLogs),
 };
 
 contextBridge.exposeInMainWorld("forwarder", api);

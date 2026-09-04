@@ -170,6 +170,7 @@ export interface ForwarderApi {
   stop(): Promise<RuntimeStatus>;
   status(): Promise<RuntimeStatus>;
   logs(): Promise<LogEntry[]>;
+  clearLogs(): Promise<OperationResult>;
 }
 
 export const IPC_CHANNELS = {
@@ -191,6 +192,7 @@ export const IPC_CHANNELS = {
   stop: "runtime:stop",
   status: "runtime:status",
   logs: "runtime:logs",
+  clearLogs: "runtime:logs:clear",
 } as const;
 
 declare global {
