@@ -325,20 +325,38 @@ h2 { font-size: 1.35rem; }
 .rule-actions { display: flex; align-items: center; gap: 10px; color: var(--text-label); font-size: 0.76rem; }
 .rule-actions span:last-child { color: var(--text-success); }
 .empty, .muted { color: var(--text-muted); }
-.filters { display: flex; gap: 8px; }
-.log-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 14px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.log-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 14px; }
+.log-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.log-clear-button:disabled { cursor: not-allowed; opacity: 0.45; }
 .log-count { color: var(--text-label); font-size: 0.8rem; }
 .log-row { display: grid; grid-template-columns: 90px 54px minmax(0, 1fr); gap: 10px; width: 100%; border: 0; border-bottom: 1px solid var(--border-subtle); padding: 9px 0; color: var(--text-code); background: transparent; font-size: 0.82rem; text-align: left; }
 .log-row:hover { background: var(--surface-background); }
 .log-message { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-.log-detail { min-width: 0; min-height: 260px; margin-top: 0; border: 1px solid var(--border-default); border-radius: 12px; padding: 15px; background: var(--surface-code-background); }
+.log-detail { min-width: 0; max-height: 660px; min-height: 260px; overflow-y: auto; margin-top: 0; border: 1px solid var(--border-default); border-radius: 12px; padding: 15px; background: var(--surface-code-background); scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); scrollbar-width: thin; }
 .log-detail-empty { margin: 0; color: var(--text-muted); font-size: 0.8rem; }
 .log-detail-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--text-primary); }
 .log-detail-close { border: 0; padding: 0 3px; color: var(--text-label); background: transparent; font-size: 1.2rem; line-height: 1; }
 .log-detail-close:hover { color: var(--inverse); }
 .log-detail-list { display: grid; gap: 14px; margin: 14px 0 0; }
-.log-detail-list dt { margin-bottom: 7px; color: var(--text-label); font-size: 0.76rem; }
+.log-detail-section { display: grid; gap: 8px; min-width: 0; }
+.log-detail-section-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.log-detail-section-title { margin: 0; color: var(--text-label); font-size: 0.76rem; }
+.log-detail-tabs { display: flex; flex-wrap: wrap; gap: 2px; }
+.log-detail-tabs button { border: 0; border-bottom: 2px solid transparent; padding: 4px 8px 6px; color: var(--text-muted); background: transparent; font-size: 0.72rem; }
+.log-detail-tabs button:hover { color: var(--text-secondary); }
+.log-detail-tabs button.active { border-bottom-color: var(--border-selected); color: var(--text-success); }
 .log-detail-list dd { margin: 0; }
+.log-detail-parsed { display: grid; gap: 12px; }
+.log-detail-scalar { margin: 0; color: var(--text-code); font: 0.74rem/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; word-break: break-word; }
+.log-detail-empty-value { margin: 0; color: var(--text-muted); font-size: 0.74rem; }
+.log-detail-key-values { display: grid; gap: 6px; }
+.log-detail-key-value { display: grid; grid-template-columns: minmax(84px, 0.35fr) auto minmax(0, 1fr); gap: 8px; border-bottom: 1px solid var(--border-subtle); padding: 6px 0; color: var(--text-code); font: 0.74rem/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.log-detail-key, .log-detail-value { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+.log-detail-key { color: var(--info); }
+.log-detail-separator { color: var(--text-muted); }
+.log-detail-value { color: var(--text-code); }
+.log-detail-response-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .log-detail-body { max-height: 260px; overflow: auto; margin: 0; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 11px; color: var(--text-code); background: var(--code-background); font: 0.74rem/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .log-row time { color: var(--text-subtle); }
 .log-level { color: var(--text-success); text-transform: uppercase; }

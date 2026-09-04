@@ -29,3 +29,36 @@ test("log panel keeps the list visible beside the selected detail", async () => 
   assert.match(styleSource, /\.log-list[^}]*overflow-y:\s*auto/);
   assert.match(styleSource, /@media\s*\(max-width:\s*820px\)[\s\S]*?\.log-workspace[\s\S]*?grid-template-columns:\s*1fr/);
 });
+
+test("log panel exposes source and parsed request detail actions", async () => {
+  const [panelSource, styleSource] = await Promise.all([
+    readFile("src/renderer/components/LogPanel.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+  assert.match(panelSource, /parseLogRequestParams/);
+  assert.match(panelSource, /onClear/);
+  assert.match(panelSource, /onFillJson/);
+  assert.match(panelSource, /清空日志/);
+  assert.match(panelSource, /disabled=\{logs\.length === 0\}/);
+  assert.match(panelSource, /if\s*\(await onClear\(\)\)\s*\{\s*setSelected\(undefined\)/);
+  assert.match(panelSource, /requestView/);
+  assert.match(panelSource, /源码/);
+  assert.match(panelSource, /解析结果/);
+  assert.match(panelSource, /method/);
+  assert.match(panelSource, /path/);
+  assert.match(panelSource, /query/);
+  assert.match(panelSource, /body/);
+  assert.match(panelSource, /rawBody/);
+  assert.match(panelSource, /回填到 JSON 可视化/);
+  assert.match(panelSource, /onFillJson\(selected\.responseData/);
+  assert.match(panelSource, /log-detail-key-value/);
+  assert.match(panelSource, /log-detail-key/);
+  assert.match(panelSource, /log-detail-value/);
+  assert.match(styleSource, /\.log-detail-section-title[^\{]*\{/);
+  assert.match(styleSource, /\.log-detail-tabs[^\{]*\{/);
+  assert.match(styleSource, /\.log-detail-key-value[^\{]*\{/);
+  assert.match(styleSource, /\.log-detail-value[^\{]*\{[^}]*overflow-wrap:\s*anywhere/);
+  assert.match(styleSource, /\.log-detail-response-actions[^\{]*\{[^}]*flex-wrap:\s*wrap/);
+  assert.match(styleSource, /\.log-detail[^\{]*\{[^}]*overflow-y:\s*auto/);
+  assert.match(styleSource, /\.log-toolbar[^\{]*\{[^}]*flex-wrap:\s*wrap/);
+});
