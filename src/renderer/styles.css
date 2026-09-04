@@ -75,8 +75,10 @@ button { cursor: pointer; }
   --preview-dark-content: #1a2b43;
   --preview-dark-panel: #263b57;
   --preview-shadow: rgb(0 0 0 / 6%);
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   display: flex;
+  overflow: hidden;
   color: var(--text-primary);
   color-scheme: dark;
   background: radial-gradient(circle at 70% -10%, var(--app-background-accent) 0, var(--app-background-mid) 38%, var(--app-background) 78%);
@@ -150,7 +152,7 @@ button { cursor: pointer; }
   color-scheme: light;
 }
 .app-shell ::selection { color: var(--text-primary); background: var(--selection-background); }
-.sidebar { width: 294px; flex: 0 0 294px; display: flex; flex-direction: column; min-height: 100vh; padding: 24px 16px 18px; border-right: 1px solid var(--sidebar-border); background: var(--sidebar-background); }
+.sidebar { width: 294px; flex: 0 0 294px; display: flex; flex-direction: column; height: 100vh; min-height: 0; overflow-y: auto; padding: 24px 16px 18px; border-right: 1px solid var(--sidebar-border); background: var(--sidebar-background); }
 .proxy-instance-sidebar { min-height: 0; }
 .proxy-instance-sidebar-heading { display: flex; align-items: stretch; justify-content: space-between; gap: 8px; margin: 0 4px 12px 10px; }
 .proxy-instance-sidebar-bulk-actions { display: flex; gap: 6px; min-width: 0; }
@@ -190,7 +192,7 @@ button { cursor: pointer; }
 .sidebar-nav button:hover { color: var(--text-bright); background: var(--surface-selected-background); }
 .sidebar-nav button.active { border-left-color: var(--border-selected); color: var(--text-bright); background: var(--surface-selected-background); }
 .sidebar-nav button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-.content { flex: 1; min-width: 0; width: min(1180px, 100%); margin: 0 auto; padding: 42px 48px 56px; background: var(--app-background); }
+.content { flex: 1; min-width: 0; width: min(1180px, 100%); height: 100vh; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 auto; padding: 42px 48px 56px; background: var(--app-background); }
 .request-page-content { padding-top: 28px; }
 .topbar { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 30px; }
 .content-toolbar { display: flex; justify-content: flex-end; min-height: 32px; margin-bottom: 14px; }

@@ -195,3 +195,11 @@ test("proxy sidebar shows three cards and previews the next card", async () => {
   assert.match(styles, /\.proxy-instance-sidebar-list[^}]*max-height:\s*calc\(\(64px \* 3\) \+ \(8px \* 2\) \+ 6px \+ 20px\)/);
   assert.match(styles, /\.proxy-instance-sidebar-list[^}]*overflow-y:\s*auto/);
 });
+
+test("sidebar and content scroll independently within the viewport", async () => {
+  const styles = await readFile("src/renderer/styles.css", "utf8");
+  assert.match(styles, /\.app-shell\s*\{[^}]*height:\s*100vh;[^}]*min-height:\s*0;[^}]*overflow:\s*hidden;/);
+  assert.match(styles, /\.sidebar\s*\{[^}]*height:\s*100vh;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;/);
+  assert.match(styles, /\.content\s*\{[^}]*height:\s*100vh;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/);
+  assert.match(styles, /\.proxy-instance-sidebar-list[^}]*overflow-y:\s*auto/);
+});
