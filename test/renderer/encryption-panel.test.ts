@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { encryptionDirectoryHistoryForKind } from "../../src/renderer/components/ConfigPages";
+
+test("keeps input and output encryption directory history separate", () => {
+  const preferences = {
+    inputDir: "/work/input",
+    outputDir: "/work/output",
+    inputHistory: ["/history/input-a", "/history/input-b"],
+    outputHistory: ["/history/output-a", "/history/output-b"],
+  };
+  assert.deepEqual(encryptionDirectoryHistoryForKind(preferences, "input"), preferences.inputHistory);
+  assert.deepEqual(encryptionDirectoryHistoryForKind(preferences, "output"), preferences.outputHistory);
+  assert.notDeepEqual(encryptionDirectoryHistoryForKind(preferences, "input"), preferences.outputHistory);
+});
 
 test("navigation exposes the encryption page", async () => {
   const source = await readFile("src/renderer/App.tsx", "utf8");
@@ -35,6 +48,35 @@ test("encryption page exposes two directory selectors and an execution action", 
   assert.doesNotMatch(source, /<input readOnly value=\{encryptionOutputDir\}/);
   assert.match(source, /encryptionRunning/);
   assert.match(source, /disabled=\{encryptionRunning/);
+});
+
+test("encryption directory history uses separate dropdowns and the existing save path", async () => {
+  const [component, styles] = await Promise.all([
+    readFile("src/renderer/components/ConfigPages.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+  assert.match(component, /export function encryptionDirectoryHistoryForKind/);
+  assert.match(component, /inputHistory/);
+  assert.match(component, /outputHistory/);
+  assert.match(component, /openEncryptionHistoryKind/);
+  assert.match(component, /encryptionDirectoryHistoryForKind/);
+  assert.match(component, /encryption-history-toggle/);
+  assert.match(component, /encryption-history-chevron/);
+  assert.match(component, /encryption-history-menu/);
+  assert.match(component, /encryption-history-option/);
+  assert.match(component, /role="listbox"/);
+  assert.match(component, /role="option"/);
+  assert.match(component, /aria-selected/);
+  assert.match(component, /aria-expanded/);
+  assert.match(component, /selectEncryptionHistory/);
+  assert.match(component, /saveEncryptionDirectory\(kind, directory\)/);
+  assert.match(component, /onMouseDown=\{\(event\) => event\.preventDefault\(\)\}/);
+  assert.match(component, /closest\("\.address-input-shell"\)/);
+  assert.match(component, /closest\("\.encryption-input-shell"\)/);
+  assert.match(styles, /\.encryption-input-shell\s*\{/);
+  assert.match(styles, /\.encryption-directory-input\s*\{/);
+  assert.match(styles, /\.encryption-history-menu\s*\{/);
+  assert.match(styles, /\.encryption-directory-field \.encryption-history-toggle\s*\{/);
 });
 
 test("full encryption is primary and incremental encryption is outlined", async () => {

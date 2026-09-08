@@ -45,6 +45,10 @@ export function forwardingAddressHistoryForTarget(history: AppConfig["forwarding
   return history[key] ?? [];
 }
 
+export function encryptionDirectoryHistoryForKind(preferences: EncryptionPreferences, kind: EncryptionDirectoryKind): string[] {
+  return kind === "input" ? preferences.inputHistory : preferences.outputHistory;
+}
+
 export interface AddressParts { host: string; port: string; }
 
 function defaultPort(protocol: string): string {
@@ -124,6 +128,7 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
   const [addressDrafts, setAddressDrafts] = useState(() => draftsForTargets(config.tcpTargets));
   const [addressError, setAddressError] = useState("");
   const [openHistoryIndex, setOpenHistoryIndex] = useState<number>();
+  const [openEncryptionHistoryKind, setOpenEncryptionHistoryKind] = useState<EncryptionDirectoryKind>();
   const [localText, setLocalText] = useState(() => formatLocalCacheText(sharedValues));
   const [localError, setLocalError] = useState("");
   const [cacheText, setCacheText] = useState(() => formatLocalCacheText(loginCache));
@@ -156,15 +161,17 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     }
   }), [onEncryptionProgress]);
   useEffect(() => {
-    if (openHistoryIndex === undefined) return;
+    if (openHistoryIndex === undefined && openEncryptionHistoryKind === undefined) return;
     const closeOnOutsidePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Element && target.closest(".address-input-shell") !== null) return;
+      if (target instanceof Element && target.closest(".encryption-input-shell") !== null) return;
       setOpenHistoryIndex(undefined);
+      setOpenEncryptionHistoryKind(undefined);
     };
     document.addEventListener("pointerdown", closeOnOutsidePointerDown);
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
-  }, [openHistoryIndex]);
+  }, [openHistoryIndex, openEncryptionHistoryKind]);
 
   const saveLocalValues = async () => {
     try {
@@ -260,6 +267,11 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     }
   };
 
+  const selectEncryptionHistory = (kind: EncryptionDirectoryKind, directory: string) => {
+    setOpenEncryptionHistoryKind(undefined);
+    void saveEncryptionDirectory(kind, directory);
+  };
+
   const startEncryption = async (mode: EncryptionMode) => {
     if (!encryptionInputDir || !encryptionOutputDir) {
       setEncryptionError("请先选择加密前和加密后文件夹目录");
@@ -295,13 +307,18 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     ? 0
     : Math.min(100, Math.round((encryptionProgress.current / encryptionProgress.total) * 100));
 
+  const renderEncryptionDirectoryField = (kind: EncryptionDirectoryKind, label: string, chooseLabel: string, directory: string, setDirectory: (value: string) => void) => {
+    const history = encryptionDirectoryHistoryForKind(encryptionPreferences, kind);
+    return <label className="encryption-directory-field">{label}<div className="input-with-button"><div className="encryption-input-shell"><input className="encryption-directory-input" disabled={encryptionRunning} value={directory} placeholder="粘贴 file:/// URL 或本地目录路径" onChange={(event) => setDirectory(event.target.value)} onBlur={() => void saveEncryptionDirectory(kind, directory)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveEncryptionDirectory(kind, directory); } }} /><button type="button" className="address-history-toggle encryption-history-toggle" aria-label={kind === "input" ? "显示加密前目录历史" : "显示加密后目录历史"} aria-expanded={openEncryptionHistoryKind === kind} disabled={encryptionRunning || history.length === 0} onClick={() => setOpenEncryptionHistoryKind((current) => current === kind ? undefined : kind)}><span className="address-history-chevron encryption-history-chevron" aria-hidden="true" /></button>{openEncryptionHistoryKind === kind && <div className="address-history-menu encryption-history-menu" role="listbox" aria-label={kind === "input" ? "加密前目录历史" : "加密后目录历史"}>{history.map((directory) => <button type="button" role="option" aria-selected={directory === (kind === "input" ? encryptionInputDir : encryptionOutputDir)} className="address-history-option encryption-history-option" key={directory} onMouseDown={(event) => event.preventDefault()} onClick={() => selectEncryptionHistory(kind, directory)}>{directory}</button>)}</div>}</div><button type="button" disabled={encryptionRunning} onClick={() => void chooseEncryptionDirectory(kind)}>{chooseLabel}</button></div></label>;
+  };
+
   if (page === "addresses") return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">/reqxml</p><h2>转发地址</h2></div></div>{addressDrafts.map((draft, index) => <div className="address-editor" key={draft.id}><label className="address-field"><span>{addressLabels[index] ?? `地址${index + 1}`} 地址</span><div className="address-input-shell"><input className="address-input" value={draft.address} placeholder="例如 https://h5khtest.citics.com/ant" onChange={(event) => updateAddress(index, event.target.value)} onBlur={() => void saveAddressDrafts()} /><button type="button" className="address-history-toggle" aria-label="显示历史地址" aria-expanded={openHistoryIndex === index} disabled={addressHistoryForIndex(index).length === 0} onClick={() => setOpenHistoryIndex((current) => current === index ? undefined : index)}><span className="address-history-chevron" aria-hidden="true" /></button>{openHistoryIndex === index && <div className="address-history-menu" role="listbox" aria-label="历史地址">{addressHistoryForIndex(index).map((address) => <button type="button" role="option" aria-selected={draft.address === address} className="address-history-option" key={address} onMouseDown={(event) => event.preventDefault()} onClick={() => selectAddressHistory(index, address)}>{address}</button>)}</div>}</div></label><label className="address-enabled"><input type="checkbox" checked={draft.enabled} onChange={(event) => setAddressDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: event.target.checked } : item))} />启用</label></div>)}{addressError && <DismissibleError message={addressError} onClose={() => setAddressError("")} />}</section>;
   if (page === "request") return <RequestPage config={config} onChange={onChange} onSendRequest={onSendRequest} />;
   if (page === "string") return <StringToolPage config={config} />;
   if (page === "local") return <section className="panel"><p className="muted">可直接输入本地变量，按“键 = 值”逐行填写，离开输入框后自动保存。</p><textarea className="local-values-input" aria-label="本地变量输入" value={localText} onChange={(event) => setLocalText(event.target.value)} onBlur={() => void saveLocalValues()} placeholder="localKey = value\nAnotherKey = another value" rows={18} />{localError && <DismissibleError message={localError} onClose={() => setLocalError("")} />}</section>;
   if (page === "values") return <section className="panel"><textarea className="login-cache-input" aria-label="登录缓存" value={cacheText} onChange={(event) => setCacheText(event.target.value)} onBlur={() => void saveLoginCache()} placeholder="Token = xxx\nSessionNo = 123" rows={14} />{cacheError && <DismissibleError message={cacheError} onClose={() => setCacheError("")} />}<p className="muted">当前代理已缓存 {Object.keys(loginCache).length} 项，登录请求成功后会自动更新。</p></section>;
   if (page === "cache") return <section className="panel"><p className="eyebrow">资源管理</p><h2>缓存</h2><dl className="settings-list"><div><dt>根目录</dt><dd>{config.cache.rootDir || "默认应用缓存"}</dd></div><div><dt>下载目标</dt><dd>{config.cache.downloadTarget || "未配置"}</dd></div><div><dt>解密 .d 资源</dt><dd>{config.cache.decryptEnabled ? "已启用" : "已停用"}</dd></div></dl></section>;
-  if (page === "encryption") return <section className="panel encryption-panel"><div className="encryption-directory-list"><label className="encryption-directory-field">加密前文件夹目录<div className="input-with-button"><input disabled={encryptionRunning} value={encryptionInputDir} placeholder="粘贴 file:/// URL 或本地目录路径" onChange={(event) => setEncryptionInputDir(event.target.value)} onBlur={() => void saveEncryptionDirectory("input", encryptionInputDir)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveEncryptionDirectory("input", encryptionInputDir); } }} /><button type="button" disabled={encryptionRunning} onClick={() => void chooseEncryptionDirectory("input")}>选择加密前目录</button></div></label><label className="encryption-directory-field">加密后文件夹目录<div className="input-with-button"><input disabled={encryptionRunning} value={encryptionOutputDir} placeholder="粘贴 file:/// URL 或本地目录路径" onChange={(event) => setEncryptionOutputDir(event.target.value)} onBlur={() => void saveEncryptionDirectory("output", encryptionOutputDir)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveEncryptionDirectory("output", encryptionOutputDir); } }} /><button type="button" disabled={encryptionRunning} onClick={() => void chooseEncryptionDirectory("output")}>选择加密后目录</button></div></label><div className="encryption-progress" aria-live="polite"><div className="encryption-progress-heading"><span>加密进度</span><strong>{encryptionProgressPercent}%</strong></div><div className="encryption-progress-bar" role="progressbar" aria-label="加密进度" aria-valuemin={0} aria-valuemax={encryptionProgress.total} aria-valuenow={encryptionProgress.current}><span style={{ width: `${encryptionProgressPercent}%` }} /></div><div className="encryption-progress-meta"><span>总文件数：{encryptionProgress.total}</span><span>已加密文件：{encryptionProgress.processedFiles}</span></div></div></div>{encryptionError && <DismissibleError message={encryptionError} onClose={() => setEncryptionError("")} />}<div className="button-row encryption-actions"><button className="primary" disabled={encryptionRunning || !encryptionInputDir || !encryptionOutputDir} onClick={() => void startEncryption("full")}>开始加密</button><button className="encryption-incremental-button" disabled={encryptionRunning || !encryptionInputDir || !encryptionOutputDir} onClick={() => void startEncryption("incremental")}>增量加密</button></div>{encryptionLogs.length > 0 && <pre className="encryption-log">{encryptionLogs.join("\n")}</pre>}</section>;
+  if (page === "encryption") return <section className="panel encryption-panel"><div className="encryption-directory-list">{renderEncryptionDirectoryField("input", "加密前文件夹目录", "选择加密前目录", encryptionInputDir, setEncryptionInputDir)}{renderEncryptionDirectoryField("output", "加密后文件夹目录", "选择加密后目录", encryptionOutputDir, setEncryptionOutputDir)}<div className="encryption-progress" aria-live="polite"><div className="encryption-progress-heading"><span>加密进度</span><strong>{encryptionProgressPercent}%</strong></div><div className="encryption-progress-bar" role="progressbar" aria-label="加密进度" aria-valuemin={0} aria-valuemax={encryptionProgress.total} aria-valuenow={encryptionProgress.current}><span style={{ width: `${encryptionProgressPercent}%` }} /></div><div className="encryption-progress-meta"><span>总文件数：{encryptionProgress.total}</span><span>已加密文件：{encryptionProgress.processedFiles}</span></div></div></div>{encryptionError && <DismissibleError message={encryptionError} onClose={() => setEncryptionError("")} />}<div className="button-row encryption-actions"><button className="primary" disabled={encryptionRunning || !encryptionInputDir || !encryptionOutputDir} onClick={() => void startEncryption("full")}>开始加密</button><button className="encryption-incremental-button" disabled={encryptionRunning || !encryptionInputDir || !encryptionOutputDir} onClick={() => void startEncryption("incremental")}>增量加密</button></div>{encryptionLogs.length > 0 && <pre className="encryption-log">{encryptionLogs.join("\n")}</pre>}</section>;
   if (page === "logs") return <section className="panel"><p className="eyebrow">运行记录</p><h2>{logs.length} 条日志</h2><p className="muted">可在日志页面查看近期服务活动。</p></section>;
   return null;
 }
