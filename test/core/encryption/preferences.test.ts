@@ -124,6 +124,50 @@ test("invalid history fields are safely ignored", async () => {
   }
 });
 
+test("whitespace-only history entries are ignored while directory paths keep their values", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-encryption-preferences-"));
+  const preferencesPath = path.join(root, "preferences.json");
+  const inputDir = path.join(root, " input ");
+  const outputDir = path.join(root, " output ");
+  await mkdir(inputDir);
+  await mkdir(outputDir);
+  try {
+    await writeFile(preferencesPath, JSON.stringify({
+      inputDir,
+      outputDir,
+      inputHistory: ["  \t", inputDir],
+      outputHistory: ["\n", outputDir],
+    }), "utf8");
+
+    assert.deepEqual(await readEncryptionPreferences(preferencesPath), {
+      inputDir,
+      outputDir,
+      inputHistory: [inputDir],
+      outputHistory: [outputDir],
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("saving a whitespace input directory does not add it to input history", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-encryption-preferences-"));
+  const preferencesPath = path.join(root, "preferences.json");
+  const whitespaceInputDir = " \t ";
+  try {
+    await saveEncryptionPreferences(preferencesPath, { inputDir: whitespaceInputDir });
+
+    assert.deepEqual(await readEncryptionPreferences(preferencesPath), {
+      inputDir: "",
+      outputDir: "",
+      inputHistory: [],
+      outputHistory: [],
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("preferences keep deleted directories in history without restoring them", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-encryption-preferences-"));
   const preferencesPath = path.join(root, "preferences.json");
@@ -136,6 +180,25 @@ test("preferences keep deleted directories in history without restoring them", a
       inputDir: "",
       outputDir: "",
       inputHistory: [inputDir],
+      outputHistory: [],
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("missing preferences return independent history arrays", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-encryption-preferences-"));
+  const preferencesPath = path.join(root, "preferences.json");
+  try {
+    const first = await readEncryptionPreferences(preferencesPath);
+    first.inputHistory.push("mutated-input");
+    first.outputHistory.push("mutated-output");
+
+    assert.deepEqual(await readEncryptionPreferences(preferencesPath), {
+      inputDir: "",
+      outputDir: "",
+      inputHistory: [],
       outputHistory: [],
     });
   } finally {

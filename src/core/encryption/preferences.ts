@@ -9,18 +9,20 @@ export interface EncryptionPreferences {
 }
 
 const HISTORY_LIMIT = 10;
-const emptyPreferences: EncryptionPreferences = { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };
 
 type EncryptionPreferencesPatch = Partial<Pick<EncryptionPreferences, "inputDir" | "outputDir">>;
 
+function createEmptyPreferences(): EncryptionPreferences {
+  return { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };
+}
+
 function normalizeHistory(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0))].slice(0, HISTORY_LIMIT);
+  return [...new Set(value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0))].slice(0, HISTORY_LIMIT);
 }
 
 function addToHistory(history: string[], value: string): string[] {
-  if (value.length === 0) return history;
-  return [value, ...history.filter((entry) => entry !== value)].slice(0, HISTORY_LIMIT);
+  return normalizeHistory([value, ...history]);
 }
 
 async function normalizeExistingDirectory(value: unknown): Promise<string> {
@@ -44,7 +46,7 @@ export async function readEncryptionPreferences(preferencesPath: string): Promis
       outputHistory: addToHistory(normalizeHistory(parsed.outputHistory), outputDir),
     };
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { ...emptyPreferences };
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return createEmptyPreferences();
     throw error;
   }
 }
