@@ -104,12 +104,14 @@ export interface ProxyInstance {
   id: string;
   name: string;
   config: AppConfig;
+  loginCache?: Record<string, string>;
 }
 
 export interface ProxyWorkspace {
   version: 1;
   selectedInstanceId: string;
   instances: ProxyInstance[];
+  sharedValues?: Record<string, string>;
 }
 
 export interface ProxyInstanceSummary {
@@ -119,6 +121,7 @@ export interface ProxyInstanceSummary {
   bindHost: string;
   port: number;
   target: string;
+  loginCacheCount: number;
   status: RuntimeStatus;
 }
 
@@ -134,7 +137,11 @@ export type EncryptionDirectoryKind = "input" | "output";
 export interface EncryptionPreferences {
   inputDir: string;
   outputDir: string;
+  inputHistory: string[];
+  outputHistory: string[];
 }
+
+export type EncryptionPreferencesPatch = Partial<Pick<EncryptionPreferences, "inputDir" | "outputDir">>;
 
 export interface EncryptionFileResult {
   relativePath: string;
@@ -151,23 +158,45 @@ export interface EncryptionResult extends OperationResult {
   logs?: string[];
 }
 
+export type EncryptionProgressPhase = "scanning" | "processing" | "completed";
+export type EncryptionProgressStatus = "encrypting" | "skipping" | "removing" | "completed";
+
+export interface EncryptionProgress {
+  mode: EncryptionMode;
+  phase: EncryptionProgressPhase;
+  status?: EncryptionProgressStatus;
+  current: number;
+  total: number;
+  processedFiles: number;
+  skippedFiles: number;
+  removedFiles: number;
+  relativePath?: string;
+}
+
 export interface ForwarderApi {
   getConfig(): Promise<AppConfig>;
   saveConfig(config: AppConfig): Promise<OperationResult>;
+  getSharedValues(): Promise<Record<string, string>>;
+  saveSharedValues(values: Record<string, string>): Promise<OperationResult>;
+  getLoginCache(): Promise<Record<string, string>>;
+  saveLoginCache(values: Record<string, string>): Promise<OperationResult>;
   listProxyInstances(): Promise<ProxyInstanceSummary[]>;
   selectProxyInstance(id: string): Promise<OperationResult & { instanceId?: string }>;
   createProxyInstance(): Promise<OperationResult & { instance?: ProxyInstanceSummary }>;
   duplicateProxyInstance(): Promise<OperationResult & { instance?: ProxyInstanceSummary }>;
-  importLegacy(): Promise<OperationResult & { config?: AppConfig }>;
-  exportConfig(): Promise<OperationResult & { path?: string }>;
+  renameProxyInstance(id: string, name: string): Promise<OperationResult>;
+  deleteProxyInstance(id: string): Promise<OperationResult>;
   selectProjectDirectory(): Promise<OperationResult & { path?: string; canceled?: boolean }>;
-  selectEncryptionDirectory(kind: EncryptionDirectoryKind): Promise<OperationResult & { path?: string; canceled?: boolean }>;
+  selectEncryptionDirectory(kind: EncryptionDirectoryKind): Promise<OperationResult & { path?: string; canceled?: boolean; preferences?: EncryptionPreferences }>;
   getEncryptionPreferences(): Promise<EncryptionPreferences>;
-  saveEncryptionPreferences(patch: Partial<EncryptionPreferences>): Promise<OperationResult & { preferences?: EncryptionPreferences }>;
+  saveEncryptionPreferences(patch: EncryptionPreferencesPatch): Promise<OperationResult & { preferences?: EncryptionPreferences }>;
   encryptDirectory(inputDir: string, outputDir: string, mode: EncryptionMode): Promise<EncryptionResult>;
+  onEncryptionProgress(listener: (progress: EncryptionProgress) => void): () => void;
   sendRequest(request: ManualRequestConfig): Promise<ManualRequestResponse>;
-  start(): Promise<RuntimeStatus>;
-  stop(): Promise<RuntimeStatus>;
+  start(id?: string): Promise<RuntimeStatus>;
+  stop(id?: string): Promise<RuntimeStatus>;
+  startAll(): Promise<OperationResult>;
+  stopAll(): Promise<OperationResult>;
   status(): Promise<RuntimeStatus>;
   logs(): Promise<LogEntry[]>;
   clearLogs(): Promise<OperationResult>;
@@ -176,20 +205,27 @@ export interface ForwarderApi {
 export const IPC_CHANNELS = {
   getConfig: "config:get",
   saveConfig: "config:save",
-  importLegacy: "config:import-legacy",
-  exportConfig: "config:export",
+  getSharedValues: "values:shared:get",
+  saveSharedValues: "values:shared:save",
+  getLoginCache: "values:login:get",
+  saveLoginCache: "values:login:save",
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
   getEncryptionPreferences: "encryption:get-preferences",
   saveEncryptionPreferences: "encryption:save-preferences",
   encryptDirectory: "encryption:run",
+  encryptionProgress: "encryption:progress",
   sendRequest: "request:send",
   listProxyInstances: "proxy-instances:list",
   selectProxyInstance: "proxy-instances:select",
   createProxyInstance: "proxy-instances:create",
   duplicateProxyInstance: "proxy-instances:duplicate",
+  renameProxyInstance: "proxy-instances:rename",
+  deleteProxyInstance: "proxy-instances:delete",
   start: "runtime:start",
   stop: "runtime:stop",
+  startAll: "runtime:start-all",
+  stopAll: "runtime:stop-all",
   status: "runtime:status",
   logs: "runtime:logs",
   clearLogs: "runtime:logs:clear",

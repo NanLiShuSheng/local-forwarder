@@ -16,20 +16,27 @@ import { getManualRequestConfigValidationError, isValidManualRequestConfig } fro
 const IPC_CHANNELS = {
   getConfig: "config:get",
   saveConfig: "config:save",
-  importLegacy: "config:import-legacy",
-  exportConfig: "config:export",
+  getSharedValues: "values:shared:get",
+  saveSharedValues: "values:shared:save",
+  getLoginCache: "values:login:get",
+  saveLoginCache: "values:login:save",
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
   getEncryptionPreferences: "encryption:get-preferences",
   saveEncryptionPreferences: "encryption:save-preferences",
   encryptDirectory: "encryption:run",
+  encryptionProgress: "encryption:progress",
   sendRequest: "request:send",
   listProxyInstances: "proxy-instances:list",
   selectProxyInstance: "proxy-instances:select",
   createProxyInstance: "proxy-instances:create",
   duplicateProxyInstance: "proxy-instances:duplicate",
+  renameProxyInstance: "proxy-instances:rename",
+  deleteProxyInstance: "proxy-instances:delete",
   start: "runtime:start",
   stop: "runtime:stop",
+  startAll: "runtime:start-all",
+  stopAll: "runtime:stop-all",
   status: "runtime:status",
   logs: "runtime:logs",
   clearLogs: "runtime:logs:clear",
@@ -63,6 +70,26 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       }
     }),
   );
+  registerIpcHandler(policy, IPC_CHANNELS.getSharedValues, () => manager.getSharedValues());
+  registerIpcHandler(policy, IPC_CHANNELS.saveSharedValues, async (_event, values) => {
+    if (!isStringRecord(values)) return { ok: false, error: "本地变量格式无效" };
+    try {
+      await manager.saveSharedValues(values);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "本地变量保存失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.getLoginCache, () => manager.getLoginCache());
+  registerIpcHandler(policy, IPC_CHANNELS.saveLoginCache, async (_event, values) => {
+    if (!isStringRecord(values)) return { ok: false, error: "登录缓存格式无效" };
+    try {
+      await manager.saveLoginCache(values);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "登录缓存保存失败" };
+    }
+  });
   registerIpcHandler(policy, IPC_CHANNELS.listProxyInstances, (): ProxyInstanceSummary[] => manager.list());
   registerIpcHandler(policy, IPC_CHANNELS.selectProxyInstance, async (_event, id) => {
     if (typeof id !== "string" || id.length === 0) return { ok: false, error: "代理实例参数无效" };
@@ -87,27 +114,22 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       return { ok: false, error: error instanceof Error ? error.message : "复制代理实例失败" };
     }
   });
-  registerIpcHandler(policy, IPC_CHANNELS.importLegacy, async () => {
-    const selected = await dialog.showOpenDialog({ properties: ["openDirectory"] });
-    if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, error: "import canceled" };
+  registerIpcHandler(policy, IPC_CHANNELS.renameProxyInstance, async (_event, id, name) => {
+    if (typeof id !== "string" || id.length === 0 || typeof name !== "string") return { ok: false, error: "代理名称参数无效" };
     try {
-      const imported = await configStore.importLegacy(selected.filePaths[0]);
-      await manager.stop();
-      await manager.saveConfig(imported);
-      await configStore.save(imported);
-      return { ok: true, config: imported };
+      await manager.rename(id, name);
+      return { ok: true };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : "could not import legacy configuration" };
+      return { ok: false, error: error instanceof Error ? error.message : "代理名称保存失败" };
     }
   });
-  registerIpcHandler(policy, IPC_CHANNELS.exportConfig, async () => {
-    const selected = await dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] });
-    if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, error: "export canceled" };
+  registerIpcHandler(policy, IPC_CHANNELS.deleteProxyInstance, async (_event, id) => {
+    if (typeof id !== "string" || id.length === 0) return { ok: false, error: "代理实例参数无效" };
     try {
-      await configStore.exportLegacy(manager.getConfig(), selected.filePaths[0]);
-      return { ok: true, path: selected.filePaths[0] };
+      await manager.remove(id);
+      return { ok: true };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : "could not export configuration" };
+      return { ok: false, error: error instanceof Error ? error.message : "删除代理实例失败" };
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.selectProjectDirectory, async () => {
@@ -136,7 +158,7 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     try {
       return readEncryptionPreferences(getEncryptionPreferencesPath(app.getPath("userData")));
     } catch {
-      return { inputDir: "", outputDir: "" };
+      return { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.saveEncryptionPreferences, async (_event, patch) => {
@@ -166,6 +188,9 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
         outputDir,
         mode: mode as EncryptionMode,
         encoderPath: getEncryptionEncoderPath(__dirname, app.isPackaged, process.resourcesPath),
+        onProgress: (progress) => {
+          for (const window of BrowserWindow.getAllWindows()) window.webContents.send(IPC_CHANNELS.encryptionProgress, progress);
+        },
       });
       return { ok: true, ...result };
     } catch (error) {
@@ -187,8 +212,30 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       return { ok: false, error: error instanceof Error ? error.message : "请求失败" };
     }
   });
-  registerIpcHandler(policy, IPC_CHANNELS.start, () => manager.start());
-  registerIpcHandler(policy, IPC_CHANNELS.stop, () => manager.stop());
+  registerIpcHandler(policy, IPC_CHANNELS.start, (_event, id) => {
+    if (id !== undefined && (typeof id !== "string" || id.length === 0)) throw new Error("代理实例参数无效");
+    return manager.start(id);
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.stop, (_event, id) => {
+    if (id !== undefined && (typeof id !== "string" || id.length === 0)) throw new Error("代理实例参数无效");
+    return manager.stop(id);
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.startAll, async () => {
+    try {
+      await manager.startAll();
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "一键开启失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.stopAll, async () => {
+    try {
+      await manager.stopAll();
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "一键关闭失败" };
+    }
+  });
   registerIpcHandler(policy, IPC_CHANNELS.status, () => {
     if (smokeMode) {
       console.log("forwarder-ready");
@@ -205,6 +252,11 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       return { ok: false, error: error instanceof Error ? error.message : "日志清空失败" };
     }
   });
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  return Object.values(value).every((entry) => typeof entry === "string");
 }
 
 async function loadService(): Promise<void> {

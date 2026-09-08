@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionProgress, EncryptionResult, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus } from "../shared/contracts";
+import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus } from "../shared/contracts";
 import { AppearancePage } from "./components/AppearancePage";
 import { ConfigPages, type Page } from "./components/ConfigPages";
 import { DismissibleError } from "./components/DismissibleError";
@@ -11,7 +11,7 @@ import { ProxyInstanceSidebar } from "./components/ProxyInstanceSidebar";
 import { useTheme } from "./useTheme";
 
 const initialStatus: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
-const initialEncryptionPreferences: EncryptionPreferences = { inputDir: "", outputDir: "" };
+const initialEncryptionPreferences: EncryptionPreferences = { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };
 const initialConfig: AppConfig = { server: { bindHost: "127.0.0.1", port: 8080, timeoutMs: 30000, loggingEnabled: true }, httpRules: [], tcpTargets: [], localValues: {}, mapValues: {}, accounts: {}, cache: { rootDir: "", downloadTarget: "", decryptEnabled: false, autoDownload: false }, request: { host: "127.0.0.1", port: 8080, paramsText: "" }, stringTool: { inputText: "", outputText: "", operation: "replace", findText: "", replaceText: "" } };
 type SidebarNavIconName = "runtime" | "request" | "string" | "json" | "local" | "values" | "encryption" | "logs" | "appearance";
 const sidebarNavIconPaths: Record<SidebarNavIconName, string[]> = {
@@ -25,7 +25,7 @@ const sidebarNavIconPaths: Record<SidebarNavIconName, string[]> = {
   logs: ["M5 6h14", "M5 12h14", "M5 18h14"],
   appearance: ["M5 6h14", "M8 4v4", "M5 12h14", "M15 10v4", "M5 18h14", "M11 16v4"],
 };
-const pages: Array<{ id: Page; label: string; icon: SidebarNavIconName }> = [{ id: "runtime", label: "概览", icon: "runtime" }, { id: "request", label: "请求", icon: "request" }, { id: "string", label: "字符串", icon: "string" }, { id: "json", label: "JSON 可视化", icon: "json" }, { id: "local", label: "本地变量", icon: "local" }, { id: "values", label: "登录缓存", icon: "values" }, { id: "encryption", label: "加密", icon: "encryption" }, { id: "logs", label: "日志", icon: "logs" }, { id: "appearance", label: "外观", icon: "appearance" }];
+const pages: Array<{ id: Page; label: string; icon: SidebarNavIconName }> = [{ id: "runtime", label: "概览", icon: "runtime" }, { id: "request", label: "请求", icon: "request" }, { id: "encryption", label: "加密", icon: "encryption" }, { id: "json", label: "JSON 可视化", icon: "json" }, { id: "logs", label: "日志", icon: "logs" }, { id: "string", label: "字符串", icon: "string" }, { id: "local", label: "本地变量", icon: "local" }, { id: "values", label: "登录缓存", icon: "values" }, { id: "appearance", label: "外观", icon: "appearance" }];
 
 export function createVersionedLogReader(readLogs: () => Promise<LogEntry[]>, applyLogs: (logs: LogEntry[]) => void) {
   let version = 0;
@@ -53,6 +53,7 @@ function App() {
   const [loginCache, setLoginCache] = useState<Record<string, string>>({});
   const [encryptionPreferences, setEncryptionPreferences] = useState(initialEncryptionPreferences);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [selectedLog, setSelectedLog] = useState<LogEntry>();
   const [error, setError] = useState("");
   const [bulkRuntimeAction, setBulkRuntimeAction] = useState<"start" | "stop">();
   const [jsonPrefill, setJsonPrefill] = useState<string>();
@@ -258,7 +259,7 @@ function App() {
     setPage("json");
   };
 
-  const saveEncryptionPreferences = async (patch: Partial<EncryptionPreferences>): Promise<boolean> => {
+  const saveEncryptionPreferences = async (patch: EncryptionPreferencesPatch): Promise<boolean> => {
     const result = await window.forwarder.saveEncryptionPreferences(patch);
     if (!result.ok) {
       setError(result.error ?? "保存加密目录失败");
@@ -276,9 +277,10 @@ function App() {
       setError(result.error ?? "选择加密目录失败");
       return undefined;
     }
-    setEncryptionPreferences((current) => kind === "input" ? { ...current, inputDir: result.path ?? "" } : { ...current, outputDir: result.path ?? "" });
+    const selectedPath = result.path;
+    setEncryptionPreferences((current) => result.preferences ?? (kind === "input" ? { ...current, inputDir: selectedPath } : { ...current, outputDir: selectedPath }));
     setError("");
-    return result.path;
+    return selectedPath;
   };
 
   const encryptDirectory = async (inputDir: string, outputDir: string, mode: EncryptionMode): Promise<EncryptionResult> => {
@@ -307,14 +309,14 @@ function App() {
         {pages.map((item) => <button key={item.id} className={page === item.id ? "active" : ""} aria-current={page === item.id ? "page" : undefined} onClick={() => setPage(item.id)}><SidebarNavIcon name={item.icon} /><span>{item.label}</span></button>)}
       </nav>
     </aside>
-    <section className={`content ${page === "request" ? "request-page-content" : ""} ${page === "json" ? "json-page-content" : ""}`}>
+    <section className={`content ${page === "request" ? "request-page-content" : ""} ${page === "json" ? "json-page-content" : ""} ${page === "logs" ? "log-page-content" : ""}`}>
       {error && <DismissibleError message={error} onClose={() => setError("")} />}
       {page === "appearance" && <AppearancePage mode={mode} theme={theme} onModeChange={setMode} />}
       {page === "runtime" && <><ProxyInstancePanel instances={instances} status={status} config={config} onChange={save} onChooseProjectDirectory={chooseProjectDirectory} onRename={renameProxyInstance} onStart={start} onStop={stop} /><ConfigPages page="addresses" {...pageProps} /></>}
-      {page === "json" && <JsonPreviewPage prefillText={jsonPrefill} onPrefillApplied={() => setJsonPrefill(undefined)} />}
+      <div hidden={page !== "json"}><JsonPreviewPage prefillText={jsonPrefill} onPrefillApplied={() => setJsonPrefill(undefined)} /></div>
       {page === "rules" && <RuleList config={config} onChange={save} />}
       {page !== "runtime" && page !== "rules" && page !== "logs" && page !== "appearance" && page !== "json" && <ConfigPages page={page} {...pageProps} />}
-      {page === "logs" && <LogPanel logs={logs} onClear={clearLogs} onFillJson={fillJsonPreview} />}
+      {page === "logs" && <LogPanel logs={logs} selected={selectedLog} onSelect={setSelectedLog} onClear={clearLogs} onFillJson={fillJsonPreview} />}
     </section>
   </main>;
 }

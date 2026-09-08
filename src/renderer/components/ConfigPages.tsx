@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionProgress, EncryptionResult, ForwardingAddressHistory, LogEntry, ManualRequestConfig, ManualRequestResponse } from "../../shared/contracts";
+import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, ForwardingAddressHistory, LogEntry, ManualRequestConfig, ManualRequestResponse } from "../../shared/contracts";
 import { parseDirectoryInput } from "../../shared/directory-path";
 import { formatLocalCacheText, parseLocalCacheText } from "../../shared/local-cache";
 import { DismissibleError } from "./DismissibleError";
 import { RequestPage } from "./RequestPage";
 import { StringToolPage } from "./StringToolPage";
 
-export type Page = "runtime" | "rules" | "addresses" | "request" | "string" | "local" | "values" | "cache" | "encryption" | "logs" | "appearance";
+export type Page = "runtime" | "rules" | "addresses" | "request" | "string" | "local" | "values" | "cache" | "encryption" | "logs" | "appearance" | "json";
 interface ConfigPagesProps {
   page: Page;
   config: AppConfig;
@@ -14,7 +14,7 @@ interface ConfigPagesProps {
   onChange: (config: AppConfig) => Promise<boolean>;
   encryptionPreferences: EncryptionPreferences;
   onSelectEncryptionDirectory: (kind: EncryptionDirectoryKind) => Promise<string | undefined>;
-  onSaveEncryptionPreferences: (patch: Partial<EncryptionPreferences>) => Promise<boolean>;
+  onSaveEncryptionPreferences: (patch: EncryptionPreferencesPatch) => Promise<boolean>;
   onEncryptDirectory: (inputDir: string, outputDir: string, mode: EncryptionMode) => Promise<EncryptionResult>;
   onEncryptionProgress: (listener: (progress: EncryptionProgress) => void) => () => void;
   onSendRequest: (request: ManualRequestConfig) => Promise<ManualRequestResponse>;
