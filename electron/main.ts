@@ -156,7 +156,7 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
   });
   registerIpcHandler(policy, IPC_CHANNELS.getEncryptionPreferences, async () => {
     try {
-      return readEncryptionPreferences(getEncryptionPreferencesPath(app.getPath("userData")));
+      return await readEncryptionPreferences(getEncryptionPreferencesPath(app.getPath("userData")));
     } catch {
       return { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };
     }

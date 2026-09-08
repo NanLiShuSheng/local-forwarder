@@ -45,6 +45,11 @@ test("main encryption preferences fallback includes both history arrays without 
   assert.match(main, /Object\.keys\(value\)\.some\(\(key\) => key !== "inputDir" && key !== "outputDir"\)/);
 });
 
+test("main awaits encryption preferences so malformed JSON reaches the fallback", async () => {
+  const main = await readFile("electron/main.ts", "utf8");
+  assert.match(main, /return await readEncryptionPreferences\(getEncryptionPreferencesPath\(app\.getPath\("userData"\)\)\);/);
+});
+
 test("encoder path resolves to project resources in development and app resources when packaged", () => {
   assert.equal(
     getEncryptionEncoderPath("/project/dist-electron/electron", false, "/ignored/resources"),
