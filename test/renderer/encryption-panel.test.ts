@@ -10,7 +10,8 @@ test("navigation exposes the encryption page", async () => {
 test("App keeps encryption history when selecting or saving a directory", async () => {
   const source = await readFile("src/renderer/App.tsx", "utf8");
   assert.match(source, /const initialEncryptionPreferences: EncryptionPreferences = \{ inputDir: "", outputDir: "", inputHistory: \[\], outputHistory: \[\] \};/);
-  assert.match(source, /setEncryptionPreferences\(result\.preferences \?\? \{ \.\.\.encryptionPreferences, \.\.\.patch \}\)/);
+  assert.match(source, /setEncryptionPreferences\(\(current\) => result\.preferences \?\? \{ \.\.\.current, \.\.\.patch \}\);/);
+  assert.doesNotMatch(source, /setEncryptionPreferences\(result\.preferences \?\? \{ \.\.\.encryptionPreferences, \.\.\.patch \}\)/);
   assert.match(source, /setEncryptionPreferences\(\(current\) => result\.preferences \?\? \(kind === "input" \? \{ \.\.\.current, inputDir: selectedPath \} : \{ \.\.\.current, outputDir: selectedPath \}\)\);/);
 });
 

@@ -1,16 +1,9 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-
-export interface EncryptionPreferences {
-  inputDir: string;
-  outputDir: string;
-  inputHistory: string[];
-  outputHistory: string[];
-}
+import type { EncryptionPreferences, EncryptionPreferencesPatch } from "../../shared/contracts";
+export type { EncryptionPreferences, EncryptionPreferencesPatch } from "../../shared/contracts";
 
 const HISTORY_LIMIT = 10;
-
-type EncryptionPreferencesPatch = Partial<Pick<EncryptionPreferences, "inputDir" | "outputDir">>;
 
 function createEmptyPreferences(): EncryptionPreferences {
   return { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };

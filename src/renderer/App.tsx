@@ -265,7 +265,7 @@ function App() {
       setError(result.error ?? "保存加密目录失败");
       return false;
     }
-    setEncryptionPreferences(result.preferences ?? { ...encryptionPreferences, ...patch });
+    setEncryptionPreferences((current) => result.preferences ?? { ...current, ...patch });
     setError("");
     return true;
   };

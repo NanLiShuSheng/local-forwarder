@@ -31,6 +31,14 @@ test("shared encryption contracts preserve history and restrict writable patches
   assert.doesNotMatch(preload, /Partial<EncryptionPreferences>/);
 });
 
+test("core encryption preferences reuses and re-exports the shared preference types", async () => {
+  const core = await readFile("src/core/encryption/preferences.ts", "utf8");
+  assert.match(core, /import type \{[^}]*EncryptionPreferences[^}]*EncryptionPreferencesPatch[^}]*\} from "\.\.\/\.\.\/shared\/contracts";/);
+  assert.match(core, /export type \{[^}]*EncryptionPreferences[^}]*EncryptionPreferencesPatch[^}]*\} from "\.\.\/\.\.\/shared\/contracts";/);
+  assert.doesNotMatch(core, /export interface EncryptionPreferences/);
+  assert.doesNotMatch(core, /type EncryptionPreferencesPatch\s*=/);
+});
+
 test("main encryption preferences fallback includes both history arrays without widening the patch whitelist", async () => {
   const main = await readFile("electron/main.ts", "utf8");
   assert.match(main, /return \{\s*inputDir: "",\s*outputDir: "",\s*inputHistory: \[\],\s*outputHistory: \[\]\s*\};/);
