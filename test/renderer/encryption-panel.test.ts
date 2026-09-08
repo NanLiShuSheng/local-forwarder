@@ -79,6 +79,14 @@ test("encryption directory history uses separate dropdowns and the existing save
   assert.match(styles, /\.encryption-directory-field \.encryption-history-toggle\s*\{/);
 });
 
+test("history shell boundaries and running state keep menus safe", async () => {
+  const component = await readFile("src/renderer/components/ConfigPages.tsx", "utf8");
+  assert.match(component, /if \(target instanceof Element && target\.closest\("\.address-input-shell"\) !== null\) \{\s*setOpenEncryptionHistoryKind\(undefined\);\s*return;\s*\}/);
+  assert.match(component, /if \(target instanceof Element && target\.closest\("\.encryption-input-shell"\) !== null\) \{\s*setOpenHistoryIndex\(undefined\);\s*return;\s*\}/);
+  assert.match(component, /setEncryptionRunning\(true\);\s*setOpenEncryptionHistoryKind\(undefined\);/);
+  assert.match(component, /className="address-history-option encryption-history-option"[^>]*disabled=\{encryptionRunning\}/);
+});
+
 test("full encryption is primary and incremental encryption is outlined", async () => {
   const component = await readFile("src/renderer/components/ConfigPages.tsx", "utf8");
   const styles = await readFile("src/renderer/styles.css", "utf8");
