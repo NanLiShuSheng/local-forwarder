@@ -39,6 +39,13 @@ test("parses relative request targets from valid HTTP method lines", () => {
   assert.equal(getLogType({ message: "POST api/path?x=1 HTTP/1.1" }), "/api/path");
 });
 
+test("keeps wildcard and absolute request targets consistent", () => {
+  assert.equal(getLogType(entry({ requestPath: "*" })), undefined);
+  assert.equal(getLogType({ message: "GET https://host.test/path?x=1 HTTP/1.1" }), "/path");
+  assert.equal(getLogType({ message: "GET http://[invalid HTTP/1.1" }), undefined);
+  assert.equal(getLogType({ message: "GET * HTTP/1.1" }), undefined);
+});
+
 test("does not classify ordinary status messages as request paths", () => {
   assert.equal(getLogType({ message: "service started" }), undefined);
 });

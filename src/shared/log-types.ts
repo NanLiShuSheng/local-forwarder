@@ -23,7 +23,7 @@ const ABSOLUTE_URL_PATTERN = /^https?:\/\//i;
 
 function normalizeRequestPath(value: string | undefined): string | undefined {
   const candidate = value?.trim();
-  if (!candidate || candidate === ALL_LOG_TYPES) return undefined;
+  if (!candidate || candidate === ALL_LOG_TYPES || candidate === "*") return undefined;
   if (URL_SCHEME_PATTERN.test(candidate) && !ABSOLUTE_URL_PATTERN.test(candidate)) return undefined;
 
   try {
@@ -50,9 +50,7 @@ function parseRequestPath(value: string | undefined): string | undefined {
 
 export function getLogType(entry: LogTypeSource): string | undefined {
   const requestPath = entry.requestPath?.trim();
-  if (requestPath === ALL_LOG_TYPES) return undefined;
-  const normalizedRequestPath = normalizeRequestPath(requestPath);
-  if (normalizedRequestPath !== undefined) return normalizedRequestPath;
+  if (requestPath) return normalizeRequestPath(requestPath);
 
   return parseRequestPath(entry.requestParams) ?? parseRequestPath(entry.message);
 }
