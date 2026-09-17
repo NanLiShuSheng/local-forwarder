@@ -17,13 +17,14 @@ export interface LogTypeSource {
 }
 
 const URL_BASE = "http://local-forwarder.invalid";
-const REQUEST_LINE_PATTERN = /^\S+\s+(\S+)(?:\s+HTTP\/\S+)?$/;
+const REQUEST_LINE_PATTERN = /^[A-Z][A-Z0-9-]*\s+(\S+)(?:\s+HTTP\/\S+)?$/;
+const URL_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 const ABSOLUTE_URL_PATTERN = /^https?:\/\//i;
 
 function normalizeRequestPath(value: string | undefined): string | undefined {
   const candidate = value?.trim();
   if (!candidate || candidate === ALL_LOG_TYPES) return undefined;
-  if (!candidate.startsWith("/") && !ABSOLUTE_URL_PATTERN.test(candidate)) return undefined;
+  if (URL_SCHEME_PATTERN.test(candidate) && !ABSOLUTE_URL_PATTERN.test(candidate)) return undefined;
 
   try {
     return new URL(candidate, URL_BASE).pathname;
@@ -38,7 +39,7 @@ function parseRequestPath(value: string | undefined): string | undefined {
   const firstLine = value.split(/\r?\n/, 1)[0]?.trim() ?? "";
   const match = REQUEST_LINE_PATTERN.exec(firstLine);
   const target = match?.[1];
-  if (!target || target === "*" || (!target.startsWith("/") && !ABSOLUTE_URL_PATTERN.test(target))) return undefined;
+  if (!target || target === "*" || (URL_SCHEME_PATTERN.test(target) && !ABSOLUTE_URL_PATTERN.test(target))) return undefined;
 
   try {
     return new URL(target, URL_BASE).pathname;
