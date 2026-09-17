@@ -59,6 +59,7 @@ test("returns fixed types first and appends ordinary paths in first-seen order",
     entry({ message: "GET /api/second?value=1 HTTP/1.1" }),
     entry({ requestParams: "GET /api/first?value=2 HTTP/1.1" }),
     entry({ requestPath: "/reqreadmap" }),
+    entry({ requestPath: ALL_LOG_TYPES }),
   ]);
 
   assert.deepEqual(options, [

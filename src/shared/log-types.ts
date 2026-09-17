@@ -47,7 +47,7 @@ export function getLogTypeOptions(logs: readonly LogTypeSource[]): string[] {
 
   for (const log of logs) {
     const type = getLogType(log);
-    if (type !== undefined && !seen.has(type)) {
+    if (type !== undefined && type !== ALL_LOG_TYPES && !seen.has(type)) {
       seen.add(type);
       options.push(type);
     }
