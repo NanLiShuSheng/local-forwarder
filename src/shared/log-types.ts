@@ -18,6 +18,19 @@ export interface LogTypeSource {
 
 const URL_BASE = "http://local-forwarder.invalid";
 const REQUEST_LINE_PATTERN = /^\S+\s+(\S+)(?:\s+HTTP\/\S+)?$/;
+const ABSOLUTE_URL_PATTERN = /^https?:\/\//i;
+
+function normalizeRequestPath(value: string | undefined): string | undefined {
+  const candidate = value?.trim();
+  if (!candidate || candidate === ALL_LOG_TYPES) return undefined;
+  if (!candidate.startsWith("/") && !ABSOLUTE_URL_PATTERN.test(candidate)) return undefined;
+
+  try {
+    return new URL(candidate, URL_BASE).pathname;
+  } catch {
+    return undefined;
+  }
+}
 
 function parseRequestPath(value: string | undefined): string | undefined {
   if (!value) return undefined;
@@ -25,7 +38,7 @@ function parseRequestPath(value: string | undefined): string | undefined {
   const firstLine = value.split(/\r?\n/, 1)[0]?.trim() ?? "";
   const match = REQUEST_LINE_PATTERN.exec(firstLine);
   const target = match?.[1];
-  if (!target || target === "*") return undefined;
+  if (!target || target === "*" || (!target.startsWith("/") && !ABSOLUTE_URL_PATTERN.test(target))) return undefined;
 
   try {
     return new URL(target, URL_BASE).pathname;
@@ -36,13 +49,15 @@ function parseRequestPath(value: string | undefined): string | undefined {
 
 export function getLogType(entry: LogTypeSource): string | undefined {
   const requestPath = entry.requestPath?.trim();
-  if (requestPath) return requestPath;
+  if (requestPath === ALL_LOG_TYPES) return undefined;
+  const normalizedRequestPath = normalizeRequestPath(requestPath);
+  if (normalizedRequestPath !== undefined) return normalizedRequestPath;
 
   return parseRequestPath(entry.requestParams) ?? parseRequestPath(entry.message);
 }
 
 export function getLogTypeOptions(logs: readonly LogTypeSource[]): string[] {
-  const options = [...FIXED_LOG_TYPES];
+  const options: string[] = [...FIXED_LOG_TYPES];
   const seen = new Set<string>(options);
 
   for (const log of logs) {

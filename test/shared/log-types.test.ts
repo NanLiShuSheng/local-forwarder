@@ -24,6 +24,19 @@ test("prefers a non-empty requestPath over requestParams and message", () => {
   );
 });
 
+test("normalizes requestPath values and rejects the all sentinel", () => {
+  assert.equal(getLogType(entry({ requestPath: "/api?a=1#fragment" })), "/api");
+  assert.equal(getLogType(entry({ requestPath: "https://host.test/api?x=1" })), "/api");
+  assert.equal(getLogType(entry({ requestPath: ALL_LOG_TYPES })), undefined);
+  assert.equal(getLogType(entry({ requestPath: "/all" })), "/all");
+
+  assert.deepEqual(getLogTypeOptions([entry({ requestPath: ALL_LOG_TYPES })]), [...FIXED_LOG_TYPES]);
+});
+
+test("does not classify ordinary status messages as request paths", () => {
+  assert.equal(getLogType({ message: "service started" }), undefined);
+});
+
 test("falls back from requestParams to message and removes query and fragment", () => {
   assert.equal(
     getLogType(entry({
