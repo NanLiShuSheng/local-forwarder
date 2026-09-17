@@ -48,6 +48,7 @@ test("keeps wildcard and absolute request targets consistent", () => {
 
 test("does not classify ordinary status messages as request paths", () => {
   assert.equal(getLogType({ message: "service started" }), undefined);
+  assert.equal(getLogType({ message: "INFO /health" }), undefined);
 });
 
 test("falls back from requestParams to message and removes query and fragment", () => {
