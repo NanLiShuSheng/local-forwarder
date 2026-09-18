@@ -495,6 +495,69 @@ test("styles define independent light and dark theme scopes and tokens", async (
   assert.match(lightThemeRule, /--preview-shadow\s*:/);
 });
 
+test("light theme uses the approved clear mint palette", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+  const lightRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
+  const expectedTokens: Record<string, string> = {
+    "app-background": "#fcfefd",
+    "app-background-accent": "#ffffff",
+    "app-background-mid": "#f7fcfa",
+    "sidebar-background": "#f2faf7",
+    "sidebar-border": "#dbece7",
+    "panel-background": "#ffffff",
+    "surface-background": "#ffffff",
+    "surface-alt-background": "#f7fcfa",
+    "surface-subtle-background": "#f4fbf8",
+    "surface-elevated-background": "#ffffff",
+    "surface-selected-background": "#e4f5ef",
+    "surface-code-background": "#f8fcfa",
+    "input-background": "#ffffff",
+    "code-background": "#f7fcfa",
+    "code-surface-background": "#ffffff",
+    "text-primary": "#17332f",
+    "text-bright": "#13302c",
+    "text-secondary": "#5b726c",
+    "text-muted": "#5b726c",
+    "text-label": "#5b726c",
+    "text-subtle": "#5b726c",
+    "text-tertiary": "#2e584c",
+    "text-code": "#31564b",
+    "text-description": "#5b726c",
+    "border-default": "#d7e9e3",
+    "border-card": "#d1e6df",
+    "border-strong": "#c8e1d9",
+    "border-button": "#c8e1d9",
+    "border-input": "#d4e7e1",
+    "border-field": "#e0eee9",
+    "border-subtle": "#e4efeb",
+    "border-hover": "#55a892",
+    "border-selected": "#247c67",
+    "selection-background": "#e4f5ef",
+    "success": "#247c67",
+    "text-success": "#217660",
+    "success-hover": "#1f6f5c",
+    "focus-ring": "#247c67",
+  };
+
+  for (const [token, expected] of Object.entries(expectedTokens)) {
+    assert.equal(extractCssToken(lightRule, token), expected, `unexpected light token: ${token}`);
+  }
+  assert.match(lightRule, /background:\s*var\(--app-background\)/);
+  assert.match(lightRule, /color-scheme:\s*light/);
+});
+
+test("light theme keeps surfaces white and makes selected states distinct", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+  const lightRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
+  const panelRule = source.match(/\.app-shell\[data-theme=\"light\"\][^{]*\.panel[^{]*\{[^}]*\}/s)?.[0] ?? "";
+  const selectedInstanceRule = source.match(/\.app-shell\[data-theme=\"light\"\][^{]*\.proxy-instance-sidebar-card\.selected[^{]*\{[^}]*\}/s)?.[0] ?? "";
+
+  assert.equal(extractCssToken(lightRule, "surface-background"), "#ffffff");
+  assert.equal(extractCssToken(lightRule, "surface-selected-background"), "#e4f5ef");
+  assert.match(panelRule, /box-shadow:\s*0\s+10px\s+26px\s+var\(--shadow-color\)/);
+  assert.match(selectedInstanceRule, /border-color:\s*var\(--border-hover\)/);
+});
+
 test("theme text tokens meet AA against actual dark and light backgrounds", async () => {
   const source = await readFile("src/renderer/styles.css", "utf8");
   const themes = [
