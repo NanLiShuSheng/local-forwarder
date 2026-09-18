@@ -9,7 +9,7 @@
     "dev": "concurrently -k \"vite --config vite.config.ts\" \"npm run build:electron && wait-on http://localhost:5173 && electron .\"",
     "build:electron": "tsc -p tsconfig.node.json && node scripts/flatten-electron.mjs",
     "build": "npm run build:electron && tsc -p tsconfig.json --noEmit && vite build",
-    "test": "npm run build && node --import tsx --test $(rg --files test -g '*.test.ts' | sort)",
+    "test": "npm run build && node scripts/run-tests.mjs",
     "package:x64": "npm run build && electron-builder --mac dir --x64 && node scripts/create-dmg.mjs && npm run verify:package",
     "verify:package": "node scripts/verify-dmg.mjs",
     "smoke": "node scripts/smoke-electron.mjs"
