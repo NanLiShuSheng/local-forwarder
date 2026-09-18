@@ -13,6 +13,7 @@
     "package:x64": "npm run build && electron-builder --mac dir --x64 && node scripts/create-dmg.mjs && npm run verify:package",
     "package:win:x64": "npm run build && electron-builder --win nsis --x64 && npm run verify:win",
     "verify:package": "node scripts/verify-dmg.mjs",
+    "verify:win": "node scripts/verify-win.mjs",
     "smoke": "node scripts/smoke-electron.mjs"
   },
   "dependencies": {
