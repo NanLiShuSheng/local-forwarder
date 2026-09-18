@@ -36,6 +36,9 @@ jobs:
       - name: Verify packaged protocol resources
         run: node scripts/smoke-win-resources.mjs
 
+      - name: Verify real Windows port recovery
+        run: npx tsx --test test/core/runtime/port-recovery.windows.test.ts
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:

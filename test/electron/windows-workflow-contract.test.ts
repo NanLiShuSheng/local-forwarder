@@ -12,6 +12,7 @@ test("Windows workflow builds and uploads the x64 package", async () => {
   assert.match(workflow, /npm run build/);
   assert.match(workflow, /npm run package:win:x64/);
   assert.match(workflow, /node scripts\/smoke-win-resources\.mjs/);
+  assert.match(workflow, /npx tsx --test test\/core\/runtime\/port-recovery\.windows\.test\.ts/);
   assert.match(workflow, /dist\/\*\.exe/);
   assert.match(workflow, /dist\/win-unpacked/);
   assert.match(resourceSmoke, /win-unpacked/);
