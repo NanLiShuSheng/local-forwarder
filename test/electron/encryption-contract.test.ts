@@ -89,3 +89,9 @@ test("DMG verification checks for the packaged encoder", async () => {
   const verifier = await readFile("scripts/verify-dmg.mjs", "utf8");
   assert.match(verifier, /protocol.*encode.*h5encode-mac-amd64/);
 });
+
+test("DMG verification accepts the cross-platform bundle identifier", async () => {
+  const verifier = await readFile("scripts/verify-dmg.mjs", "utf8");
+  assert.match(verifier, /com\.localforwarder\.desktop/);
+  assert.doesNotMatch(verifier, /com\.localforwarder\.mac/);
+});

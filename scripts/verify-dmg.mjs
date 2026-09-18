@@ -59,7 +59,7 @@ try {
   }
 
   const infoPlist = readFileSync(path.join(appPath, "Contents", "Info.plist"), "utf8");
-  if (!infoPlist.includes("com.localforwarder.mac")) {
+  if (!infoPlist.includes("com.localforwarder.desktop")) {
     throw new Error("installed app has an unexpected bundle identifier");
   }
 
