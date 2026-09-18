@@ -1,6 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createTztCodec } from "../../../src/core/tcp/tzt-codec";
+import path from "node:path";
+import { createTztCodec, getNode16BinaryCandidates } from "../../../src/core/tcp/tzt-codec";
+
+test("Node 16 candidates prefer the bundled Windows x64 runtime", () => {
+  const candidates = getNode16BinaryCandidates("/packed/protocol", "win32", "x64", {});
+  assert.equal(candidates[0], path.join("/packed/protocol", "node", "win-x64", "node.exe"));
+  assert.equal(candidates.some((candidate) => candidate.includes("node-v16.13.0-win-x64")), false);
+});
+
+test("Node 16 environment override is preferred and unsupported Windows arch has no x64 bundle", () => {
+  const override = "C:\\tools\\node-v16.13.0\\node.exe";
+  assert.equal(getNode16BinaryCandidates("/packed/protocol", "win32", "x64", { TZT_NODE16_BIN: override })[0], override);
+  assert.equal(getNode16BinaryCandidates("/packed/protocol", "win32", "arm64", {}).some((candidate) => candidate.includes("win-x64")), false);
+});
 
 test("codec preserves the legacy RC4 and encode regression vectors", () => {
   const codec = createTztCodec();

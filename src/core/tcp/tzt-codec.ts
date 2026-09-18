@@ -5,7 +5,7 @@ import path from "node:path";
 
 export type TztValue = string | number | boolean;
 export type TztQuery = Record<string, TztValue>;
-export type TztResponse = Record<string, string>;
+export type TztResponse = Record<string, unknown>;
 
 export interface TztCodec {
   rc4(data: Uint8Array, key: string): Buffer;
@@ -23,7 +23,7 @@ interface LegacyRequest {
 }
 
 interface LegacyResponse {
-  data: string | TztResponse[];
+  data: string | unknown[];
 }
 
 const MAGIC = 0x07b7;
@@ -55,12 +55,27 @@ function protocolDirectory(): string {
   throw new Error("TZT codec runtime incompatible: bundled resources/protocol assets are missing");
 }
 
-function node16Binary(): string {
-  const candidates = [
-    process.env.TZT_NODE16_BIN,
+export function getNode16BinaryCandidates(
+  protocolDir: string,
+  platform: NodeJS.Platform,
+  arch: string,
+  env: NodeJS.ProcessEnv,
+): string[] {
+  const bundled = platform === "win32" && arch === "x64"
+    ? [path.join(protocolDir, "node", "win-x64", "node.exe")]
+    : [];
+  const external = [
     path.join(os.homedir(), ".nvm/versions/node/v16.13.0/bin/node"),
-    process.env.NVM_BIN === undefined ? undefined : path.join(process.env.NVM_BIN, "node"),
+    env.NVM_BIN === undefined ? undefined : path.join(env.NVM_BIN, "node"),
+    platform === "win32" && env.NVM_HOME !== undefined ? path.join(env.NVM_HOME, "v16.13.0", "node.exe") : undefined,
+    platform === "win32" && env.APPDATA !== undefined ? path.join(env.APPDATA, "nvm", "v16.13.0", "node.exe") : undefined,
   ].filter((candidate): candidate is string => candidate !== undefined);
+  return [env.TZT_NODE16_BIN, ...bundled, ...external].filter((candidate): candidate is string => candidate !== undefined && candidate.length > 0);
+}
+
+function node16Binary(): string {
+  const protocolDir = protocolDirectory();
+  const candidates = getNode16BinaryCandidates(protocolDir, process.platform, process.arch, process.env);
 
   for (const candidate of candidates) {
     try {
@@ -70,7 +85,7 @@ function node16Binary(): string {
       // Try the next explicitly supported runtime location.
     }
   }
-  throw new Error("TZT codec runtime incompatible: Node.js 16.13.0 is required to load the bundled legacy protocol bytecode; set TZT_NODE16_BIN or install it under ~/.nvm");
+  throw new Error(`TZT codec runtime incompatible: Node.js 16.13.0 is required to load the bundled legacy protocol bytecode; set TZT_NODE16_BIN. Checked: ${candidates.join(", ")}`);
 }
 
 function createLegacyRuntime(): LegacyRuntime {
@@ -129,12 +144,9 @@ function assertRuntimeCompatibility(runtime: LegacyRuntime): void {
 
 function decodeLegacyResponse(value: unknown): TztResponse {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Invalid TZT response: expected an object");
-  const result: TztResponse = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (typeof item !== "string") throw new Error(`Invalid TZT response field: ${key}`);
-    result[key] = item;
-  }
+  const result = { ...(value as Record<string, unknown>) };
   if (result.HandleSerialNo === undefined) throw new Error("Invalid TZT response: missing serial number");
+  if (typeof result.HandleSerialNo !== "string" && typeof result.HandleSerialNo !== "number") throw new Error("Invalid TZT response: invalid serial number");
   return result;
 }
 
