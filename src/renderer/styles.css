@@ -74,7 +74,7 @@ button { cursor: pointer; }
   --preview-dark-sidebar: #101a2b;
   --preview-dark-content: #1a2b43;
   --preview-dark-panel: #263b57;
-  --preview-shadow: rgb(23 51 47 / 10%);
+  --preview-shadow: rgb(0 0 0 / 6%);
   height: 100vh;
   min-height: 0;
   display: flex;
