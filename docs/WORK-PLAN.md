@@ -83,3 +83,12 @@
 - 主题控件保留清晰焦点样式，满足焦点可访问性和 AA 对比度保障。
 - 已完成专项主题测试，以及运行时 hook 和媒体查询监听测试。
 - 本轮验证：`npx tsx --test test/renderer/theme.test.ts`、`npx tsx --test test/renderer/chinese-ui.test.ts`、`npm test`、`npm run build` 和 `git diff --check` 均通过。
+
+### Windows 10/11 x64 版本（2026-09-18）
+
+- 保留 HTTP/HTTPS、TCP `/reqxml`、H5 加密、`.d` 解密、缓存和多代理实例能力。
+- Windows x64 使用随包的 `resources/protocol/encode/h5encode-win-x86.exe` 子进程，以及官方 Node.js 16.13.0 x64 `node.exe` 运行 TZT 旧字节码；macOS 继续使用原有编码器和运行时路径。
+- 端口 `8080–8089` 自动恢复在 Windows 使用 `netstat -ano -p tcp` 查询，先执行 `taskkill /PID <pid> /T`，超时后追加 `/F`；当前进程和非自动恢复端口保持跳过逻辑。
+- Electron Builder 使用跨平台 appId `com.localforwarder.desktop`、NSIS x64 目标和 `resources/icon.ico`；安装包脚本为 `npm run package:win:x64`。
+- Windows CI 位于 `.github/workflows/windows.yml`，执行 `npm ci`、`npm test`、`npm run build`、NSIS 打包、包校验和 packaged smoke，并上传安装器与 `dist/win-unpacked`。
+- Windows 验收命令：`npm run package:win:x64`、`npm run verify:win`、`node scripts/smoke-packaged.mjs`；需在 Windows x64 runner 完成真实安装、HTTP/HTTPS、TCP/TZT、H5 加密、`.d` 解密、端口恢复和卸载后用户数据保留验证。

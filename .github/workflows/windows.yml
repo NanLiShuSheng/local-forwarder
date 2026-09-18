@@ -1,0 +1,43 @@
+name: Windows x64
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build renderer and Electron main process
+        run: npm run build
+
+      - name: Build Windows NSIS package
+        run: npm run package:win:x64
+
+      - name: Verify packaged smoke
+        run: node scripts/smoke-packaged.mjs
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-forwarder-windows-x64
+          if-no-files-found: error
+          path: |
+            dist/*.exe
+            dist/win-unpacked
