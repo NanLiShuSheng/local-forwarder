@@ -62,6 +62,24 @@ test("encoder path resolves to project resources in development and app resource
   assert.equal(getEncryptionPreferencesPath("/Users/test/Library/Application Support/Local Forwarder"), path.join("/Users/test/Library/Application Support/Local Forwarder", "encryption-preferences.json"));
 });
 
+test("encoder path resolves the Windows x86 encoder for Windows x64", () => {
+  assert.equal(
+    getEncryptionEncoderPath("/project/dist-electron/electron", false, "/ignored", "win32", "x64"),
+    path.join("/project/resources", "protocol", "encode", "h5encode-win-x86.exe"),
+  );
+  assert.equal(
+    getEncryptionEncoderPath("/project/dist-electron/electron", true, "/packed/resources", "win32", "x64"),
+    path.join("/packed/resources", "protocol", "encode", "h5encode-win-x86.exe"),
+  );
+});
+
+test("encoder path rejects unsupported Windows architectures", () => {
+  assert.throws(
+    () => getEncryptionEncoderPath("/project/dist-electron/electron", false, "/ignored", "win32", "arm64"),
+    /unsupported.*win32.*arm64/i,
+  );
+});
+
 test("the encoder binary is included as an executable application resource", async () => {
   const encoderPath = path.resolve("resources/protocol/encode/h5encode-mac-amd64");
   await access(encoderPath, constants.X_OK);
