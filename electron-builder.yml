@@ -1,4 +1,4 @@
-appId: com.localforwarder.mac
+appId: com.localforwarder.desktop
 productName: Local Forwarder
 electronDist: node_modules/electron/dist
 asar: true
@@ -14,3 +14,7 @@ extraResources:
 mac:
   target:
     - dmg
+win:
+  target:
+    - nsis
+  icon: resources/icon.ico

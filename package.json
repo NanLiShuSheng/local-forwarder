@@ -1,7 +1,7 @@
 {
-  "name": "local-forwarder-mac",
+  "name": "local-forwarder",
   "version": "0.1.0",
-  "description": "A local HTTP, HTTPS, and TZT forwarding service for Intel Mac",
+  "description": "A local HTTP, HTTPS, and TZT forwarding service",
   "author": "Local Forwarder",
   "private": true,
   "main": "dist-electron/main.js",
@@ -11,6 +11,7 @@
     "build": "npm run build:electron && tsc -p tsconfig.json --noEmit && vite build",
     "test": "npm run build && node scripts/run-tests.mjs",
     "package:x64": "npm run build && electron-builder --mac dir --x64 && node scripts/create-dmg.mjs && npm run verify:package",
+    "package:win:x64": "npm run build && electron-builder --win nsis --x64 && npm run verify:win",
     "verify:package": "node scripts/verify-dmg.mjs",
     "smoke": "node scripts/smoke-electron.mjs"
   },
