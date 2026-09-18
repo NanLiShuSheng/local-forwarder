@@ -9,12 +9,16 @@ test("Electron Builder exposes a cross-platform Windows NSIS target", async () =
     description: string;
     scripts: Record<string, string>;
   };
+  const lockJson = JSON.parse(await readFile("package-lock.json", "utf8")) as {
+    packages: { "": { name: string } };
+  };
   const icon = await readFile("resources/icon.ico");
 
   assert.match(builderConfig, /^appId:\s*com\.localforwarder\.desktop\s*$/m);
   assert.match(builderConfig, /win:\s*\n(?:\s+.*\n)*?\s+target:\s*\n\s+-\s+nsis/m);
   assert.match(builderConfig, /icon:\s*resources\/icon\.ico/);
   assert.equal(packageJson.name, "local-forwarder");
+  assert.equal(lockJson.packages[""].name, packageJson.name);
   assert.doesNotMatch(packageJson.description, /Mac/i);
   assert.match(packageJson.scripts["package:win:x64"] ?? "", /electron-builder --win nsis --x64/);
   assert.equal(icon.readUInt16LE(0), 0);
