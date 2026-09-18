@@ -7,7 +7,6 @@ export const FIXED_LOG_TYPES = [
   "/reqsavemap",
   "/reqsavefile",
   "/reqreadfile",
-  "/login",
 ] as const;
 
 export interface LogTypeSource {
@@ -67,19 +66,8 @@ export function getLogType(entry: LogTypeSource): string | undefined {
   return parseRequestPath(entry.requestParams) ?? parseRequestPath(entry.message);
 }
 
-export function getLogTypeOptions(logs: readonly LogTypeSource[]): string[] {
-  const options: string[] = [...FIXED_LOG_TYPES];
-  const seen = new Set<string>(options);
-
-  for (const log of logs) {
-    const type = getLogType(log);
-    if (type !== undefined && type !== ALL_LOG_TYPES && !seen.has(type)) {
-      seen.add(type);
-      options.push(type);
-    }
-  }
-
-  return options;
+export function getLogTypeOptions(_logs: readonly LogTypeSource[]): string[] {
+  return [...FIXED_LOG_TYPES];
 }
 
 export function matchesLogType(entry: LogTypeSource, selectedType: string): boolean {

@@ -28,6 +28,7 @@ test("normalizes requestPath values and rejects the all sentinel", () => {
   assert.equal(getLogType(entry({ requestPath: "/api?a=1#fragment" })), "/api");
   assert.equal(getLogType(entry({ requestPath: "https://host.test/api?x=1" })), "/api");
   assert.equal(getLogType(entry({ requestPath: "api/path?x=1" })), "/api/path");
+  assert.equal(getLogType(entry({ requestPath: "/login" })), "/login");
   assert.equal(getLogType(entry({ requestPath: ALL_LOG_TYPES })), undefined);
   assert.equal(getLogType(entry({ requestPath: "/all" })), "/all");
 
@@ -79,22 +80,21 @@ test("returns undefined when neither field contains a parseable request target",
   assert.equal(getLogType({}), undefined);
 });
 
-test("returns fixed types first and appends ordinary paths in first-seen order", () => {
+test("returns only fixed types regardless of observed request paths", () => {
   const options = getLogTypeOptions([
     entry({ requestPath: "/api/first" }),
     entry({ requestPath: "/reqxml" }),
     entry({ message: "GET /api/second?value=1 HTTP/1.1" }),
     entry({ requestParams: "GET /api/first?value=2 HTTP/1.1" }),
-    entry({ requestPath: "/reqreadmap" }),
-    entry({ requestPath: ALL_LOG_TYPES }),
+    entry({ requestPath: "/login" }),
+    entry({ requestPath: "/newzt/components/StepBtns/StepBtns.html" }),
   ]);
 
-  assert.deepEqual(options, [
-    ...FIXED_LOG_TYPES,
-    "/api/first",
-    "/api/second",
-  ]);
-  assert.equal(options.includes(ALL_LOG_TYPES), false);
+  assert.deepEqual(options, [...FIXED_LOG_TYPES]);
+  assert.equal(options.includes("/login"), false);
+  assert.equal(options.includes("/api/first"), false);
+  assert.equal(options.includes("/api/second"), false);
+  assert.equal(options.includes("/newzt/components/StepBtns/StepBtns.html"), false);
 });
 
 test("always includes fixed types in their declared order when there are no logs", () => {
