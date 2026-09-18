@@ -33,6 +33,9 @@ jobs:
       - name: Verify packaged smoke
         run: node scripts/smoke-packaged.mjs
 
+      - name: Verify packaged protocol resources
+        run: node scripts/smoke-win-resources.mjs
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:

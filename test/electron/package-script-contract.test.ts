@@ -22,6 +22,10 @@ test("Windows package verification and packaged smoke scripts use the unpacked a
   assert.match(verifyScript, /tzt\.bytecode-16\.13\.0/);
   assert.match(verifyScript, /0x014c/);
   assert.match(verifyScript, /0x8664/);
+  assert.match(verifyScript, /verifyPe\(path\.join\(unpackedDir, "Local Forwarder\.exe"\), 0x8664/);
+  assert.match(verifyScript, /--version/);
+  assert.match(verifyScript, /v16\.13\.0/);
+  assert.match(verifyScript, /Local Forwarder Setup/);
   assert.match(smokeScript, /path\.join\(\"dist\", \"win-unpacked\"/);
   assert.match(smokeScript, /Local Forwarder\.exe/);
   assert.match(smokeScript, /--smoke/);

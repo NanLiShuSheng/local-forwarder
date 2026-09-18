@@ -18,3 +18,5 @@ win:
   target:
     - nsis
   icon: resources/icon.ico
+nsis:
+  artifactName: ${productName} Setup ${version}.${ext}

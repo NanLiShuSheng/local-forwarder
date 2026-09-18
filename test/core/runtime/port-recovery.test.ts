@@ -93,3 +93,72 @@ test("uses Windows taskkill in ordinary and forced phases", async () => {
 
   assert.deepEqual(terminations, [[1234, false], [1234, true]]);
 });
+
+test("uses the Windows netstat and taskkill command arguments", async () => {
+  const commands: Array<[string, string[]]> = [];
+  let netstatCalls = 0;
+
+  await recoverOccupiedPort(8083, {
+    platform: "win32",
+    executeCommand: async (command, args) => {
+      commands.push([command, args]);
+      if (command === "netstat") {
+        netstatCalls += 1;
+        return { stdout: netstatCalls < 3 ? "TCP 0.0.0.0:8083 0.0.0.0:0 LISTENING 1234" : "" };
+      }
+      return { stdout: "" };
+    },
+    sleep: async () => undefined,
+    termGraceMs: 0,
+    killGraceMs: 0,
+  });
+
+  assert.deepEqual(commands, [
+    ["netstat", ["-ano", "-p", "tcp"]],
+    ["taskkill", ["/PID", "1234", "/T"]],
+    ["netstat", ["-ano", "-p", "tcp"]],
+    ["taskkill", ["/PID", "1234", "/T", "/F"]],
+    ["netstat", ["-ano", "-p", "tcp"]],
+  ]);
+});
+
+test("treats a missing Windows process as cleaned up but propagates command failures", async () => {
+  let netstatCalls = 0;
+  const missingProcess = Object.assign(new Error("No running instance of the task"), { code: 128 });
+  await recoverOccupiedPort(8084, {
+    platform: "win32",
+    executeCommand: async (command) => {
+      if (command === "netstat") {
+        netstatCalls += 1;
+        return { stdout: netstatCalls === 1 ? "TCP 0.0.0.0:8084 0.0.0.0:0 LISTENING 1234" : "" };
+      }
+      throw missingProcess;
+    },
+    sleep: async () => undefined,
+    termGraceMs: 0,
+    killGraceMs: 0,
+  });
+
+  await assert.rejects(
+    () => recoverOccupiedPort(8085, {
+      platform: "win32",
+      executeCommand: async (command) => {
+        if (command === "netstat") return { stdout: "TCP 0.0.0.0:8085 0.0.0.0:0 LISTENING 1234" };
+        throw Object.assign(new Error("Access is denied"), { code: 5 });
+      },
+      sleep: async () => undefined,
+      termGraceMs: 0,
+      killGraceMs: 0,
+    }),
+    /Access is denied/,
+  );
+
+  await assert.rejects(
+    () => recoverOccupiedPort(8086, {
+      platform: "win32",
+      executeCommand: async () => { throw new Error("netstat unavailable"); },
+      sleep: async () => undefined,
+    }),
+    /netstat unavailable/,
+  );
+});

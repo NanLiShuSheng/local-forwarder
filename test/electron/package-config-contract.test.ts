@@ -17,6 +17,7 @@ test("Electron Builder exposes a cross-platform Windows NSIS target", async () =
   assert.match(builderConfig, /^appId:\s*com\.localforwarder\.desktop\s*$/m);
   assert.match(builderConfig, /win:\s*\n(?:\s+.*\n)*?\s+target:\s*\n\s+-\s+nsis/m);
   assert.match(builderConfig, /icon:\s*resources\/icon\.ico/);
+  assert.match(builderConfig, /artifactName:\s*\$\{productName\} Setup \$\{version\}\.\$\{ext\}/);
   assert.equal(packageJson.name, "local-forwarder");
   assert.equal(lockJson.packages[""].name, packageJson.name);
   assert.doesNotMatch(packageJson.description, /Mac/i);

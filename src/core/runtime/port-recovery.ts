@@ -8,11 +8,19 @@ const DEFAULT_TERM_GRACE_MS = 1000;
 const DEFAULT_KILL_GRACE_MS = 1000;
 const DEFAULT_POLL_INTERVAL_MS = 50;
 
+export interface PortCommandResult {
+  stdout: string;
+  stderr?: string;
+}
+
+export type PortCommandExecutor = (command: string, args: string[]) => Promise<PortCommandResult>;
+
 export interface PortRecoveryDependencies {
   platform?: NodeJS.Platform;
   listListeningProcessIds: (port: number) => Promise<number[]>;
   sendSignal: (pid: number, signal: NodeJS.Signals) => void;
   terminateProcess?: (pid: number, force: boolean) => Promise<void>;
+  executeCommand?: PortCommandExecutor;
   sleep: (milliseconds: number) => Promise<void>;
   termGraceMs?: number;
   killGraceMs?: number;
@@ -23,14 +31,23 @@ function isProcessMissing(error: unknown): boolean {
   return (error as { code?: string | number }).code === "ESRCH";
 }
 
-async function listListeningProcessIds(port: number): Promise<number[]> {
-  if (process.platform === "win32") return listWindowsListeningProcessIds(port);
-  return listMacListeningProcessIds(port);
+const defaultCommandExecutor: PortCommandExecutor = async (command, args) => {
+  const result = await execFileAsync(command, args, { maxBuffer: 256 * 1024, windowsHide: true });
+  return { stdout: result.stdout, stderr: result.stderr };
+};
+
+async function listListeningProcessIdsForPlatform(
+  port: number,
+  platform: NodeJS.Platform,
+  executeCommand: PortCommandExecutor,
+): Promise<number[]> {
+  if (platform === "win32") return listWindowsListeningProcessIds(port, executeCommand);
+  return listMacListeningProcessIds(port, executeCommand);
 }
 
-async function listMacListeningProcessIds(port: number): Promise<number[]> {
+async function listMacListeningProcessIds(port: number, executeCommand: PortCommandExecutor): Promise<number[]> {
   try {
-    const result = await execFileAsync("lsof", ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { maxBuffer: 64 * 1024 });
+    const result = await executeCommand("lsof", ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"]);
     return [...new Set(result.stdout.split(/\s+/).map((value) => Number(value)).filter((pid) => Number.isInteger(pid) && pid > 0))];
   } catch (error) {
     if ((error as { code?: string | number }).code === 1) return [];
@@ -50,16 +67,16 @@ export function parseWindowsListeningProcessIds(output: string, port: number): n
   return [...new Set(processIds)];
 }
 
-async function listWindowsListeningProcessIds(port: number): Promise<number[]> {
-  const result = await execFileAsync("netstat", ["-ano", "-p", "tcp"], { maxBuffer: 256 * 1024, windowsHide: true });
+async function listWindowsListeningProcessIds(port: number, executeCommand: PortCommandExecutor): Promise<number[]> {
+  const result = await executeCommand("netstat", ["-ano", "-p", "tcp"]);
   return parseWindowsListeningProcessIds(result.stdout, port);
 }
 
-async function terminateWindowsProcess(pid: number, force: boolean): Promise<void> {
+async function terminateWindowsProcess(pid: number, force: boolean, executeCommand: PortCommandExecutor): Promise<void> {
   const args = ["/PID", String(pid), "/T"];
   if (force) args.push("/F");
   try {
-    await execFileAsync("taskkill", args, { maxBuffer: 64 * 1024, windowsHide: true });
+    await executeCommand("taskkill", args);
   } catch (error) {
     if (!isWindowsProcessMissing(error)) throw error;
   }
@@ -74,9 +91,10 @@ function isWindowsProcessMissing(error: unknown): boolean {
 
 const defaultDependencies: PortRecoveryDependencies = {
   platform: process.platform,
-  listListeningProcessIds,
+  listListeningProcessIds: (port) => listListeningProcessIdsForPlatform(port, process.platform, defaultCommandExecutor),
   sendSignal: (pid, signal) => process.kill(pid, signal),
-  terminateProcess: terminateWindowsProcess,
+  terminateProcess: (pid, force) => terminateWindowsProcess(pid, force, defaultCommandExecutor),
+  executeCommand: defaultCommandExecutor,
   sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
 };
 
@@ -86,9 +104,14 @@ export function isAutoRecoverablePort(port: number): boolean {
 
 export async function recoverOccupiedPort(port: number, overrides: Partial<PortRecoveryDependencies> = {}): Promise<void> {
   if (!isAutoRecoverablePort(port)) return;
-  const dependencies = { ...defaultDependencies, ...overrides };
-  const platform = dependencies.platform ?? process.platform;
-  const terminateProcess = dependencies.terminateProcess ?? terminateWindowsProcess;
+  const baseDependencies = { ...defaultDependencies, ...overrides };
+  const platform = baseDependencies.platform ?? process.platform;
+  const executeCommand = baseDependencies.executeCommand ?? defaultCommandExecutor;
+  const dependencies: PortRecoveryDependencies = {
+    ...baseDependencies,
+    listListeningProcessIds: overrides.listListeningProcessIds ?? ((targetPort) => listListeningProcessIdsForPlatform(targetPort, platform, executeCommand)),
+    terminateProcess: overrides.terminateProcess ?? ((pid, force) => terminateWindowsProcess(pid, force, executeCommand)),
+  };
   const termGraceMs = dependencies.termGraceMs ?? DEFAULT_TERM_GRACE_MS;
   const killGraceMs = dependencies.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
   const pollIntervalMs = dependencies.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
@@ -98,7 +121,7 @@ export async function recoverOccupiedPort(port: number, overrides: Partial<PortR
   for (const pid of listedPids) {
     try {
       if (platform === "win32") {
-        await terminateProcess(pid, false);
+        await dependencies.terminateProcess?.(pid, false);
       } else {
         dependencies.sendSignal(pid, "SIGTERM");
       }
@@ -111,7 +134,7 @@ export async function recoverOccupiedPort(port: number, overrides: Partial<PortR
   for (const pid of listedPids) {
     try {
       if (platform === "win32") {
-        await terminateProcess(pid, true);
+        await dependencies.terminateProcess?.(pid, true);
       } else {
         dependencies.sendSignal(pid, "SIGKILL");
       }
