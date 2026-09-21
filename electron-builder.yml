@@ -1,6 +1,5 @@
 appId: com.localforwarder.desktop
 productName: Local Forwarder
-electronDist: node_modules/electron/dist
 asar: true
 files:
   - dist/**
@@ -11,9 +10,18 @@ extraResources:
     to: protocol
     filter:
       - "**/*"
+publish:
+  provider: github
+  owner: NanLiShuSheng
+  repo: local-forwarder
+  releaseType: release
+afterSign: scripts/notarize.mjs
 mac:
   target:
     - dmg
+    - zip
+  hardenedRuntime: true
+  gatekeeperAssess: false
 win:
   target:
     - nsis

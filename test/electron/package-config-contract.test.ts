@@ -15,7 +15,11 @@ test("Electron Builder exposes a cross-platform Windows NSIS target", async () =
   const icon = await readFile("resources/icon.ico");
 
   assert.match(builderConfig, /^appId:\s*com\.localforwarder\.desktop\s*$/m);
+  assert.doesNotMatch(builderConfig, /^electronDist:\s*node_modules\/electron\/dist\s*$/m);
   assert.match(builderConfig, /win:\s*\n(?:\s+.*\n)*?\s+target:\s*\n\s+-\s+nsis/m);
+  assert.match(builderConfig, /mac:\s*\n(?:\s+.*\n)*?\s+target:\s*\n(?:\s+-\s+(?:dmg|zip)\s*\n){2}/m);
+  assert.match(builderConfig, /mac:\s*\n(?:\s+.*\n)*?\s+-\s+dmg/m);
+  assert.match(builderConfig, /mac:\s*\n(?:\s+.*\n)*?\s+-\s+zip/m);
   assert.match(builderConfig, /icon:\s*resources\/icon\.ico/);
   assert.match(builderConfig, /artifactName:\s*\$\{productName\} Setup \$\{version\}\.\$\{ext\}/);
   assert.equal(packageJson.name, "local-forwarder");

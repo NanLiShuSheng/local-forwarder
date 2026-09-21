@@ -12,18 +12,25 @@
     "test": "npm run build && node scripts/run-tests.mjs",
     "package:x64": "npm run build && electron-builder --mac dir --x64 && node scripts/create-dmg.mjs && npm run verify:package",
     "package:win:x64": "npm run build && electron-builder --win nsis --x64 && npm run verify:win",
+    "verify:release:tag": "node scripts/verify-release-tag.mjs",
+    "verify:release:win": "node scripts/verify-release-assets.mjs win",
+    "verify:release:mac": "node scripts/verify-release-assets.mjs mac",
+    "package:release:win:x64": "npm run build && electron-builder --win nsis --x64 --publish never && npm run verify:win && npm run verify:release:win",
+    "package:release:mac:x64": "npm run build && electron-builder --mac dir zip --x64 --publish never && node scripts/create-dmg.mjs && npm run verify:package && npm run verify:release:mac",
     "verify:package": "node scripts/verify-dmg.mjs",
     "verify:win": "node scripts/verify-win.mjs",
     "smoke": "node scripts/smoke-electron.mjs"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "react": "latest",
     "react-dom": "latest"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "latest",
+    "@electron/notarize": "^3.1.1",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
     "concurrently": "latest",
     "electron": "latest",
     "electron-builder": "latest",

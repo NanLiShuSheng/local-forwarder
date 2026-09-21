@@ -25,10 +25,20 @@ test("Windows package verification and packaged smoke scripts use the unpacked a
   assert.match(verifyScript, /verifyPe\(path\.join\(unpackedDir, "Local Forwarder\.exe"\), 0x8664/);
   assert.match(verifyScript, /--version/);
   assert.match(verifyScript, /v16\.13\.0/);
+  assert.match(verifyScript, /process\.platform === "win32"/);
   assert.match(verifyScript, /Local Forwarder Setup/);
   assert.match(smokeScript, /path\.join\(\"dist\", \"win-unpacked\"/);
   assert.match(smokeScript, /Local Forwarder\.exe/);
   assert.match(smokeScript, /--smoke/);
   assert.match(smokeScript, /forwarder-ready/);
   assert.match(smokeScript, /10000/);
+});
+
+test("release package scripts verify platform-specific release assets", async () => {
+  const packageJson = JSON.parse(await readFile("package.json", "utf8")) as { scripts: Record<string, string> };
+
+  assert.match(packageJson.scripts["package:release:win:x64"] ?? "", /verify:release:win/);
+  assert.match(packageJson.scripts["package:release:mac:x64"] ?? "", /verify:release:mac/);
+  assert.doesNotMatch(packageJson.scripts["package:x64"] ?? "", /--publish always/);
+  assert.doesNotMatch(packageJson.scripts["package:win:x64"] ?? "", /--publish always/);
 });
