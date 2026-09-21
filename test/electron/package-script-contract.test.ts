@@ -37,8 +37,17 @@ test("Windows package verification and packaged smoke scripts use the unpacked a
 test("release package scripts verify platform-specific release assets", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as { scripts: Record<string, string> };
 
-  assert.match(packageJson.scripts["package:release:win:x64"] ?? "", /verify:release:win/);
-  assert.match(packageJson.scripts["package:release:mac:x64"] ?? "", /verify:release:mac/);
+  assert.equal(packageJson.scripts["verify:release:tag"], "node scripts/verify-release-tag.mjs");
+  assert.equal(packageJson.scripts["verify:release:win"], "node scripts/verify-release-assets.mjs win");
+  assert.equal(packageJson.scripts["verify:release:mac"], "node scripts/verify-release-assets.mjs mac");
+  assert.equal(
+    packageJson.scripts["package:release:win:x64"],
+    "npm run build && electron-builder --win nsis --x64 --publish never && npm run verify:win && npm run verify:release:win",
+  );
+  assert.equal(
+    packageJson.scripts["package:release:mac:x64"],
+    "npm run build && electron-builder --mac dir zip --x64 --publish never && node scripts/create-dmg.mjs && npm run verify:package && npm run verify:release:mac",
+  );
   assert.doesNotMatch(packageJson.scripts["package:x64"] ?? "", /--publish always/);
   assert.doesNotMatch(packageJson.scripts["package:win:x64"] ?? "", /--publish always/);
 });

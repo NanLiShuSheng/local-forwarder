@@ -37,8 +37,10 @@ function verifyWindowsPackage() {
   const nodePath = path.join(protocolDir, "node", "win-x64", "node.exe");
   verifyPe(nodePath, 0x8664, "Windows Node 16 runtime");
   requireFile(path.join(protocolDir, "node", "win-x64", "LICENSE.txt"), "Node runtime license");
-  const nodeVersion = execFileSync(nodePath, ["--version"], { encoding: "utf8", windowsHide: true }).trim();
-  if (nodeVersion !== "v16.13.0") throw new Error(`Windows Node runtime is ${nodeVersion}, expected v16.13.0`);
+  if (process.platform === "win32") {
+    const nodeVersion = execFileSync(nodePath, ["--version"], { encoding: "utf8", windowsHide: true }).trim();
+    if (nodeVersion !== "v16.13.0") throw new Error(`Windows Node runtime is ${nodeVersion}, expected v16.13.0`);
+  }
 
   const installerPath = path.join(
     distDir,

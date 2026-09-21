@@ -16,6 +16,16 @@ test("Electron Builder exposes a cross-platform Windows NSIS target", async () =
 
   assert.match(builderConfig, /^appId:\s*com\.localforwarder\.desktop\s*$/m);
   assert.doesNotMatch(builderConfig, /^electronDist:\s*node_modules\/electron\/dist\s*$/m);
+  assert.match(builderConfig, /^asar:\s*true\s*$/m);
+  assert.match(builderConfig, /^files:\s*$/m);
+  assert.match(builderConfig, /^\s+-\s+dist\/\*\*\s*$/m);
+  assert.match(builderConfig, /^\s+-\s+dist-electron\/\*\*\s*$/m);
+  assert.match(builderConfig, /^\s+-\s+package\.json\s*$/m);
+  assert.match(builderConfig, /^extraResources:\s*$/m);
+  assert.match(builderConfig, /^\s+-\s+from:\s+resources\/protocol\s*$/m);
+  assert.match(builderConfig, /^\s+to:\s+protocol\s*$/m);
+  assert.match(builderConfig, /^\s+filter:\s*$/m);
+  assert.match(builderConfig, /^\s+-\s+"\*\*\/\*"\s*$/m);
   assert.match(builderConfig, /win:\s*\n(?:\s+.*\n)*?\s+target:\s*\n\s+-\s+nsis/m);
   assert.match(builderConfig, /mac:\s*\n(?:\s+.*\n)*?\s+target:\s*\n(?:\s+-\s+(?:dmg|zip)\s*\n){2}/m);
   assert.match(builderConfig, /mac:\s*\n(?:\s+.*\n)*?\s+-\s+dmg/m);

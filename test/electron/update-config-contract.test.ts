@@ -15,8 +15,11 @@ test("GitHub updater configuration targets the public release repository", async
   assert.match(builder, /provider:\s*github/);
   assert.match(builder, /owner:\s*NanLiShuSheng/);
   assert.match(builder, /repo:\s*local-forwarder/);
+  assert.match(builder, /releaseType:\s*release/);
   assert.match(builder, /-\s+zip/);
   assert.match(builder, /afterSign:\s*scripts\/notarize\.mjs/);
+  assert.match(builder, /hardenedRuntime:\s*true/);
+  assert.match(builder, /gatekeeperAssess:\s*false/);
   assert.match(packageJson.scripts["package:release:win:x64"] ?? "", /--publish never/);
   assert.match(packageJson.scripts["package:release:mac:x64"] ?? "", /--publish never/);
 });
