@@ -48,6 +48,16 @@ test("release package scripts verify platform-specific release assets", async ()
     packageJson.scripts["package:release:mac:x64"],
     "npm run build && electron-builder --mac dir zip --x64 --publish never && node scripts/create-dmg.mjs && npm run verify:package && npm run verify:release:mac",
   );
+  assert.equal(
+    packageJson.scripts["package:x64"],
+    "npm run build && electron-builder --mac dir --x64 --publish never && node scripts/create-dmg.mjs && npm run verify:package",
+  );
+  assert.equal(
+    packageJson.scripts["package:win:x64"],
+    "npm run build && electron-builder --win nsis --x64 --publish never && npm run verify:win",
+  );
   assert.doesNotMatch(packageJson.scripts["package:x64"] ?? "", /--publish always/);
   assert.doesNotMatch(packageJson.scripts["package:win:x64"] ?? "", /--publish always/);
+  assert.doesNotMatch(packageJson.scripts["package:release:win:x64"] ?? "", /--publish always/);
+  assert.doesNotMatch(packageJson.scripts["package:release:mac:x64"] ?? "", /--publish always/);
 });
