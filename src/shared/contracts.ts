@@ -130,6 +130,29 @@ export interface OperationResult {
   error?: string;
 }
 
+export type UpdateStateKind = "idle" | "checking" | "available" | "downloading" | "downloaded" | "not-available" | "error";
+
+export interface UpdateInfoSnapshot {
+  version: string;
+  releaseDate?: string;
+  releaseNotes?: string;
+}
+
+export interface UpdateProgressSnapshot {
+  percent: number;
+  transferred: number;
+  total: number;
+  bytesPerSecond: number;
+}
+
+export interface UpdateState {
+  state: UpdateStateKind;
+  currentVersion: string;
+  update?: UpdateInfoSnapshot;
+  progress?: UpdateProgressSnapshot;
+  error?: string;
+}
+
 export type EncryptionMode = "full" | "incremental";
 
 export type EncryptionDirectoryKind = "input" | "output";
