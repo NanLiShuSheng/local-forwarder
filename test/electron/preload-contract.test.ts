@@ -23,6 +23,12 @@ test("compiled sandbox preload has no runtime dependency on shared contracts", (
   assert.match(preload, /downloadUpdate/);
   assert.match(preload, /installUpdate/);
   assert.match(preload, /onUpdateState/);
+  assert.match(preload, /getAppVersion: \(\) => (?:ipcRenderer|electron_1\.ipcRenderer)\.invoke\(IPC_CHANNELS\.getAppVersion\)/);
+  assert.match(preload, /getUpdateState: \(\) => (?:ipcRenderer|electron_1\.ipcRenderer)\.invoke\(IPC_CHANNELS\.getUpdateState\)/);
+  assert.match(preload, /checkForUpdates: \(\) => (?:ipcRenderer|electron_1\.ipcRenderer)\.invoke\(IPC_CHANNELS\.checkForUpdates\)/);
+  assert.match(preload, /downloadUpdate: \(\) => (?:ipcRenderer|electron_1\.ipcRenderer)\.invoke\(IPC_CHANNELS\.downloadUpdate\)/);
+  assert.match(preload, /installUpdate: \(\) => (?:ipcRenderer|electron_1\.ipcRenderer)\.invoke\(IPC_CHANNELS\.installUpdate\)/);
+  assert.match(preload, /onUpdateState: \(listener\)[\s\S]*?(?:ipcRenderer|electron_1\.ipcRenderer)\.on\(IPC_CHANNELS\.updateState, handler\)[\s\S]*?return \(\) => (?:ipcRenderer|electron_1\.ipcRenderer)\.removeListener\(IPC_CHANNELS\.updateState, handler\)/);
 });
 
 test("compiled Electron entrypoints have no runtime dependency on shared contracts", () => {
