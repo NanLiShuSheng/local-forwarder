@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { IPC_CHANNELS, type RuntimeStatus } from "../../src/shared/contracts";
 
 test("IPC channels expose stable runtime commands", () => {
@@ -32,4 +33,10 @@ test("IPC channels expose stable runtime commands", () => {
   });
   const status: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
   assert.equal(status.state, "stopped");
+});
+
+test("update installation verifies that all proxy instances stopped", async () => {
+  const source = await readFile("electron/main.ts", "utf8");
+  assert.match(source, /function stopAllForUpdate/);
+  assert.match(source, /manager\.list\(\)\.every\(\(instance\) => instance\.status\.state === "stopped"\)/);
 });

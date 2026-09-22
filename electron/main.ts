@@ -67,7 +67,7 @@ function registerIpcHandler(
 function registerIpcHandlers(policy: RendererSecurityPolicy): void {
   registerIpcHandler(policy, IPC_CHANNELS.getConfig, () => manager.getConfig());
   registerIpcHandler(policy, IPC_CHANNELS.getAppVersion, () => app.getVersion());
-  registerIpcHandler(policy, IPC_CHANNELS.getUpdateState, () => updateService?.getState());
+  registerIpcHandler(policy, IPC_CHANNELS.getUpdateState, () => getCurrentUpdateState());
   registerIpcHandler(policy, IPC_CHANNELS.checkForUpdates, () => updateService?.check() ?? { ok: true, skipped: true });
   registerIpcHandler(policy, IPC_CHANNELS.downloadUpdate, () => updateService?.download() ?? { ok: true, skipped: true });
   registerIpcHandler(policy, IPC_CHANNELS.installUpdate, () => updateService?.install() ?? { ok: true, skipped: true });
@@ -297,20 +297,29 @@ async function loadService(): Promise<void> {
   });
 }
 
+function getCurrentUpdateState(): UpdateState {
+  return updateService?.getState() ?? { state: "idle", currentVersion: app.getVersion() };
+}
+
+async function stopAllForUpdate(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await manager.stopAll();
+    if (!manager.list().every((instance) => instance.status.state === "stopped")) {
+      return { ok: false, error: "代理未完全停止" };
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "停止代理失败" };
+  }
+}
+
 function initializeUpdateService(): void {
   updateService = createUpdateService({
     currentVersion: app.getVersion(),
     isPackaged: app.isPackaged,
     isSmokeMode: smokeMode,
     updater: app.isPackaged && !smokeMode ? createElectronUpdateAdapter() : undefined,
-    stopAll: async () => {
-      try {
-        await manager.stopAll();
-        return { ok: true };
-      } catch (error) {
-        return { ok: false, error: error instanceof Error ? error.message : "停止代理失败" };
-      }
-    },
+    stopAll: stopAllForUpdate,
     publish: (state: UpdateState) => {
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send(IPC_CHANNELS.updateState, state);
     },
@@ -374,6 +383,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", (event) => {
+  updateService?.dispose();
   if (quitting || manager === undefined || manager.list().every((instance) => instance.status.state === "stopped")) return;
   event.preventDefault();
   quitting = true;
