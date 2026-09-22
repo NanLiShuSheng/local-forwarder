@@ -9,6 +9,7 @@ import { RuleList } from "./components/RuleList";
 import { ProxyInstancePanel } from "./components/ProxyInstancePanel";
 import { ProxyInstanceSidebar } from "./components/ProxyInstanceSidebar";
 import { UpdateCard } from "./components/UpdateCard";
+import { resolveManualCheckResult } from "./update-state";
 import { useTheme } from "./useTheme";
 
 const initialStatus: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
@@ -90,10 +91,9 @@ function App() {
   }, [notifyError]);
 
   useEffect(() => {
-    if (manualCheckRef.current && updateState.state === "not-available") {
-      manualCheckRef.current = false;
-      notify({ kind: "success", message: "当前已是最新版本" });
-    }
+    const resolution = resolveManualCheckResult(manualCheckRef.current, updateState.state);
+    manualCheckRef.current = resolution.pending;
+    if (resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
   }, [notify, updateState.state]);
 
   const checkForUpdates = async () => {
@@ -107,10 +107,9 @@ function App() {
         return;
       }
       const nextState = await window.forwarder.getUpdateState();
-      if (manualCheckRef.current && nextState.state === "not-available") {
-        manualCheckRef.current = false;
-        notify({ kind: "success", message: "当前已是最新版本" });
-      }
+      const resolution = resolveManualCheckResult(manualCheckRef.current, nextState.state);
+      manualCheckRef.current = resolution.pending;
+      if (resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
     } catch (cause) {
       manualCheckRef.current = false;
       notifyError(cause, "检查更新失败");
