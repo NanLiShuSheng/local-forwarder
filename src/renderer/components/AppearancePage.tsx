@@ -4,6 +4,9 @@ export interface AppearancePageProps {
   mode: ThemeMode;
   theme: ResolvedTheme;
   onModeChange: (next: ThemeMode) => void;
+  appVersion: string;
+  checkingForUpdates: boolean;
+  onCheckForUpdates: () => void;
 }
 
 const themeOptions: Array<{ mode: ThemeMode; label: string; description: string }> = [
@@ -14,7 +17,7 @@ const themeOptions: Array<{ mode: ThemeMode; label: string; description: string 
 
 const resolvedThemeLabels: Record<ResolvedTheme, string> = { light: "浅色", dark: "深色" };
 
-export function AppearancePage({ mode, theme, onModeChange }: AppearancePageProps) {
+export function AppearancePage({ mode, theme, onModeChange, appVersion, checkingForUpdates, onCheckForUpdates }: AppearancePageProps) {
   return <section className="panel appearance-page appearance-theme-panel">
     <div className="panel-heading">
       <div>
@@ -44,5 +47,17 @@ export function AppearancePage({ mode, theme, onModeChange }: AppearancePageProp
         {mode === option.mode && <span className="appearance-theme-card-check" aria-hidden="true">✓</span>}
       </button>)}
     </div>
+    <section className="appearance-update-section" aria-labelledby="appearance-update-title">
+      <div className="appearance-update-heading">
+        <div>
+          <p className="eyebrow">版本更新</p>
+          <h3 id="appearance-update-title">检查更新</h3>
+        </div>
+        <button type="button" className="button-row-button primary" disabled={checkingForUpdates} onClick={onCheckForUpdates}>
+          {checkingForUpdates ? "正在检查" : "检查更新"}
+        </button>
+      </div>
+      <p className="appearance-update-version">当前版本：{appVersion || "加载中…"}</p>
+    </section>
   </section>;
 }

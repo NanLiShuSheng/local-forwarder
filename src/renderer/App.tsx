@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus } from "../shared/contracts";
+import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus, UpdateState } from "../shared/contracts";
 import { AppearancePage } from "./components/AppearancePage";
 import { ConfigPages, type Page } from "./components/ConfigPages";
 import { DismissibleError } from "./components/DismissibleError";
@@ -8,9 +8,11 @@ import { JsonPreviewPage } from "./components/JsonPreviewPage";
 import { RuleList } from "./components/RuleList";
 import { ProxyInstancePanel } from "./components/ProxyInstancePanel";
 import { ProxyInstanceSidebar } from "./components/ProxyInstanceSidebar";
+import { UpdateCard } from "./components/UpdateCard";
 import { useTheme } from "./useTheme";
 
 const initialStatus: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
+const initialUpdateState: UpdateState = { state: "idle", currentVersion: "" };
 const initialEncryptionPreferences: EncryptionPreferences = { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };
 const initialConfig: AppConfig = { server: { bindHost: "127.0.0.1", port: 8080, timeoutMs: 30000, loggingEnabled: true }, httpRules: [], tcpTargets: [], localValues: {}, mapValues: {}, accounts: {}, cache: { rootDir: "", downloadTarget: "", decryptEnabled: false, autoDownload: false }, request: { host: "127.0.0.1", port: 8080, paramsText: "" }, stringTool: { inputText: "", outputText: "", operation: "replace", findText: "", replaceText: "" } };
 type SidebarNavIconName = "runtime" | "request" | "string" | "json" | "local" | "values" | "encryption" | "logs" | "appearance";
@@ -57,9 +59,85 @@ function App() {
   const [error, setError] = useState("");
   const [bulkRuntimeAction, setBulkRuntimeAction] = useState<"start" | "stop">();
   const [jsonPrefill, setJsonPrefill] = useState<string>();
+  const [appVersion, setAppVersion] = useState("");
+  const [updateState, setUpdateState] = useState<UpdateState>(initialUpdateState);
+  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string>();
+  const manualCheckRef = useRef(false);
   const logReaderRef = useRef<ReturnType<typeof createVersionedLogReader> | null>(null);
   if (logReaderRef.current === null) logReaderRef.current = createVersionedLogReader(() => window.forwarder.logs(), setLogs);
   const readLogs = () => logReaderRef.current!.read();
+
+  useEffect(() => {
+    if (status.error !== undefined) notifyError(status.error, "代理运行失败");
+  }, [notifyError, status.error]);
+
+  useEffect(() => {
+    let mounted = true;
+    const unsubscribe = window.forwarder.onUpdateState((nextState) => {
+      if (mounted) setUpdateState(nextState);
+    });
+    void Promise.all([window.forwarder.getAppVersion(), window.forwarder.getUpdateState()]).then(([version, nextState]) => {
+      if (!mounted) return;
+      setAppVersion(version);
+      setUpdateState(nextState);
+    }).catch((cause) => {
+      if (mounted) notifyError(cause, "无法加载更新状态");
+    });
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [notifyError]);
+
+  useEffect(() => {
+    if (manualCheckRef.current && updateState.state === "not-available") {
+      manualCheckRef.current = false;
+      notify({ kind: "success", message: "当前已是最新版本" });
+    }
+  }, [notify, updateState.state]);
+
+  const checkForUpdates = async () => {
+    manualCheckRef.current = true;
+    setDismissedUpdateVersion(undefined);
+    try {
+      const result = await window.forwarder.checkForUpdates();
+      if (!result.ok) {
+        manualCheckRef.current = false;
+        notifyError(result.error ?? "检查更新失败", "检查更新失败");
+        return;
+      }
+      const nextState = await window.forwarder.getUpdateState();
+      if (manualCheckRef.current && nextState.state === "not-available") {
+        manualCheckRef.current = false;
+        notify({ kind: "success", message: "当前已是最新版本" });
+      }
+    } catch (cause) {
+      manualCheckRef.current = false;
+      notifyError(cause, "检查更新失败");
+    }
+  };
+
+  const downloadUpdate = async () => {
+    try {
+      const result = await window.forwarder.downloadUpdate();
+      if (!result.ok) notifyError(result.error ?? "下载更新失败", "下载更新失败");
+    } catch (cause) {
+      notifyError(cause, "下载更新失败");
+    }
+  };
+
+  const installUpdate = async () => {
+    try {
+      const result = await window.forwarder.installUpdate();
+      if (!result.ok) notifyError(result.error ?? "安装更新失败", "安装更新失败");
+    } catch (cause) {
+      notifyError(cause, "安装更新失败");
+    }
+  };
+
+  const dismissUpdate = () => {
+    if (updateState.update?.version !== undefined) setDismissedUpdateVersion(updateState.update.version);
+  };
 
   const refresh = async () => {
     try {
@@ -311,13 +389,14 @@ function App() {
     </aside>
     <section className={`content ${page === "request" ? "request-page-content" : ""} ${page === "json" ? "json-page-content" : ""} ${page === "logs" ? "log-page-content" : ""}`}>
       {error && <DismissibleError message={error} onClose={() => setError("")} />}
-      {page === "appearance" && <AppearancePage mode={mode} theme={theme} onModeChange={setMode} />}
+      {page === "appearance" && <AppearancePage mode={mode} theme={theme} onModeChange={setMode} appVersion={appVersion || updateState.currentVersion} checkingForUpdates={updateState.state === "checking"} onCheckForUpdates={checkForUpdates} />}
       {page === "runtime" && <><ProxyInstancePanel instances={instances} status={status} config={config} onChange={save} onChooseProjectDirectory={chooseProjectDirectory} onRename={renameProxyInstance} onStart={start} onStop={stop} /><ConfigPages page="addresses" {...pageProps} /></>}
       <div hidden={page !== "json"}><JsonPreviewPage prefillText={jsonPrefill} onPrefillApplied={() => setJsonPrefill(undefined)} /></div>
       {page === "rules" && <RuleList config={config} onChange={save} />}
       {page !== "runtime" && page !== "rules" && page !== "logs" && page !== "appearance" && page !== "json" && <ConfigPages page={page} {...pageProps} />}
       {page === "logs" && <LogPanel logs={logs} selected={selectedLog} onSelect={setSelectedLog} onClear={clearLogs} onFillJson={fillJsonPreview} />}
     </section>
+    <UpdateCard state={updateState} dismissedVersion={dismissedUpdateVersion} onDownload={downloadUpdate} onInstall={installUpdate} onDismiss={dismissUpdate} />
   </main>;
 }
 
