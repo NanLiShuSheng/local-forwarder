@@ -9,7 +9,7 @@ import { RuleList } from "./components/RuleList";
 import { ProxyInstancePanel } from "./components/ProxyInstancePanel";
 import { ProxyInstanceSidebar } from "./components/ProxyInstanceSidebar";
 import { UpdateCard } from "./components/UpdateCard";
-import { resolveManualCheckResult } from "./update-state";
+import { createUpdateStateSynchronizer, resolveManualCheckResult } from "./update-state";
 import { useTheme } from "./useTheme";
 
 const initialStatus: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
@@ -64,6 +64,11 @@ function App() {
   const [updateState, setUpdateState] = useState<UpdateState>(initialUpdateState);
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string>();
   const manualCheckRef = useRef(false);
+  const updateStateSynchronizerRef = useRef<ReturnType<typeof createUpdateStateSynchronizer> | undefined>(undefined);
+  if (updateStateSynchronizerRef.current === undefined) {
+    updateStateSynchronizerRef.current = createUpdateStateSynchronizer(initialUpdateState, setUpdateState);
+  }
+  const updateStateSynchronizer = updateStateSynchronizerRef.current;
   const logReaderRef = useRef<ReturnType<typeof createVersionedLogReader> | null>(null);
   if (logReaderRef.current === null) logReaderRef.current = createVersionedLogReader(() => window.forwarder.logs(), setLogs);
   const readLogs = () => logReaderRef.current!.read();
@@ -75,12 +80,12 @@ function App() {
   useEffect(() => {
     let mounted = true;
     const unsubscribe = window.forwarder.onUpdateState((nextState) => {
-      if (mounted) setUpdateState(nextState);
+      if (mounted) updateStateSynchronizer.receiveEvent(nextState);
     });
     void Promise.all([window.forwarder.getAppVersion(), window.forwarder.getUpdateState()]).then(([version, nextState]) => {
       if (!mounted) return;
       setAppVersion(version);
-      setUpdateState(nextState);
+      updateStateSynchronizer.receiveSnapshot(nextState);
     }).catch((cause) => {
       if (mounted) notifyError(cause, "无法加载更新状态");
     });
@@ -99,6 +104,7 @@ function App() {
   const checkForUpdates = async () => {
     manualCheckRef.current = true;
     setDismissedUpdateVersion(undefined);
+    const checkStartRevision = updateStateSynchronizer.getRevision();
     try {
       const result = await window.forwarder.checkForUpdates();
       if (!result.ok) {
@@ -107,7 +113,9 @@ function App() {
         return;
       }
       const nextState = await window.forwarder.getUpdateState();
-      const resolution = resolveManualCheckResult(manualCheckRef.current, nextState.state);
+      updateStateSynchronizer.receiveSnapshot(nextState);
+      const effectiveState = updateStateSynchronizer.getRevision() > checkStartRevision ? updateStateSynchronizer.getState() : nextState;
+      const resolution = resolveManualCheckResult(manualCheckRef.current, effectiveState.state);
       manualCheckRef.current = resolution.pending;
       if (resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
     } catch (cause) {

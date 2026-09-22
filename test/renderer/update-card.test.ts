@@ -4,7 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import type { UpdateState } from "../../src/shared/contracts";
-import { UpdateCard } from "../../src/renderer/components/UpdateCard";
+import { canInstallUpdate, UpdateCard } from "../../src/renderer/components/UpdateCard";
 
 const callbacks = { onDownload: () => undefined, onInstall: () => undefined, onDismiss: () => undefined };
 
@@ -61,6 +61,11 @@ test("update card keeps update errors localized and uses the fixed download acti
   assert.doesNotMatch(error, /GitHub request failed/);
   assert.match(error, /下载更新/);
   assert.doesNotMatch(error, /重新下载/);
+});
+
+test("only the shared downloaded state enables installation", () => {
+  assert.equal(canInstallUpdate({ state: "downloaded", currentVersion: "1.0.0", update: { version: "1.1.0" } }), true);
+  assert.equal(canInstallUpdate({ state: "error", currentVersion: "1.0.0", update: { version: "1.1.0" } }), false);
 });
 
 test("update card is persistent and visually separated from five-second toasts", async () => {

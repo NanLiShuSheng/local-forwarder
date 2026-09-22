@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import type { UpdateState } from "../../shared/contracts";
 
 export interface UpdateCardProps {
@@ -23,17 +22,12 @@ function formatBytes(value: number): string {
   return `${amount.toFixed(amount >= 10 ? 0 : 1)} ${unit}`;
 }
 
+export function canInstallUpdate(state: UpdateState): boolean {
+  return state.state === "downloaded";
+}
+
 export function UpdateCard({ state, dismissedVersion, onDownload, onInstall, onDismiss }: UpdateCardProps) {
   const version = state.update?.version;
-  const [downloadedVersion, setDownloadedVersion] = useState<string>();
-
-  useEffect(() => {
-    if (state.state === "downloaded" && version !== undefined) {
-      setDownloadedVersion(version);
-    } else if (state.state === "available" || state.state === "downloading") {
-      setDownloadedVersion(undefined);
-    }
-  }, [state.state, version]);
 
   const visible = version !== undefined
     && (state.state === "available" || state.state === "downloading" || state.state === "downloaded" || state.state === "error")
@@ -42,11 +36,11 @@ export function UpdateCard({ state, dismissedVersion, onDownload, onInstall, onD
 
   const rawPercent = state.progress?.percent ?? 0;
   const percent = Number.isFinite(rawPercent) ? Math.max(0, Math.min(100, rawPercent)) : 0;
-  const canInstall = state.state === "downloaded" || (state.state === "error" && downloadedVersion === version);
+  const canInstall = canInstallUpdate(state);
   const isDownloading = state.state === "downloading";
   const errorMessage = state.error !== undefined && /[\u4e00-\u9fff]/.test(state.error) ? state.error : "更新操作失败，请重试";
 
-  return <aside className="update-card" role="region" aria-label="软件更新">
+  return <aside className="update-card" role="region" aria-label="软件更新" aria-live="polite">
     <div className="update-card-header">
       <div>
         <p className="update-card-eyebrow">发现新版本</p>
