@@ -45,9 +45,12 @@ test("IPC channels expose stable runtime commands", () => {
 test("update installation verifies that all proxy instances stopped", async () => {
   const source = await readFile("electron/main.ts", "utf8");
   assert.match(source, /async function stopAllForUpdate/);
-  assert.match(source, /await manager\.stopAll\(\);\s*if \(!manager\.list\(\)\.every\(\(instance\) => instance\.status\.state === "stopped"\)\) \{\s*(?:updateInstallInProgress = false;\s*)?return \{ ok: false, error: "代理未完全停止" \};/);
+  assert.match(source, /await manager\.stopAll\(\);[\s\S]*?if \(!manager\.list\(\)\.every\(\(instance\) => instance\.status\.state === "stopped"\)\) \{[\s\S]*?return \{ ok: false, error: "代理未完全停止" \};/);
   assert.match(source, /stopAll: stopAllForUpdate/);
   assert.match(source, /let updateInstallInProgress = false/);
   assert.match(source, /if \(updateInstallInProgress\) throw new Error\("更新安装中，请稍候"\)/);
   assert.match(source, /onInstallStateChange: \(installing\) =>/);
+  assert.match(source, /updateLifecycle\.trackStart\(\(\) => manager\.start\(id\)\)/);
+  assert.match(source, /updateLifecycle\.trackStart\(\(\) => manager\.startAll\(\)\)/);
+  assert.match(source, /await updateLifecycle\.waitForStarts\(\)/);
 });

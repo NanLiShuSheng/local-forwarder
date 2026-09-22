@@ -13,6 +13,7 @@ import { createSaveConfigHandler, createTrustedIpcHandler, type IpcHandler } fro
 import { extractManualLoginValues, sendManualRequest } from "../src/core/request/manual-request";
 import { getManualRequestConfigValidationError, isValidManualRequestConfig } from "../src/shared/validation";
 import { createElectronUpdateAdapter, createUpdateService, type UpdateService } from "./update-service";
+import { createUpdateLifecycleGate } from "./update-lifecycle";
 
 const IPC_CHANNELS = {
   getConfig: "config:get",
@@ -55,6 +56,7 @@ let configStore: ConfigStore;
 let workspaceStore: ProxyWorkspaceStore;
 let updateService: UpdateService | undefined;
 let updateInstallInProgress = false;
+const updateLifecycle = createUpdateLifecycleGate();
 let quitting = false;
 
 function registerIpcHandler(
@@ -229,7 +231,7 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
   registerIpcHandler(policy, IPC_CHANNELS.start, (_event, id) => {
     if (updateInstallInProgress) throw new Error("更新安装中，请稍候");
     if (id !== undefined && (typeof id !== "string" || id.length === 0)) throw new Error("代理实例参数无效");
-    return manager.start(id);
+    return updateLifecycle.trackStart(() => manager.start(id));
   });
   registerIpcHandler(policy, IPC_CHANNELS.stop, (_event, id) => {
     if (id !== undefined && (typeof id !== "string" || id.length === 0)) throw new Error("代理实例参数无效");
@@ -238,7 +240,7 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
   registerIpcHandler(policy, IPC_CHANNELS.startAll, async () => {
     if (updateInstallInProgress) return { ok: false, error: "更新安装中，请稍候" };
     try {
-      await manager.startAll();
+      await updateLifecycle.trackStart(() => manager.startAll());
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "一键开启失败" };
@@ -306,15 +308,19 @@ function getCurrentUpdateState(): UpdateState {
 
 async function stopAllForUpdate(): Promise<{ ok: boolean; error?: string }> {
   updateInstallInProgress = true;
+  updateLifecycle.beginInstall();
   try {
+    await updateLifecycle.waitForStarts();
     await manager.stopAll();
     if (!manager.list().every((instance) => instance.status.state === "stopped")) {
       updateInstallInProgress = false;
+      updateLifecycle.endInstall();
       return { ok: false, error: "代理未完全停止" };
     }
     return { ok: true };
   } catch (error) {
     updateInstallInProgress = false;
+    updateLifecycle.endInstall();
     return { ok: false, error: error instanceof Error ? error.message : "停止代理失败" };
   }
 }
@@ -328,6 +334,8 @@ function initializeUpdateService(): void {
     stopAll: stopAllForUpdate,
     onInstallStateChange: (installing) => {
       updateInstallInProgress = installing;
+      if (installing) updateLifecycle.beginInstall();
+      else updateLifecycle.endInstall();
     },
     publish: (state: UpdateState) => {
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send(IPC_CHANNELS.updateState, state);
