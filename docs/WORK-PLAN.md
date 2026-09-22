@@ -92,3 +92,11 @@
 - Electron Builder 使用跨平台 appId `com.localforwarder.desktop`、NSIS x64 目标和 `resources/icon.ico`；安装包脚本为 `npm run package:win:x64`。
 - Windows CI 位于 `.github/workflows/windows.yml`，执行 `npm ci`、`npm test`、`npm run build`、NSIS 打包、包校验和 packaged smoke，并上传安装器与 `dist/win-unpacked`。
 - Windows 验收命令：`npm run package:win:x64`、`npm run verify:win`、`node scripts/smoke-packaged.mjs`；需在 Windows x64 runner 完成真实安装、HTTP/HTTPS、TCP/TZT、H5 加密、`.d` 解密、端口恢复和卸载后用户数据保留验证。
+
+### GitHub Releases 自动更新（2026-09-22）
+
+- 主进程通过 `electron-updater` 提供手动检查、下载进度和安装前停止代理；renderer 使用持久更新卡片，普通错误继续使用短时 Toast。
+- Release Tag 必须与 `package.json.version` 匹配，Windows NSIS 与 macOS DMG/ZIP 资产会在发布前校验版本、更新元数据和 `sha512`。
+- `.github/workflows/release.yml` 仅对 `v*` Tag 构建 Windows x64 和 Intel macOS x64，两个构建 job 成功后由 publish job 创建 GitHub Release。
+- macOS Actions 需要配置 `MACOS_CERTIFICATE_BASE64`、`MACOS_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；本地构建跳过签名环境检查和公证。
+- 已完成 renderer、发布脚本和 workflow 契约测试；真实 Windows runner、Apple Developer ID 签名/公证以及两版本自动更新验收需在对应外部环境执行。
