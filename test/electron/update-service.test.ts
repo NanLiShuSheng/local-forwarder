@@ -269,7 +269,7 @@ test("reuses in-flight check and download promises", async () => {
 });
 
 test("installs only after stopping all services and can retry after stop failure", async () => {
-  const { adapter, service } = createHarness();
+  const adapter = new FakeAdapter();
   let stopCalls = 0;
   let shouldStop = false;
   const retryable = createUpdateService({
@@ -296,12 +296,118 @@ test("installs only after stopping all services and can retry after stop failure
   assert.deepEqual(await retryable.install(), { ok: false, error: "安装更新失败" });
   assert.equal(stopCalls, 1);
   assert.equal(adapter.quitAndInstallCalls, 0);
+  assert.equal(retryable.getState().state, "downloaded");
 
   shouldStop = true;
   assert.deepEqual(await retryable.install(), { ok: true });
   assert.equal(stopCalls, 2);
   assert.equal(adapter.quitAndInstallCalls, 1);
   retryable.dispose();
+});
+
+test("refuses installation after downloaded state changes", async () => {
+  for (const transition of ["checking", "downloading", "error"] as const) {
+    let stopCalls = 0;
+    const { adapter, service } = createHarness({
+      stopAll: async () => {
+        stopCalls += 1;
+        return { ok: true };
+      },
+    });
+
+    const download = service.download();
+    adapter.emitDownloaded();
+    adapter.downloadDeferred?.resolve({});
+    await download;
+    assert.equal(service.getState().state, "downloaded");
+
+    if (transition === "checking") adapter.emitChecking();
+    if (transition === "downloading") {
+      adapter.emitProgress({ percent: 20, transferred: 20, total: 100, bytesPerSecond: 10 });
+    }
+    if (transition === "error") adapter.emitError(new Error("download failed"));
+
+    assert.equal(service.getState().state, transition);
+    assert.deepEqual(await service.install(), { ok: false, error: "安装更新失败" });
+    assert.equal(stopCalls, 0);
+    assert.equal(adapter.quitAndInstallCalls, 0);
+    service.dispose();
+  }
+});
+
+test("does not install if update state changes while services stop", async () => {
+  const stopDeferred = new Deferred<{ ok: boolean }>();
+  let stopStarted = false;
+  const { adapter, service } = createHarness({
+    stopAll: async () => {
+      stopStarted = true;
+      return stopDeferred.promise;
+    },
+  });
+
+  const download = service.download();
+  adapter.emitDownloaded();
+  adapter.downloadDeferred?.resolve({});
+  await download;
+
+  const install = service.install();
+  await Promise.resolve();
+  assert.equal(stopStarted, true);
+  adapter.emitChecking();
+  stopDeferred.resolve({ ok: true });
+
+  assert.deepEqual(await install, { ok: false, error: "安装更新失败" });
+  assert.equal(adapter.quitAndInstallCalls, 0);
+  service.dispose();
+});
+
+test("keeps downloaded state when stopping services rejects so installation can retry", async () => {
+  const adapter = new FakeAdapter();
+  let stopCalls = 0;
+  const service = createUpdateService({
+    currentVersion: "1.0.0",
+    isPackaged: true,
+    isSmokeMode: false,
+    updater: adapter,
+    stopAll: async () => {
+      stopCalls += 1;
+      if (stopCalls === 1) throw new Error("stop-all failed");
+      return { ok: true };
+    },
+    publish: () => undefined,
+  });
+
+  const download = service.download();
+  adapter.emitDownloaded();
+  adapter.downloadDeferred?.resolve({});
+  await download;
+
+  assert.deepEqual(await service.install(), { ok: false, error: "安装更新失败" });
+  assert.equal(service.getState().state, "downloaded");
+  assert.equal(adapter.quitAndInstallCalls, 0);
+  assert.deepEqual(await service.install(), { ok: true });
+  assert.equal(adapter.quitAndInstallCalls, 1);
+  service.dispose();
+});
+
+test("does not access an updater when no adapter is provided", async () => {
+  let stopCalls = 0;
+  const service = createUpdateService({
+    currentVersion: "1.0.0",
+    isPackaged: true,
+    isSmokeMode: false,
+    stopAll: async () => {
+      stopCalls += 1;
+      return { ok: true };
+    },
+    publish: () => undefined,
+  });
+
+  assert.deepEqual(await service.check(), { ok: true });
+  assert.deepEqual(await service.download(), { ok: true });
+  assert.deepEqual(await service.install(), { ok: true });
+  assert.deepEqual(service.getState(), { state: "idle", currentVersion: "1.0.0" });
+  assert.equal(stopCalls, 0);
   service.dispose();
 });
 

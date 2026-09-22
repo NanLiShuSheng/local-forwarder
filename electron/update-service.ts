@@ -60,7 +60,6 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
   let checkPromise: Promise<OperationResult> | undefined;
   let downloadPromise: Promise<OperationResult> | undefined;
   let installPromise: Promise<OperationResult> | undefined;
-  let downloadReady = false;
   let currentOperation: UpdateOperation = "check";
   const removeListeners: Array<() => void> = [];
 
@@ -74,11 +73,9 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
       setState({ state: "checking", currentVersion: options.currentVersion });
     }));
     removeListeners.push(updater.onUpdateAvailable((update) => {
-      downloadReady = false;
       setState({ state: "available", currentVersion: options.currentVersion, update });
     }));
     removeListeners.push(updater.onUpdateNotAvailable(() => {
-      downloadReady = false;
       setState({ state: "not-available", currentVersion: options.currentVersion });
     }));
     removeListeners.push(updater.onDownloadProgress((progress) => {
@@ -90,7 +87,6 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
       });
     }));
     removeListeners.push(updater.onUpdateDownloaded((update) => {
-      downloadReady = true;
       setState({ state: "downloaded", currentVersion: options.currentVersion, update });
     }));
     removeListeners.push(updater.onError(() => {
@@ -133,7 +129,7 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
   function install(): Promise<OperationResult> {
     if (!active) return Promise.resolve({ ok: true });
     if (installPromise !== undefined) return installPromise;
-    if (!downloadReady) {
+    if (state.state !== "downloaded") {
       setError("install");
       return Promise.resolve({ ok: false, error: FALLBACK_ERRORS.install });
     }
@@ -141,8 +137,18 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
     currentOperation = "install";
     installPromise = Promise.resolve()
       .then(async () => {
-        const result = await options.stopAll();
-        if (result !== undefined && !result.ok) throw new Error("stop-all failed");
+        let result: { ok: boolean; error?: string } | void;
+        try {
+          result = await options.stopAll();
+        } catch {
+          return { ok: false, error: FALLBACK_ERRORS.install };
+        }
+        if (result !== undefined && !result.ok) {
+          return { ok: false, error: FALLBACK_ERRORS.install };
+        }
+        if (state.state !== "downloaded") {
+          return { ok: false, error: FALLBACK_ERRORS.install };
+        }
         updater.quitAndInstall();
         return { ok: true };
       })
