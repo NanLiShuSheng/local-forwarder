@@ -153,6 +153,10 @@ export interface UpdateState {
   error?: string;
 }
 
+export interface UpdateOperationResult extends OperationResult {
+  skipped?: boolean;
+}
+
 export type EncryptionMode = "full" | "incremental";
 
 export type EncryptionDirectoryKind = "input" | "output";
@@ -198,6 +202,12 @@ export interface EncryptionProgress {
 
 export interface ForwarderApi {
   getConfig(): Promise<AppConfig>;
+  getAppVersion(): Promise<string>;
+  getUpdateState(): Promise<UpdateState>;
+  checkForUpdates(): Promise<UpdateOperationResult>;
+  downloadUpdate(): Promise<UpdateOperationResult>;
+  installUpdate(): Promise<UpdateOperationResult>;
+  onUpdateState(listener: (state: UpdateState) => void): () => void;
   saveConfig(config: AppConfig): Promise<OperationResult>;
   getSharedValues(): Promise<Record<string, string>>;
   saveSharedValues(values: Record<string, string>): Promise<OperationResult>;
@@ -227,6 +237,12 @@ export interface ForwarderApi {
 
 export const IPC_CHANNELS = {
   getConfig: "config:get",
+  getAppVersion: "app:version:get",
+  getUpdateState: "update:state:get",
+  checkForUpdates: "update:check",
+  downloadUpdate: "update:download",
+  installUpdate: "update:install",
+  updateState: "update:state",
   saveConfig: "config:save",
   getSharedValues: "values:shared:get",
   saveSharedValues: "values:shared:save",

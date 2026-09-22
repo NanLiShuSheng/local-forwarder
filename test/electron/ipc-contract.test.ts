@@ -5,6 +5,12 @@ import { IPC_CHANNELS, type RuntimeStatus } from "../../src/shared/contracts";
 test("IPC channels expose stable runtime commands", () => {
   assert.deepEqual(IPC_CHANNELS, {
     getConfig: "config:get",
+    getAppVersion: "app:version:get",
+    getUpdateState: "update:state:get",
+    checkForUpdates: "update:check",
+    downloadUpdate: "update:download",
+    installUpdate: "update:install",
+    updateState: "update:state",
     saveConfig: "config:save",
     importLegacy: "config:import-legacy",
     exportConfig: "config:export",

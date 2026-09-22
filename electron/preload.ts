@@ -1,8 +1,14 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferencesPatch, EncryptionProgress, ForwarderApi } from "../src/shared/contracts";
+import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferencesPatch, EncryptionProgress, ForwarderApi, UpdateState } from "../src/shared/contracts";
 
 const IPC_CHANNELS = {
   getConfig: "config:get",
+  getAppVersion: "app:version:get",
+  getUpdateState: "update:state:get",
+  checkForUpdates: "update:check",
+  downloadUpdate: "update:download",
+  installUpdate: "update:install",
+  updateState: "update:state",
   saveConfig: "config:save",
   getSharedValues: "values:shared:get",
   saveSharedValues: "values:shared:save",
@@ -32,6 +38,16 @@ const IPC_CHANNELS = {
 
 const api: ForwarderApi = {
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.getConfig),
+  getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),
+  getUpdateState: () => ipcRenderer.invoke(IPC_CHANNELS.getUpdateState),
+  checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.checkForUpdates),
+  downloadUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.downloadUpdate),
+  installUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.installUpdate),
+  onUpdateState: (listener: (state: UpdateState) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: UpdateState) => listener(state);
+    ipcRenderer.on(IPC_CHANNELS.updateState, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.updateState, handler);
+  },
   saveConfig: (config: AppConfig) => ipcRenderer.invoke(IPC_CHANNELS.saveConfig, config),
   getSharedValues: () => ipcRenderer.invoke(IPC_CHANNELS.getSharedValues),
   saveSharedValues: (values) => ipcRenderer.invoke(IPC_CHANNELS.saveSharedValues, values),

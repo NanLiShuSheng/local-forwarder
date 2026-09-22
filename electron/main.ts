@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { encryptDirectory } from "../src/core/encryption/encryptor";
 import { readEncryptionPreferences, saveEncryptionPreferences } from "../src/core/encryption/preferences";
-import type { AppConfig, EncryptionMode, LogEntry, ProxyInstanceSummary } from "../src/shared/contracts";
+import type { AppConfig, EncryptionMode, LogEntry, ProxyInstanceSummary, UpdateState } from "../src/shared/contracts";
 import { ConfigStore } from "../src/core/config/config-store";
 import { createDefaultConfig } from "../src/core/config/model";
 import { ForwardingServiceManager } from "../src/core/runtime/forwarding-service-manager";
@@ -12,9 +12,16 @@ import { createRendererSecurityPolicy, type RendererSecurityPolicy } from "./sec
 import { createSaveConfigHandler, createTrustedIpcHandler, type IpcHandler } from "./ipc";
 import { extractManualLoginValues, sendManualRequest } from "../src/core/request/manual-request";
 import { getManualRequestConfigValidationError, isValidManualRequestConfig } from "../src/shared/validation";
+import { createElectronUpdateAdapter, createUpdateService, type UpdateService } from "./update-service";
 
 const IPC_CHANNELS = {
   getConfig: "config:get",
+  getAppVersion: "app:version:get",
+  getUpdateState: "update:state:get",
+  checkForUpdates: "update:check",
+  downloadUpdate: "update:download",
+  installUpdate: "update:install",
+  updateState: "update:state",
   saveConfig: "config:save",
   getSharedValues: "values:shared:get",
   saveSharedValues: "values:shared:save",
@@ -46,6 +53,7 @@ const smokeMode = process.argv.includes("--smoke");
 let manager: ForwardingServiceManager;
 let configStore: ConfigStore;
 let workspaceStore: ProxyWorkspaceStore;
+let updateService: UpdateService | undefined;
 let quitting = false;
 
 function registerIpcHandler(
@@ -58,6 +66,11 @@ function registerIpcHandler(
 
 function registerIpcHandlers(policy: RendererSecurityPolicy): void {
   registerIpcHandler(policy, IPC_CHANNELS.getConfig, () => manager.getConfig());
+  registerIpcHandler(policy, IPC_CHANNELS.getAppVersion, () => app.getVersion());
+  registerIpcHandler(policy, IPC_CHANNELS.getUpdateState, () => updateService?.getState());
+  registerIpcHandler(policy, IPC_CHANNELS.checkForUpdates, () => updateService?.check() ?? { ok: true, skipped: true });
+  registerIpcHandler(policy, IPC_CHANNELS.downloadUpdate, () => updateService?.download() ?? { ok: true, skipped: true });
+  registerIpcHandler(policy, IPC_CHANNELS.installUpdate, () => updateService?.install() ?? { ok: true, skipped: true });
   registerIpcHandler(
     policy,
     IPC_CHANNELS.saveConfig,
@@ -284,6 +297,26 @@ async function loadService(): Promise<void> {
   });
 }
 
+function initializeUpdateService(): void {
+  updateService = createUpdateService({
+    currentVersion: app.getVersion(),
+    isPackaged: app.isPackaged,
+    isSmokeMode: smokeMode,
+    updater: app.isPackaged && !smokeMode ? createElectronUpdateAdapter() : undefined,
+    stopAll: async () => {
+      try {
+        await manager.stopAll();
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : "停止代理失败" };
+      }
+    },
+    publish: (state: UpdateState) => {
+      for (const window of BrowserWindow.getAllWindows()) window.webContents.send(IPC_CHANNELS.updateState, state);
+    },
+  });
+}
+
 function createWindow(policy: RendererSecurityPolicy): void {
   const window = new BrowserWindow({
     width: 1200,
@@ -318,8 +351,10 @@ const rendererSecurityPolicy = createRendererSecurityPolicy({
 
 app.whenReady().then(() => {
   void loadService().then(() => {
+    initializeUpdateService();
     registerIpcHandlers(rendererSecurityPolicy);
     createWindow(rendererSecurityPolicy);
+    void updateService?.startBackgroundCheck();
   }).catch((error) => {
     dialog.showErrorBox("Local Forwarder", error instanceof Error ? error.message : "could not load configuration");
     app.quit();
