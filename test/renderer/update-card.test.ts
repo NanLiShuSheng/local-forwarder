@@ -38,6 +38,16 @@ test("update card renders state-specific actions and bounded progress semantics"
   assert.match(downloading, /aria-valuenow="0"/);
   assert.match(downloading, /正在下载更新 0%/);
 
+  for (const [percent, expected] of [[-10, "0"], [150, "100"], [Number.POSITIVE_INFINITY, "0"]] as const) {
+    const bounded = renderCard({
+      state: "downloading",
+      currentVersion: "1.0.0",
+      update: { version: "1.1.0" },
+      progress: { percent, transferred: 0, total: 0, bytesPerSecond: 0 },
+    });
+    assert.match(bounded, new RegExp(`aria-valuenow="${expected}"`));
+  }
+
   const downloaded = renderCard({ state: "downloaded", currentVersion: "1.0.0", update: { version: "1.1.0" } });
   assert.match(downloaded, /更新已下载/);
   assert.match(downloaded, /立即重启更新/);
@@ -64,6 +74,18 @@ test("update card is persistent and visually separated from five-second toasts",
   assert.match(styles, /--update-background/);
   assert.match(styles, /@media \(max-width: 600px\)[^}]*\.update-card/);
   assert.doesNotMatch(source, /TOAST_DURATION_MS/);
+});
+
+test("App wires update state loading, subscription cleanup, and card actions", async () => {
+  const app = await readFile("src/renderer/App.tsx", "utf8");
+  assert.match(app, /getAppVersion\(\)/);
+  assert.match(app, /getUpdateState\(\)/);
+  assert.match(app, /onUpdateState/);
+  assert.match(app, /unsubscribe\(\)/);
+  assert.match(app, /checkForUpdates/);
+  assert.match(app, /downloadUpdate/);
+  assert.match(app, /installUpdate/);
+  assert.match(app, /<UpdateCard/);
 });
 
 test("appearance page exposes current version and manual check", async () => {
