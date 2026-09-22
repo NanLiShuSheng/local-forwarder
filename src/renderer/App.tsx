@@ -9,7 +9,7 @@ import { RuleList } from "./components/RuleList";
 import { ProxyInstancePanel } from "./components/ProxyInstancePanel";
 import { ProxyInstanceSidebar } from "./components/ProxyInstanceSidebar";
 import { UpdateCard } from "./components/UpdateCard";
-import { createUpdateStateSynchronizer, resolveManualCheckResult } from "./update-state";
+import { createManualCheckTracker, createUpdateStateSynchronizer, resolveManualCheckResult } from "./update-state";
 import { useTheme } from "./useTheme";
 
 const initialStatus: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
@@ -63,7 +63,11 @@ function App() {
   const [appVersion, setAppVersion] = useState("");
   const [updateState, setUpdateState] = useState<UpdateState>(initialUpdateState);
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string>();
-  const manualCheckRef = useRef(false);
+  const manualCheckTrackerRef = useRef<ReturnType<typeof createManualCheckTracker> | undefined>(undefined);
+  if (manualCheckTrackerRef.current === undefined) {
+    manualCheckTrackerRef.current = createManualCheckTracker();
+  }
+  const manualCheckTracker = manualCheckTrackerRef.current;
   const updateStateSynchronizerRef = useRef<ReturnType<typeof createUpdateStateSynchronizer> | undefined>(undefined);
   if (updateStateSynchronizerRef.current === undefined) {
     updateStateSynchronizerRef.current = createUpdateStateSynchronizer(initialUpdateState, setUpdateState);
@@ -79,13 +83,14 @@ function App() {
 
   useEffect(() => {
     let mounted = true;
+    const initialSnapshot = updateStateSynchronizer.beginSnapshot();
     const unsubscribe = window.forwarder.onUpdateState((nextState) => {
       if (mounted) updateStateSynchronizer.receiveEvent(nextState);
     });
     void Promise.all([window.forwarder.getAppVersion(), window.forwarder.getUpdateState()]).then(([version, nextState]) => {
       if (!mounted) return;
       setAppVersion(version);
-      updateStateSynchronizer.receiveSnapshot(nextState);
+      updateStateSynchronizer.receiveSnapshot(initialSnapshot, nextState);
     }).catch((cause) => {
       if (mounted) notifyError(cause, "无法加载更新状态");
     });
@@ -96,31 +101,32 @@ function App() {
   }, [notifyError]);
 
   useEffect(() => {
-    const resolution = resolveManualCheckResult(manualCheckRef.current, updateState.state);
-    manualCheckRef.current = resolution.pending;
-    if (resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
+    const requestId = manualCheckTracker.current();
+    if (requestId === undefined) return;
+    const resolution = resolveManualCheckResult(manualCheckTracker.hasPending(), updateState.state);
+    if (resolution.pending) return;
+    if (manualCheckTracker.complete(requestId) && resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
   }, [notify, updateState.state]);
 
   const checkForUpdates = async () => {
-    manualCheckRef.current = true;
+    const requestId = manualCheckTracker.begin();
     setDismissedUpdateVersion(undefined);
-    const checkStartRevision = updateStateSynchronizer.getRevision();
+    const checkSnapshot = updateStateSynchronizer.beginSnapshot();
     try {
       const result = await window.forwarder.checkForUpdates();
+      if (!manualCheckTracker.isCurrent(requestId)) return;
       if (!result.ok) {
-        manualCheckRef.current = false;
+        manualCheckTracker.complete(requestId);
         notifyError(result.error ?? "检查更新失败", "检查更新失败");
         return;
       }
       const nextState = await window.forwarder.getUpdateState();
-      updateStateSynchronizer.receiveSnapshot(nextState);
-      const effectiveState = updateStateSynchronizer.getRevision() > checkStartRevision ? updateStateSynchronizer.getState() : nextState;
-      const resolution = resolveManualCheckResult(manualCheckRef.current, effectiveState.state);
-      manualCheckRef.current = resolution.pending;
-      if (resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
+      updateStateSynchronizer.receiveSnapshot(checkSnapshot, nextState);
+      if (!manualCheckTracker.isCurrent(requestId)) return;
+      const resolution = resolveManualCheckResult(manualCheckTracker.hasPending(), updateStateSynchronizer.getState().state);
+      if (!resolution.pending && manualCheckTracker.complete(requestId) && resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
     } catch (cause) {
-      manualCheckRef.current = false;
-      notifyError(cause, "检查更新失败");
+      if (manualCheckTracker.complete(requestId)) notifyError(cause, "检查更新失败");
     }
   };
 
