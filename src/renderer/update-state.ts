@@ -9,7 +9,7 @@ export interface ManualCheckTracker {
   begin(startRevision?: number, initialState?: UpdateStateKind): number;
   current(): number | undefined;
   isCurrent(id: number): boolean;
-  canResolve(id: number, revision: number, state: UpdateStateKind): boolean;
+  canResolve(id: number, revision: number, state: UpdateStateKind, fromSuccessfulSnapshot?: boolean): boolean;
   complete(id: number): boolean;
   hasPending(): boolean;
 }
@@ -46,13 +46,16 @@ export function createManualCheckTracker(): ManualCheckTracker {
     },
     current: () => active?.id,
     isCurrent: (id) => active?.id === id,
-    canResolve(id, revision, state) {
-      if (active?.id !== id || revision <= active.startRevision) return false;
+    canResolve(id, revision, state, fromSuccessfulSnapshot = false) {
+      if (active?.id !== id) return false;
       if (state === "checking") {
+        if (revision <= active.startRevision) return false;
         active.sawChecking = true;
         return false;
       }
       if (state !== "available" && state !== "not-available") return false;
+      if (fromSuccessfulSnapshot) return true;
+      if (revision <= active.startRevision) return false;
       return active.sawChecking;
     },
     complete(id) {

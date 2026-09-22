@@ -124,7 +124,14 @@ function App() {
       const nextState = await window.forwarder.getUpdateState();
       updateStateSynchronizer.receiveSnapshot(checkSnapshot, nextState);
       if (!manualCheckTracker.isCurrent(requestId)) return;
-      const resolution = resolveManualCheckResult(manualCheckTracker.hasPending(), updateStateSynchronizer.getState().state);
+      const effectiveState = updateStateSynchronizer.getState();
+      if (effectiveState.state === "error") {
+        manualCheckTracker.complete(requestId);
+        notifyError(effectiveState.error ?? "检查更新失败", "检查更新失败");
+        return;
+      }
+      if (!manualCheckTracker.canResolve(requestId, updateStateSynchronizer.getRevision(), effectiveState.state, true)) return;
+      const resolution = resolveManualCheckResult(manualCheckTracker.hasPending(), effectiveState.state);
       if (!resolution.pending && manualCheckTracker.complete(requestId) && resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
     } catch (cause) {
       if (manualCheckTracker.complete(requestId)) notifyError(cause, "检查更新失败");

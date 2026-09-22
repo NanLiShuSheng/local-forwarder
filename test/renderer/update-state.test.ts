@@ -81,3 +81,12 @@ test("manual checks ignore terminal events until their checking event is observe
   assert.equal(tracker.canResolve(requestId, 4, "checking"), false);
   assert.equal(tracker.canResolve(requestId, 5, "not-available"), true);
 });
+
+test("an explicit successful snapshot can resolve a manual check without an event", () => {
+  const tracker = createManualCheckTracker();
+  const requestId = tracker.begin(2, "available");
+
+  assert.equal(tracker.canResolve(requestId, 2, "not-available"), false);
+  assert.equal(tracker.canResolve(requestId, 2, "not-available", true), true);
+  assert.equal(tracker.canResolve(requestId, 2, "error", true), false);
+});
