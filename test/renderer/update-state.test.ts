@@ -71,3 +71,13 @@ test("an older manual check cannot complete a newer request", () => {
   assert.equal(tracker.complete(second), true);
   assert.equal(tracker.hasPending(), false);
 });
+
+test("manual checks ignore terminal events until their checking event is observed", () => {
+  const tracker = createManualCheckTracker();
+  const requestId = tracker.begin(2, "available");
+
+  assert.equal(tracker.canResolve(requestId, 2, "not-available"), false);
+  assert.equal(tracker.canResolve(requestId, 3, "not-available"), false);
+  assert.equal(tracker.canResolve(requestId, 4, "checking"), false);
+  assert.equal(tracker.canResolve(requestId, 5, "not-available"), true);
+});

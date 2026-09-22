@@ -104,14 +104,15 @@ function App() {
     const requestId = manualCheckTracker.current();
     if (requestId === undefined) return;
     const resolution = resolveManualCheckResult(manualCheckTracker.hasPending(), updateState.state);
+    if (!manualCheckTracker.canResolve(requestId, updateStateSynchronizer.getRevision(), updateState.state)) return;
     if (resolution.pending) return;
     if (manualCheckTracker.complete(requestId) && resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
   }, [notify, updateState.state]);
 
   const checkForUpdates = async () => {
-    const requestId = manualCheckTracker.begin();
     setDismissedUpdateVersion(undefined);
     const checkSnapshot = updateStateSynchronizer.beginSnapshot();
+    const requestId = manualCheckTracker.begin(checkSnapshot.eventRevision, updateStateSynchronizer.getState().state);
     try {
       const result = await window.forwarder.checkForUpdates();
       if (!manualCheckTracker.isCurrent(requestId)) return;

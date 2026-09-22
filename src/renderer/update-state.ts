@@ -6,9 +6,10 @@ export interface ManualCheckResult {
 }
 
 export interface ManualCheckTracker {
-  begin(): number;
+  begin(startRevision?: number, initialState?: UpdateStateKind): number;
   current(): number | undefined;
   isCurrent(id: number): boolean;
+  canResolve(id: number, revision: number, state: UpdateStateKind): boolean;
   complete(id: number): boolean;
   hasPending(): boolean;
 }
@@ -17,6 +18,7 @@ export interface UpdateStateSynchronizer {
   beginSnapshot(): UpdateStateSnapshotToken;
   receiveEvent(state: UpdateState): void;
   receiveSnapshot(token: UpdateStateSnapshotToken, state: UpdateState): boolean;
+  getRevision(): number;
   getState(): UpdateState;
 }
 
@@ -34,21 +36,31 @@ export function resolveManualCheckResult(pending: boolean, state: UpdateStateKin
 
 export function createManualCheckTracker(): ManualCheckTracker {
   let nextId = 0;
-  let activeId: number | undefined;
+  let active: { id: number; startRevision: number; sawChecking: boolean } | undefined;
 
   return {
-    begin() {
-      activeId = ++nextId;
-      return activeId;
+    begin(startRevision = 0, initialState = "idle") {
+      const id = ++nextId;
+      active = { id, startRevision, sawChecking: initialState === "checking" };
+      return id;
     },
-    current: () => activeId,
-    isCurrent: (id) => activeId === id,
+    current: () => active?.id,
+    isCurrent: (id) => active?.id === id,
+    canResolve(id, revision, state) {
+      if (active?.id !== id || revision <= active.startRevision) return false;
+      if (state === "checking") {
+        active.sawChecking = true;
+        return false;
+      }
+      if (state !== "available" && state !== "not-available") return false;
+      return active.sawChecking;
+    },
     complete(id) {
-      if (activeId !== id) return false;
-      activeId = undefined;
+      if (active?.id !== id) return false;
+      active = undefined;
       return true;
     },
-    hasPending: () => activeId !== undefined,
+    hasPending: () => active !== undefined,
   };
 }
 
@@ -75,6 +87,7 @@ export function createUpdateStateSynchronizer(initialState: UpdateState, applySt
       applyState(state);
       return true;
     },
+    getRevision: () => revision,
     getState: () => currentState,
   };
 }
