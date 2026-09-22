@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run verify:release:tag
+      - run: npm run package:release:win:x64
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+      - run: node scripts/smoke-packaged.mjs
+      - run: node scripts/smoke-win-resources.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: local-forwarder-windows-release
+          if-no-files-found: error
+          path: |
+            dist/Local Forwarder Setup *.exe
+            dist/latest.yml
+
+  build-macos:
+    needs: build-windows
+    runs-on: macos-13
+    env:
+      CSC_LINK: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+      CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: node scripts/verify-macos-signing-env.mjs
+      - run: npm run verify:release:tag
+      - run: npm run package:release:mac:x64
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: local-forwarder-macos-release
+          if-no-files-found: error
+          path: |
+            release/Local Forwarder-*.dmg
+            dist/*-mac.zip
+            dist/latest-mac.yml
+
+  publish:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: local-forwarder-windows-release
+          path: release-assets/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: local-forwarder-macos-release
+          path: release-assets/macos
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            release-assets/windows/*.exe \
+            release-assets/windows/latest.yml \
+            release-assets/macos/*.dmg \
+            release-assets/macos/*-mac.zip \
+            release-assets/macos/latest-mac.yml \
+            --verify-tag \
+            --title "Local Forwarder $GITHUB_REF_NAME" \
+            --generate-notes
