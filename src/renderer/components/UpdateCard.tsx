@@ -40,9 +40,11 @@ export function UpdateCard({ state, dismissedVersion, onDownload, onInstall, onD
     && dismissedVersion !== version;
   if (!visible) return null;
 
-  const percent = Math.max(0, Math.min(100, state.progress?.percent ?? 0));
+  const rawPercent = state.progress?.percent ?? 0;
+  const percent = Number.isFinite(rawPercent) ? Math.max(0, Math.min(100, rawPercent)) : 0;
   const canInstall = state.state === "downloaded" || (state.state === "error" && downloadedVersion === version);
   const isDownloading = state.state === "downloading";
+  const errorMessage = state.error !== undefined && /[\u4e00-\u9fff]/.test(state.error) ? state.error : "更新操作失败，请重试";
 
   return <aside className="update-card" role="region" aria-label="软件更新">
     <div className="update-card-header">
@@ -54,15 +56,15 @@ export function UpdateCard({ state, dismissedVersion, onDownload, onInstall, onD
     </div>
     {isDownloading && <div className="update-card-progress-wrap">
       <div className="update-card-progress-heading"><span>下载进度</span><strong>{Math.round(percent)}%</strong></div>
-      <progress className="update-card-progress" max={100} value={percent} aria-label="下载进度" />
+      <progress className="update-card-progress" max={100} value={percent} aria-label="下载进度" aria-valuenow={percent} />
       <div className="update-card-progress-meta"><span>{formatBytes(state.progress?.transferred ?? 0)} / {formatBytes(state.progress?.total ?? 0)}</span><span>{formatBytes(state.progress?.bytesPerSecond ?? 0)}/s</span></div>
     </div>}
-    {state.state === "error" && state.error !== undefined && <p className="update-card-error">{state.error}</p>}
+    {state.state === "error" && <p className="update-card-error">{errorMessage}</p>}
     {state.state === "downloaded" && <p className="update-card-message">更新已下载</p>}
     {state.state === "available" && <p className="update-card-message">准备下载版本 {version}</p>}
     {isDownloading && <p className="update-card-message">正在下载更新 {Math.round(percent)}%</p>}
     <div className="update-card-actions">
-      {!canInstall && <button type="button" className="button-row-button primary" disabled={isDownloading} onClick={onDownload}>{state.state === "error" ? "重新下载" : "下载更新"}</button>}
+      {!canInstall && <button type="button" className="button-row-button primary" disabled={isDownloading} onClick={onDownload}>下载更新</button>}
       {canInstall && <button type="button" className="button-row-button primary" onClick={onInstall}>立即重启更新</button>}
       {!isDownloading && <button type="button" className="button-row-button" onClick={onDismiss}>稍后更新</button>}
     </div>
