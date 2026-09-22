@@ -390,6 +390,27 @@ test("keeps downloaded state when stopping services rejects so installation can 
   service.dispose();
 });
 
+test("holds the install lifecycle lock through shutdown and releases it on failure", async () => {
+  const stopDeferred = new Deferred<{ ok: boolean }>();
+  const lockStates: boolean[] = [];
+  const { adapter, service } = createHarness({
+    stopAll: () => stopDeferred.promise,
+    onInstallStateChange: (installing) => lockStates.push(installing),
+  });
+
+  const download = service.download();
+  adapter.emitDownloaded();
+  adapter.downloadDeferred?.resolve({});
+  await download;
+
+  const install = service.install();
+  assert.deepEqual(lockStates, [true]);
+  stopDeferred.resolve({ ok: false });
+  assert.deepEqual(await install, { ok: false, error: "安装更新失败" });
+  assert.deepEqual(lockStates, [true, false]);
+  service.dispose();
+});
+
 test("does not access an updater when no adapter is provided", async () => {
   let stopCalls = 0;
   const service = createUpdateService({

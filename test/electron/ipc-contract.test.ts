@@ -13,20 +13,27 @@ test("IPC channels expose stable runtime commands", () => {
     installUpdate: "update:install",
     updateState: "update:state",
     saveConfig: "config:save",
-    importLegacy: "config:import-legacy",
-    exportConfig: "config:export",
+    getSharedValues: "values:shared:get",
+    saveSharedValues: "values:shared:save",
+    getLoginCache: "values:login:get",
+    saveLoginCache: "values:login:save",
     selectProjectDirectory: "config:select-project-directory",
     selectEncryptionDirectory: "encryption:select-directory",
     getEncryptionPreferences: "encryption:get-preferences",
     saveEncryptionPreferences: "encryption:save-preferences",
     encryptDirectory: "encryption:run",
+    encryptionProgress: "encryption:progress",
     sendRequest: "request:send",
     listProxyInstances: "proxy-instances:list",
     selectProxyInstance: "proxy-instances:select",
     createProxyInstance: "proxy-instances:create",
     duplicateProxyInstance: "proxy-instances:duplicate",
+    renameProxyInstance: "proxy-instances:rename",
+    deleteProxyInstance: "proxy-instances:delete",
     start: "runtime:start",
     stop: "runtime:stop",
+    startAll: "runtime:start-all",
+    stopAll: "runtime:stop-all",
     status: "runtime:status",
     logs: "runtime:logs",
     clearLogs: "runtime:logs:clear",
@@ -37,6 +44,10 @@ test("IPC channels expose stable runtime commands", () => {
 
 test("update installation verifies that all proxy instances stopped", async () => {
   const source = await readFile("electron/main.ts", "utf8");
-  assert.match(source, /function stopAllForUpdate/);
-  assert.match(source, /manager\.list\(\)\.every\(\(instance\) => instance\.status\.state === "stopped"\)/);
+  assert.match(source, /async function stopAllForUpdate/);
+  assert.match(source, /await manager\.stopAll\(\);\s*if \(!manager\.list\(\)\.every\(\(instance\) => instance\.status\.state === "stopped"\)\) \{\s*(?:updateInstallInProgress = false;\s*)?return \{ ok: false, error: "代理未完全停止" \};/);
+  assert.match(source, /stopAll: stopAllForUpdate/);
+  assert.match(source, /let updateInstallInProgress = false/);
+  assert.match(source, /if \(updateInstallInProgress\) throw new Error\("更新安装中，请稍候"\)/);
+  assert.match(source, /onInstallStateChange: \(installing\) =>/);
 });

@@ -25,6 +25,7 @@ export interface UpdateServiceOptions {
   isSmokeMode: boolean;
   updater?: UpdateAdapter;
   stopAll: () => Promise<{ ok: boolean; error?: string } | void>;
+  onInstallStateChange?: (installing: boolean) => void;
   publish: (state: UpdateState) => void;
 }
 
@@ -135,24 +136,41 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
     }
 
     currentOperation = "install";
+    let installLockHeld = false;
+    const releaseInstallLock = () => {
+      if (!installLockHeld) return;
+      installLockHeld = false;
+      options.onInstallStateChange?.(false);
+    };
+    options.onInstallStateChange?.(true);
+    installLockHeld = true;
     installPromise = Promise.resolve()
       .then(async () => {
         let result: { ok: boolean; error?: string } | void;
         try {
           result = await options.stopAll();
         } catch {
+          releaseInstallLock();
           return { ok: false, error: FALLBACK_ERRORS.install };
         }
         if (result !== undefined && !result.ok) {
+          releaseInstallLock();
           return { ok: false, error: FALLBACK_ERRORS.install };
         }
         if (state.state !== "downloaded") {
+          releaseInstallLock();
           return { ok: false, error: FALLBACK_ERRORS.install };
         }
-        updater.quitAndInstall();
+        try {
+          updater.quitAndInstall();
+        } catch (error) {
+          releaseInstallLock();
+          throw error;
+        }
         return { ok: true };
       })
       .catch(() => {
+        releaseInstallLock();
         setError("install");
         return { ok: false, error: FALLBACK_ERRORS.install };
       })

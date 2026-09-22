@@ -54,6 +54,7 @@ let manager: ForwardingServiceManager;
 let configStore: ConfigStore;
 let workspaceStore: ProxyWorkspaceStore;
 let updateService: UpdateService | undefined;
+let updateInstallInProgress = false;
 let quitting = false;
 
 function registerIpcHandler(
@@ -226,6 +227,7 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.start, (_event, id) => {
+    if (updateInstallInProgress) throw new Error("更新安装中，请稍候");
     if (id !== undefined && (typeof id !== "string" || id.length === 0)) throw new Error("代理实例参数无效");
     return manager.start(id);
   });
@@ -234,6 +236,7 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     return manager.stop(id);
   });
   registerIpcHandler(policy, IPC_CHANNELS.startAll, async () => {
+    if (updateInstallInProgress) return { ok: false, error: "更新安装中，请稍候" };
     try {
       await manager.startAll();
       return { ok: true };
@@ -302,13 +305,16 @@ function getCurrentUpdateState(): UpdateState {
 }
 
 async function stopAllForUpdate(): Promise<{ ok: boolean; error?: string }> {
+  updateInstallInProgress = true;
   try {
     await manager.stopAll();
     if (!manager.list().every((instance) => instance.status.state === "stopped")) {
+      updateInstallInProgress = false;
       return { ok: false, error: "代理未完全停止" };
     }
     return { ok: true };
   } catch (error) {
+    updateInstallInProgress = false;
     return { ok: false, error: error instanceof Error ? error.message : "停止代理失败" };
   }
 }
@@ -320,6 +326,9 @@ function initializeUpdateService(): void {
     isSmokeMode: smokeMode,
     updater: app.isPackaged && !smokeMode ? createElectronUpdateAdapter() : undefined,
     stopAll: stopAllForUpdate,
+    onInstallStateChange: (installing) => {
+      updateInstallInProgress = installing;
+    },
     publish: (state: UpdateState) => {
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send(IPC_CHANNELS.updateState, state);
     },
