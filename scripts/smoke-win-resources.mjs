@@ -4,6 +4,7 @@ import { gunzipSync } from "node:zlib";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { invokeTzt } from "./invoke-tzt-helper.mjs";
 
 const execFileAsync = promisify(execFile);
 const projectRoot = path.resolve(import.meta.dirname, "..");
@@ -25,25 +26,17 @@ async function runCommand(command, args, options = {}) {
   });
 }
 
-async function invokeTzt(request) {
-  const result = await runCommand(nodePath, [helperPath], {
-    input: JSON.stringify(request),
-    encoding: "utf8",
-  });
-  return JSON.parse(result.stdout);
-}
-
 async function smokeWindowsResources() {
   if (process.platform !== "win32") throw new Error(`requires Windows, detected ${process.platform}`);
 
   const version = (await runCommand(nodePath, ["--version"])).stdout.trim();
   if (version !== "v16.13.0") throw new Error(`bundled Node runtime is ${version}, expected v16.13.0`);
 
-  const fixed = await invokeTzt({
+  const fixed = invokeTzt(nodePath, helperPath, {
     method: "rc4",
     data: Buffer.from("Plaintext").toString("base64"),
     key: "file",
-  });
+  }, { cwd: projectRoot });
   const fixedBytes = Buffer.from(fixed.data, "base64");
   if (fixedBytes.toString("hex") !== "7ad9f940a0c3d07a8f") throw new Error("bundled TZT runtime failed its RC4 regression vector");
 
@@ -57,11 +50,11 @@ async function smokeWindowsResources() {
     const encodedPath = `${sourcePath}.d`;
     const encoded = await readFile(encodedPath);
     if (encoded.length <= 4) throw new Error("Windows H5 encoder produced an empty .d file");
-    const decryptedResponse = await invokeTzt({
+    const decryptedResponse = invokeTzt(nodePath, helperPath, {
       method: "rc4",
       data: encoded.subarray(0, -4).toString("base64"),
       key: "file",
-    });
+    }, { cwd: projectRoot });
     const decrypted = gunzipSync(Buffer.from(decryptedResponse.data, "base64"));
     if (!decrypted.equals(original)) throw new Error("Windows H5 .d output did not decrypt to the source file");
   } finally {
