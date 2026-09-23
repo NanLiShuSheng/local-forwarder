@@ -19,7 +19,8 @@ function verifyManifest(filePath, artifactName) {
   const manifest = readFileSync(filePath, "utf8");
   const versionPattern = new RegExp(`^version:\\s*${escapeRegExp(version)}\\s*$`, "m");
   if (!versionPattern.test(manifest)) throw new Error(`更新元数据版本不匹配: ${filePath}`);
-  if (!manifest.includes(artifactName)) throw new Error(`更新元数据缺少资产 ${artifactName}: ${filePath}`);
+  const hasArtifact = manifest.includes(artifactName) || manifest.includes(encodeURI(artifactName));
+  if (!hasArtifact) throw new Error(`更新元数据缺少资产 ${artifactName}: ${filePath}`);
   if (!/^\s*sha512:\s*\S+/m.test(manifest)) throw new Error(`更新元数据缺少 sha512: ${filePath}`);
 }
 
