@@ -38,6 +38,37 @@ test("saves multiline pasted login cache values and reloads them", async () => {
   }
 });
 
+test("persists the local variable input text for the next application launch", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-local-input-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const config = { ...createDefaultConfig(), localText: "Foo = bar\nLongValue = first\nsecond" };
+
+  try {
+    await store.save(config);
+    const restored = await store.load() as typeof config;
+    assert.equal(restored.localText, config.localText);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("persists request IP, port, and pasted parameters for the next application launch", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-request-input-"));
+  const store = new ConfigStore(path.join(directory, "internal.json"));
+  const config = {
+    ...createDefaultConfig(),
+    request: { host: "192.168.1.20", port: 8088, paramsText: "Action=100\naccount=600554432" },
+  };
+
+  try {
+    await store.save(config);
+    const restored = await store.load();
+    assert.deepEqual(restored.request, config.request);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("ConfigStore saves atomically and loads the saved config", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-config-"));
   const filePath = path.join(directory, "internal.json");

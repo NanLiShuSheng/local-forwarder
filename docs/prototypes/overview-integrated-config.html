@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>概览配置整合原型</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0e1a2d; --sidebar:#101d31; --panel:#172841; --panel-2:#203653; --line:#2a405d; --text:#eef5ff; --soft:#b9c8dc; --muted:#8396b2; --green:#79e2c0; --blue:#8fc7ff; --danger:#f2a99b; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-width:1120px; background:linear-gradient(135deg,#0e1a2d,#111f34); color:var(--text); font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif; }
+    button, input { font:inherit; }
+    button { cursor:pointer; }
+    .shell { display:grid; grid-template-columns:294px minmax(760px,1fr); min-height:1080px; }
+    aside { padding:24px 16px 18px; background:rgb(8 15 27 / 88%); border-right:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:11px; margin:0 10px 30px; }
+    .brand-mark { width:32px; height:32px; display:grid; place-items:center; border-radius:10px; color:#092019; background:var(--green); font-size:21px; font-weight:800; }
+    .brand strong, .brand small { display:block; }
+    .brand strong { font-size:16px; }
+    .brand small { margin-top:2px; color:var(--muted); font-size:10px; }
+    .side-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin:0 10px 18px; }
+    h1,h2,h3,p { margin:0; }
+    .side-heading h1 { font-size:17px; }
+    .side-heading p { margin-top:4px; color:var(--muted); font-size:10px; }
+    .add { border:0; border-radius:7px; padding:7px 9px; color:#092019; background:var(--green); font-weight:700; }
+    .sidebar-actions { display:flex; align-items:stretch; justify-content:space-between; gap:8px; margin:0 4px 12px 10px; }
+    .sidebar-actions .bulk { display:flex; gap:6px; }
+    .sidebar-actions button { min-width:68px; height:32px; border:1px solid #3b4e68; border-radius:8px; padding:0 9px; color:var(--soft); background:#1a2b43; font-size:10px; font-weight:700; white-space:nowrap; }
+    .sidebar-actions .start { border-color:var(--green); color:#092019; background:var(--green); }
+    .sidebar-actions .stop { border-color:#f78383; color:#ffc1c1; background:rgb(247 131 131 / 12%); }
+    .sidebar-actions .create { min-width:58px; color:var(--soft); background:transparent; }
+    .proxy-card { position:relative; display:block; width:100%; height:64px; margin-bottom:8px; padding:0; border:1px solid #2b3d58; border-radius:10px; color:var(--text); text-align:left; background:#14243a; }
+    .proxy-card.selected { border-color:var(--green); background:#1b314c; }
+    .proxy-card-main { display:block; width:100%; height:100%; border:0; border-radius:9px; padding:10px 34px 10px 11px; color:inherit; background:transparent; text-align:left; }
+    .proxy-title { display:flex; align-items:center; gap:7px; min-width:0; font-weight:700; }
+    .proxy-title .port { margin-left:auto; color:#8fa4c0; font:10px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .proxy-card code { display:block; max-width:100%; margin-top:8px; overflow:hidden; color:var(--soft); font:10px ui-monospace,SFMono-Regular,Menlo,monospace; text-overflow:ellipsis; white-space:nowrap; }
+    .proxy-status { flex:0 0 auto; border-radius:99px; padding:2px 6px; color:#8b9db5; background:#20314a; font-size:9px; font-weight:600; }
+    .proxy-status.running { color:var(--green); background:rgb(121 226 192 / 12%); }
+    .proxy-delete { position:absolute; top:7px; right:7px; width:20px; height:20px; border:0; border-radius:5px; color:#8294ad; background:transparent; font-size:16px; line-height:1; }
+    .proxy-delete:hover { color:#ffc1c1; background:rgb(247 131 131 / 14%); }
+    .dot { width:8px; height:8px; flex:0 0 auto; border-radius:50%; background:var(--green); box-shadow:0 0 0 4px rgb(121 226 192 / 10%); }
+    .dot.stopped { background:var(--muted); box-shadow:none; }
+    .nav { display:grid; gap:3px; margin-top:25px; border-top:1px solid var(--line); padding-top:16px; }
+    .nav-label { margin:0 10px 5px; color:var(--muted); font-size:10px; font-weight:700; letter-spacing:.12em; }
+    .nav button { border:0; border-radius:7px; padding:9px 10px; color:#8d9bb0; background:transparent; text-align:left; }
+    .nav button:hover, .nav button.active { color:var(--text); background:#1d2c43; }
+    main { width:min(1180px,100%); padding:34px 46px 58px; }
+    .crumb { color:var(--muted); font-size:11px; }
+    .project-card, .instance-card, .logs { border:1px solid var(--line); border-radius:14px; background:rgb(17 29 48 / 92%); box-shadow:0 16px 36px rgb(0 0 0 / 12%); }
+    .project-card { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:16px; margin-top:18px; padding:17px 20px; }
+    .project-label { color:var(--muted); font-size:12px; font-weight:700; }
+    .project-label small { display:block; margin-top:3px; color:#647995; font-size:10px; font-weight:400; }
+    .input-shell { display:flex; gap:8px; min-width:0; }
+    input { min-width:0; width:100%; border:1px solid #344862; border-radius:7px; padding:9px 10px; color:var(--text); background:#111e32; outline:none; }
+    input:focus { border-color:var(--green); box-shadow:0 0 0 2px rgb(121 226 192 / 10%); }
+    .choose, .secondary { border:1px solid #3b5471; border-radius:7px; padding:9px 12px; color:var(--soft); background:#1a2b43; white-space:nowrap; }
+    .choose:hover, .secondary:hover { border-color:var(--green); }
+    .saved { color:var(--green); font-size:11px; white-space:nowrap; }
+    .hero { display:flex; align-items:flex-end; gap:14px; margin:28px 2px 0; }
+    .hero h2 { font-size:25px; letter-spacing:-.03em; }
+    .endpoint { margin-top:4px; color:var(--muted); font-size:11px; }
+    .badge { display:inline-flex; align-items:center; gap:7px; margin-bottom:3px; padding:5px 10px; border-radius:14px; color:var(--green); background:#173c3a; font-size:11px; font-weight:700; }
+    .hero-actions { display:flex; gap:8px; margin-left:auto; }
+    .primary { border:0; border-radius:7px; padding:9px 13px; color:#092019; background:var(--green); font-weight:700; }
+    .stop { border:1px solid #7d504d; border-radius:7px; padding:9px 13px; color:var(--danger); background:#263647; }
+    .instance-card { margin-top:18px; padding:21px; }
+    .section-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding-bottom:15px; border-bottom:1px solid var(--line); }
+    .section-head h3 { font-size:15px; }
+    .section-head p { margin-top:3px; color:var(--muted); font-size:10px; }
+    .overview-name { width:min(100%,420px); border-color:transparent; padding:2px 5px; background:transparent; font-size:20px; font-weight:700; letter-spacing:-.03em; }
+    .overview-name:hover, .overview-name:focus { border-color:#3b5574; background:#14243a; }
+    .config-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:15px; }
+    .config-card { min-width:0; border-radius:10px; padding:15px; background:#16263d; }
+    .config-card > label, .field-label { display:block; color:var(--muted); font-size:10px; }
+    .config-card h4 { margin:0 0 12px; color:var(--soft); font-size:12px; }
+    .field-row { display:grid; grid-template-columns:minmax(0,1fr) 78px; gap:8px; margin-top:8px; }
+    .field-row.single { display:block; }
+    .field-row input { padding:8px 9px; font-size:11px; }
+    .readonly-value { display:block; margin-top:8px; border:1px solid #26374e; border-radius:7px; padding:8px 9px; color:var(--muted); background:#101d30; font-size:11px; }
+    .field-note { display:block; margin-top:8px; color:#6f84a0; font-size:10px; }
+    .field-note.good { color:var(--green); }
+    .cache-value { margin-top:10px; color:var(--text); font-size:20px; font-weight:700; }
+    .cache-value small { margin-left:5px; color:var(--muted); font-size:10px; font-weight:400; }
+    .instance-footer { display:flex; justify-content:space-between; align-items:center; gap:14px; margin-top:18px; color:var(--muted); font-size:10px; }
+    .instance-actions { display:flex; gap:8px; }
+    .logs { margin-top:16px; padding:20px 21px; }
+    .logs-list { display:grid; gap:10px; margin-top:15px; }
+    .address-panel { margin-top:16px; padding:21px; border:1px solid var(--line); border-radius:14px; background:rgb(17 29 48 / 92%); box-shadow:0 16px 36px rgb(0 0 0 / 12%); }
+    .eyebrow { margin:0 0 6px; color:#7e92b1; font-size:10px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; }
+    .address-row { display:grid; grid-template-columns:74px minmax(0,1fr) 58px; align-items:center; gap:12px; margin-top:14px; }
+    .address-row label { color:var(--muted); font-size:11px; }
+    .address-row input { padding:9px 10px; font:11px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .address-row .enable { display:flex; align-items:center; gap:5px; color:var(--soft); font-size:10px; white-space:nowrap; }
+    .address-row .enable input { width:14px; height:14px; accent-color:var(--green); }
+    .log { display:grid; grid-template-columns:66px 45px 1fr; gap:10px; color:var(--soft); font:10px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .log time { color:var(--muted); }
+    .info { color:var(--green); }
+    .tcp { color:var(--blue); }
+    @media (max-width:1200px) { main { padding-left:30px; padding-right:30px; } .config-grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="sidebar-actions"><div class="bulk"><button class="start">一键开启</button><button class="stop">一键关闭</button></div><button class="create">＋ 新增</button></div>
+      <div class="proxy-card selected"><button class="proxy-card-main"><span class="proxy-title"><i class="dot"></i><span>代理实例 1</span><span class="port">:端口</span></span><code>上游地址</code></button><button class="proxy-delete" aria-label="删除代理实例 1">×</button></div>
+      <div class="proxy-card"><button class="proxy-card-main"><span class="proxy-title"><i class="dot"></i><span>代理实例 2</span><span class="port">:端口</span></span><code>上游地址</code></button><button class="proxy-delete" aria-label="删除代理实例 2">×</button></div>
+      <div class="proxy-card"><button class="proxy-card-main"><span class="proxy-title"><i class="dot stopped"></i><span>代理实例 3</span><span class="port">:端口</span></span><code>上游地址</code></button><button class="proxy-delete" aria-label="删除代理实例 3">×</button></div>
+      <nav class="nav"><span class="nav-label">功能</span><button class="active">概览</button><button>请求</button><button>字符串</button><button>本地变量</button><button>登录缓存</button><button>加密</button><button>日志</button></nav>
+    </aside>
+    <main>
+      <section class="project-card">
+        <div class="input-shell"><input aria-label="项目目录" placeholder="请选择项目目录" /><button class="choose">选择目录</button></div>
+      </section>
+
+      <section class="instance-card">
+        <div class="config-grid">
+          <div class="config-card">
+            <h4>本地监听</h4>
+            <span class="field-label">监听主机</span>
+            <div class="field-row single"><input aria-label="监听主机" placeholder="监听主机" /></div>
+            <span class="field-label" style="margin-top:10px">监听端口</span>
+            <div class="field-row single"><input aria-label="监听端口" placeholder="监听端口" /></div>
+          </div>
+          <div class="config-card">
+            <h4>jy 上游地址</h4>
+            <span class="field-label">上游地址</span>
+            <span class="readonly-value">由下方 jy 地址配置</span>
+            <span class="field-label" style="margin-top:10px">超时时间（毫秒）</span>
+            <div class="field-row single"><input aria-label="超时时间" placeholder="超时时间" /></div>
+          </div>
+          <div class="config-card">
+            <h4>登录缓存</h4>
+            <span class="field-label">独立保存</span>
+            <div class="cache-value">— <small>项</small></div>
+          </div>
+        </div>
+        <div class="instance-footer"><span>切换左侧代理后，右侧内容会跟随当前选中实例更新</span><div class="instance-actions"><button class="primary">启动代理</button><button class="secondary">停止代理</button><button class="secondary">复制当前代理</button></div></div>
+      </section>
+
+      <section class="address-panel"><div class="section-head"><div><p class="eyebrow">/reqxml</p><h3>转发地址</h3><p>按 hq、jy、zx 顺序配置转发目标，输入后离开输入框自动保存。</p></div></div>
+        <div class="address-row"><label>hq 地址</label><input aria-label="hq 地址" placeholder="hq 地址" /><label class="enable"><input type="checkbox" />启用</label></div>
+        <div class="address-row"><label>jy 地址</label><input aria-label="jy 地址" placeholder="jy 地址" /><label class="enable"><input type="checkbox" />启用</label></div>
+        <div class="address-row"><label>zx 地址</label><input placeholder="例如 https://h5khtest.citics.com/ant" aria-label="zx 地址" /><label class="enable"><input type="checkbox" />启用</label></div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

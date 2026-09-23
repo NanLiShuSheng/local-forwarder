@@ -188,6 +188,29 @@ test("preserves legacy HTTP reqxml transport and target base paths", () => {
   ]);
 });
 
+test("treats legacy bare reqxml targets as HTTP when useHttp is enabled", () => {
+  const config = parseLegacyConfigJs(`module.exports = {
+    conifg: { "/reqxml": { useHttp: true, target: ["60.12.9.58:7778", "123.103.83.82:6110"] } }
+  }`);
+
+  assert.deepEqual(config.tcpTargets.map(({ host, port, protocol, transport }) => ({ host, port, protocol, transport })), [
+    { host: "60.12.9.58", port: 7778, protocol: "http", transport: "http" },
+    { host: "123.103.83.82", port: 6110, protocol: "http", transport: "http" },
+  ]);
+});
+
+test("keeps proxy3 reqxml targets on the TCP bridge when useHttp is disabled", () => {
+  const targets = ["\"http://60.12.9.58:7778", "\"http://123.103.83.82:6064"];
+  const config = parseLegacyConfigJs(`module.exports = {
+    conifg: { "/reqxml": { useHttp: false, target: ${JSON.stringify(targets)} } }
+  }`);
+
+  assert.deepEqual(config.tcpTargets.map(({ host, port, protocol, transport }) => ({ host, port, protocol, transport })), [
+    { host: "60.12.9.58", port: 7778, protocol: "http", transport: undefined },
+    { host: "123.103.83.82", port: 6064, protocol: "http", transport: undefined },
+  ]);
+});
+
 test("accepts whitespace and matching wrapper quotes around reqxml targets", () => {
   const target = '  "https://wrapped.example.test:9443"  ';
   const config = parseLegacyConfigJs(`module.exports = { conifg: { "/reqxml": { target: ${JSON.stringify(target)} } } }`);

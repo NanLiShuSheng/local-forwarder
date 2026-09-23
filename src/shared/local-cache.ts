@@ -19,3 +19,7 @@ export function parseLocalCacheText(text: string): Record<string, string> {
   }
   return values;
 }
+
+export function formatLocalCacheText(values: Record<string, string>): string {
+  return Object.entries(values).map(([key, value]) => `${key} = ${value}`).join("\n");
+}

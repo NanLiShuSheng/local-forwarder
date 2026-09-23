@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { flattenJsonValue, jsonPreviewType, parseJsonPreviewText, type JsonPreviewRow, type JsonPreviewValue } from "../../shared/json-preview";
+import { flattenJsonValue, jsonPreviewType, parseJsonPreviewText, parsePipeDelimitedArray, type JsonPreviewRow, type JsonPreviewValue, type PipeDelimitedArrayPreview } from "../../shared/json-preview";
 
 type JsonPreviewView = "tree" | "table" | "raw";
 
@@ -118,6 +118,18 @@ function ValueLabel({ value }: { value: JsonPreviewValue }) {
   return <span className={`json-preview-value json-preview-value-${valueClass(value)}`} title={fullText}>{displayValue(value)}</span>;
 }
 
+function DelimitedArrayTable({ preview }: { preview: PipeDelimitedArrayPreview }) {
+  return <div className="json-preview-delimited-table-wrap" role="region" aria-label="按竖线拆分的数组数据">
+    <table className="json-preview-delimited-table">
+      <thead><tr><th scope="col">索引</th>{preview.headers.map((_, index) => <th scope="col" key={index}>{index}</th>)}</tr></thead>
+      <tbody>
+        <tr><th scope="row">字段名</th>{preview.headers.map((header, index) => <td key={index} className={header === "" ? "json-preview-delimited-empty" : undefined}>{header}</td>)}</tr>
+        {preview.rows.length === 0 ? <tr><th scope="row">数据</th><td className="json-preview-delimited-empty" colSpan={preview.headers.length} /> </tr> : preview.rows.map((row, rowIndex) => <tr key={rowIndex}><th scope="row">数据 {rowIndex + 1}</th>{row.map((cell, cellIndex) => <td key={cellIndex} className={cell === "" ? "json-preview-delimited-empty" : undefined}>{cell}</td>)}</tr>)}
+      </tbody>
+    </table>
+  </div>;
+}
+
 interface TreeNodeProps {
   keyLabel: string;
   path: string;
@@ -135,13 +147,14 @@ function TreeNode({ keyLabel, path, value, depth, expandedPaths, search, selecte
   const container = isContainer(value);
   const expanded = expandedPaths.has(path) || search !== "";
   const entries = container ? childEntries(value) : [];
+  const delimitedArray = parsePipeDelimitedArray(value);
   return <>
     <div className={`json-preview-tree-row ${selectedPath === path ? "selected" : ""}`} style={{ paddingLeft: `${depth * 18 + 8}px` }} onClick={() => onSelect(path)}>
       {container ? <button className="json-preview-tree-toggle" type="button" aria-label={expanded ? "收起节点" : "展开节点"} onClick={(event) => { event.stopPropagation(); onToggle(path); }}>{expanded ? "⌄" : "›"}</button> : <span className="json-preview-tree-toggle empty">·</span>}
       <span className="json-preview-tree-key">{keyLabel}</span><span className="json-preview-tree-colon">: </span><ValueLabel value={value} />
       {container && <span className="json-preview-count">{Array.isArray(value) ? `${value.length} 项` : `${Object.keys(value).length} 字段`}</span>}
     </div>
-    {container && expanded && entries.map((child) => <TreeNode key={child.path} keyLabel={child.key} path={`${path}${child.path}`} value={child.value} depth={depth + 1} expandedPaths={expandedPaths} search={search} selectedPath={selectedPath} onSelect={onSelect} onToggle={onToggle} />)}
+    {container && expanded && (delimitedArray ? <DelimitedArrayTable preview={delimitedArray} /> : entries.map((child) => <TreeNode key={child.path} keyLabel={child.key} path={`${path}${child.path}`} value={child.value} depth={depth + 1} expandedPaths={expandedPaths} search={search} selectedPath={selectedPath} onSelect={onSelect} onToggle={onToggle} />))}
   </>;
 }
 
@@ -494,8 +507,6 @@ export function JsonPreviewPage({ prefillText, onPrefillApplied }: { prefillText
 
   const clearInput = () => updateInput("");
 
-  const copyCurrentPath = () => void copyText(selectedPath, `路径已复制：${selectedPath}`);
-
   const exportPreviewImage = async () => {
     const preview = previewRef.current;
     if (preview === null || !parseResult.ok || isExporting) return;
@@ -574,11 +585,11 @@ export function JsonPreviewPage({ prefillText, onPrefillApplied }: { prefillText
           {([["tree", "树形视图"], ["table", "表格视图"], ["raw", "原始 JSON"]] as const).map(([view, label]) => <button key={view} className={activeView === view ? "active" : ""} type="button" role="tab" aria-selected={activeView === view} onClick={() => setActiveView(view)}>{label}</button>)}
         </div>
         {parseResult.ok && stats ? <div className="json-preview-summary"><div><span>根节点</span><strong>{stats.rootType}</strong></div><div><span>字段数</span><strong>{stats.fields}</strong></div><div><span>数组</span><strong>{stats.arrays}</strong></div><div><span>解析状态</span><strong className="good">&lt;1ms</strong></div></div> : <div className="json-preview-error-box"><strong>无法展示数据</strong><span>{parseError}</span></div>}
-        {parseResult.ok && activeView !== "raw" && <div className="json-preview-toolbar"><input aria-label="过滤字段或值" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="⌕ 过滤字段或值" /><div><button className="small-button" type="button" onClick={expandAll}>全部展开</button><button className="small-button" type="button" onClick={collapseAll}>全部收起</button><button className="small-button" type="button" onClick={copyCurrentPath}>复制当前路径</button></div></div>}
+        {parseResult.ok && activeView !== "raw" && <div className="json-preview-toolbar"><input aria-label="过滤字段或值" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="⌕ 过滤字段或值" /><div><button className="small-button" type="button" onClick={expandAll}>全部展开</button><button className="small-button" type="button" onClick={collapseAll}>全部收起</button></div></div>}
         {parseResult.ok && activeView === "tree" && <div className="json-preview-tree" role="tree"><TreeNode keyLabel="$" path="$" value={parseResult.value} depth={0} expandedPaths={expandedPaths} search={search} selectedPath={selectedPath} onSelect={setSelectedPath} onToggle={togglePath} /></div>}
         {parseResult.ok && activeView === "table" && <div className="json-preview-table-wrap"><table className="json-preview-table"><thead><tr><th>字段路径</th><th>值</th><th>类型</th></tr></thead><tbody>{tableVisibleRows.map((row) => { const expandable = row.type === "object" || row.type === "array"; const expanded = tableExpandedPaths.has(row.path) || search !== ""; return <tr key={row.path} className={selectedPath === row.path ? "selected" : ""} aria-expanded={expandable ? expanded : undefined} onClick={() => { setSelectedPath(row.path); if (expandable) toggleTablePath(row.path); }}><td><div className="json-preview-table-path" style={{ paddingLeft: `${row.depth * 18}px` }}>{expandable ? <button className="json-preview-table-toggle" type="button" aria-label={expanded ? "收起对象" : "展开对象"} onClick={(event) => { event.stopPropagation(); toggleTablePath(row.path); }}>{expanded ? "⌄" : "›"}</button> : <span className="json-preview-table-toggle empty">·</span>}<span>{row.path}</span></div></td><td title={typeof row.value === "string" ? row.value : undefined}>{displayValue(row.value)}</td><td>{typeLabel(row.type)}</td></tr>; })}</tbody></table></div>}
         {parseResult.ok && activeView === "raw" && <pre className="json-preview-raw">{parseResult.formatted}</pre>}
-        {parseResult.ok && <p className="json-preview-tip"><span>ⓘ</span>{activeView === "table" ? "点击对象或数组行可展开子字段；点击字段可复制路径。" : "点击字段可复制路径；长字符串默认截断，悬停可查看完整值。数组和对象会显示节点数量。"}</p>}
+        {parseResult.ok && <p className="json-preview-tip"><span>ⓘ</span>{activeView === "table" ? "点击对象或数组行可展开子字段；点击字段可查看当前节点。" : activeView === "tree" ? "点击字段可查看当前节点；长字符串默认截断，悬停可查看完整值。数组和对象会显示节点数量。" : "可在此查看格式化 JSON 原文。"}</p>}
       </section>
     </div>
     {notice && <div className="json-preview-notice" role="status">{notice}</div>}

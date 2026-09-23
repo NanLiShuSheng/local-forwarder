@@ -191,13 +191,21 @@ export function isValidAppConfig(value: unknown): value is AppConfig {
 }
 
 export function isValidProxyWorkspace(value: unknown): value is ProxyWorkspace {
-  if (!isRecord(value) || !hasOnlyKeys(value, ["version", "selectedInstanceId", "instances"])) return false;
+  if (!isRecord(value) || !hasOnlyKeys(value, ["version", "selectedInstanceId", "instances"], ["sharedValues"])) return false;
   if (value.version !== 1 || typeof value.selectedInstanceId !== "string" || !Array.isArray(value.instances) || value.instances.length === 0) return false;
+  if (value.sharedValues !== undefined) {
+    if (!isRecord(value.sharedValues)) return false;
+    for (const entry of Object.values(value.sharedValues)) if (typeof entry !== "string") return false;
+  }
   const ids = new Set<string>();
   for (const instance of value.instances) {
-    if (!isRecord(instance) || !hasOnlyKeys(instance, ["id", "name", "config"])) return false;
+    if (!isRecord(instance) || !hasOnlyKeys(instance, ["id", "name", "config"], ["loginCache"])) return false;
     if (typeof instance.id !== "string" || instance.id.length === 0 || ids.has(instance.id)) return false;
     if (typeof instance.name !== "string" || instance.name.trim().length === 0 || !isValidAppConfig(instance.config)) return false;
+    if (instance.loginCache !== undefined) {
+      if (!isRecord(instance.loginCache)) return false;
+      for (const entry of Object.values(instance.loginCache)) if (typeof entry !== "string") return false;
+    }
     ids.add(instance.id);
   }
   return ids.has(value.selectedInstanceId);

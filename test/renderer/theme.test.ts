@@ -640,12 +640,13 @@ test("AppearancePage structure and theme CSS interactions stay accessible and re
   assert.match(styleSource, /\.log-level\s*\{[^}]*color:\s*var\(--text-success\)/s);
   assert.match(styleSource, /\.sidebar\s*\{[^}]*background:\s*var\(--sidebar-background\)/s);
   assert.match(styleSource, /\.content\s*\{[^}]*background:\s*var\(--app-background\)/s);
-  assert.doesNotMatch(styleSource, /\.request-transport-select\s*\{[^}]*color-scheme:\s*dark/s);
-  for (const selector of ["address-input", "request-transport-select"]) {
+  for (const selector of ["address-input", "select-control"]) {
     const rule = extractCssRule(styleSource, `.${selector}`);
     assert.match(rule, /color:\s*var\(--text-primary\)/);
-    assert.match(rule, /background:\s*var\(--input-background\)/);
+    assert.match(rule, selector === "select-control"
+      ? /background-color:\s*var\(--input-background\)/
+      : /background:\s*var\(--input-background\)/);
     assert.doesNotMatch(rule, /color:\s*#e8effa/);
-    assert.doesNotMatch(rule, /background:\s*#111e32/);
+    assert.doesNotMatch(rule, /background(?:-color)?:\s*#111e32/);
   }
 });

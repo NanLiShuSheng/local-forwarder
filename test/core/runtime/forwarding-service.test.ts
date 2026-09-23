@@ -35,6 +35,77 @@ test("service starts, reports status, and stops all listeners", async () => {
   }
 });
 
+test("recovers an occupied 808x port before retrying startup", async () => {
+  const config = createDefaultConfig();
+  config.server.port = 8080;
+  let startAttempts = 0;
+  const recoveredPorts: number[] = [];
+  const service = new ForwardingService({
+    config,
+    recoverOccupiedPort: async (port) => { recoveredPorts.push(port); },
+    httpFactory: () => ({
+      start: async () => {
+        startAttempts += 1;
+        if (startAttempts === 1) throw Object.assign(new Error("listen EADDRINUSE"), { code: "EADDRINUSE" });
+        return { host: "127.0.0.1", port: 8080 };
+      },
+      stop: async () => undefined,
+      getStats: () => ({ requestCount: 0, successCount: 0, totalDurationMs: 0, tcpConnections: 0 }),
+      getValues: () => ({ localValues: {}, mapValues: {}, fileValues: {} }),
+    }) as never,
+  });
+
+  try {
+    const status = await service.start();
+    assert.equal(status.state, "running");
+    assert.equal(startAttempts, 2);
+    assert.deepEqual(recoveredPorts, [8080]);
+  } finally {
+    await service.stop();
+  }
+});
+
+test("does not recover a non-808x port after EADDRINUSE", async () => {
+  const config = createDefaultConfig();
+  config.server.port = 8090;
+  let recoveryCalls = 0;
+  const service = new ForwardingService({
+    config,
+    recoverOccupiedPort: async () => { recoveryCalls += 1; },
+    httpFactory: () => ({
+      start: async () => { throw Object.assign(new Error("listen EADDRINUSE"), { code: "EADDRINUSE" }); },
+      stop: async () => undefined,
+      getStats: () => ({ requestCount: 0, successCount: 0, totalDurationMs: 0, tcpConnections: 0 }),
+      getValues: () => ({ localValues: {}, mapValues: {}, fileValues: {} }),
+    }) as never,
+  });
+
+  await assert.rejects(() => service.start(), /EADDRINUSE/);
+  assert.equal(recoveryCalls, 0);
+  await service.stop();
+});
+
+test("serializes a stop requested while startup is still completing", async () => {
+  const config = createDefaultConfig();
+  config.server.port = await freePort();
+  config.cache.rootDir = await mkdtemp(path.join(os.tmpdir(), "forwarder-service-race-"));
+  const service = new ForwardingService({ config });
+
+  const start = service.start();
+  const stop = service.stop();
+  await start;
+  const stopped = await stop;
+
+  try {
+    assert.equal(stopped.state, "stopped");
+    assert.equal(service.status().state, "stopped");
+    await service.start();
+    assert.equal(service.status().state, "running");
+  } finally {
+    await service.stop();
+  }
+});
+
 test("service records start failures and can recover after stop", async () => {
   const config = createDefaultConfig();
   config.server.port = await freePort();
@@ -43,6 +114,14 @@ test("service records start failures and can recover after stop", async () => {
   assert.equal(service.status().state, "error");
   await service.stop();
   assert.equal(service.status().state, "stopped");
+});
+
+test("merges manually captured login values into the active service and config", async () => {
+  const config = createDefaultConfig();
+  config.localValues = { OLD: "value" };
+  const service = new ForwardingService({ config });
+  service.mergeLocalValues({ TOKEN: "captured-token" });
+  assert.deepEqual(service.getConfig().localValues, { OLD: "value", TOKEN: "captured-token" });
 });
 
 test("clears captured logs and accepts new entries afterward", async () => {

@@ -8,6 +8,16 @@ test("navigation hides forwarding rules and cache pages", async () => {
   assert.doesNotMatch(source, /\{ id: "cache", label: "缓存" \}/);
 });
 
+test("sidebar navigation puts the primary pages first in the requested order", async () => {
+  const source = await readFile("src/renderer/App.tsx", "utf8");
+  const pagesMatch = source.match(/const pages:[\s\S]*?= \[(.*?)\];/);
+
+  assert.ok(pagesMatch);
+  const labels = [...pagesMatch[1].matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
+
+  assert.deepEqual(labels, ["概览", "请求", "加密", "JSON 可视化", "日志", "字符串", "本地变量", "登录缓存", "外观"]);
+});
+
 test("sidebar navigation removes the visible feature heading without changing its accessible name", async () => {
   const source = await readFile("src/renderer/App.tsx", "utf8");
   const styles = await readFile("src/renderer/styles.css", "utf8");
@@ -54,7 +64,8 @@ test("App wires log clearing and JSON response fill actions", async () => {
   assert.match(source, /return true;/);
   assert.match(source, /const fillJsonPreview = \(text: string\) => \{[\s\S]*?setJsonPrefill\(text\);[\s\S]*?setPage\("json"\);/);
   assert.match(source, /<JsonPreviewPage prefillText=\{jsonPrefill\} onPrefillApplied=\{\(\) => setJsonPrefill\(undefined\)\} \/>/);
-  assert.match(source, /<LogPanel logs=\{logs\} onClear=\{clearLogs\} onFillJson=\{fillJsonPreview\} \/>/);
+  assert.match(source, /const \[selectedLog, setSelectedLog\] = useState<LogEntry>\(\);/);
+  assert.match(source, /<LogPanel logs=\{logs\} selected=\{selectedLog\} onSelect=\{setSelectedLog\} onClear=\{clearLogs\} onFillJson=\{fillJsonPreview\} \/>/);
 });
 
 test("App reports rejected log clearing IPC calls", async () => {
@@ -63,7 +74,7 @@ test("App reports rejected log clearing IPC calls", async () => {
 
   assert.ok(clearLogs);
   assert.match(clearLogs[1], /try\s*\{[\s\S]*?await window\.forwarder\.clearLogs\(\)/);
-  assert.match(clearLogs[1], /catch \(cause\)\s*\{[\s\S]*?setError\(cause instanceof Error \? cause\.message : "日志清空失败"\);[\s\S]*?return false;/);
+  assert.match(clearLogs[1], /catch \(cause\)\s*\{[\s\S]*?notifyError\(cause, "日志清空失败"\);[\s\S]*?return false;/);
 });
 
 test("versioned log reader ignores results from invalidated requests", async () => {

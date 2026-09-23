@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus, UpdateState } from "../shared/contracts";
 import { AppearancePage } from "./components/AppearancePage";
 import { ConfigPages, type Page } from "./components/ConfigPages";
-import { DismissibleError } from "./components/DismissibleError";
 import { LogPanel } from "./components/LogPanel";
 import { JsonPreviewPage } from "./components/JsonPreviewPage";
 import { RuleList } from "./components/RuleList";
 import { ProxyInstancePanel } from "./components/ProxyInstancePanel";
 import { ProxyInstanceSidebar } from "./components/ProxyInstanceSidebar";
 import { UpdateCard } from "./components/UpdateCard";
+import { ToastProvider, useToast } from "./components/ToastProvider";
 import { createManualCheckTracker, createUpdateStateSynchronizer, resolveManualCheckResult } from "./update-state";
 import { useTheme } from "./useTheme";
 
@@ -46,8 +46,9 @@ function SidebarNavIcon({ name }: { name: SidebarNavIconName }) {
   return <svg className="sidebar-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{sidebarNavIconPaths[name].map((path) => <path key={path} d={path} />)}</svg>;
 }
 
-function App() {
+function AppContent() {
   const { mode, theme, setMode } = useTheme();
+  const { notify, notifyError } = useToast();
   const [page, setPage] = useState<Page>("runtime");
   const [status, setStatus] = useState(initialStatus);
   const [instances, setInstances] = useState<ProxyInstanceSummary[]>([]);
@@ -57,7 +58,6 @@ function App() {
   const [encryptionPreferences, setEncryptionPreferences] = useState(initialEncryptionPreferences);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEntry>();
-  const [error, setError] = useState("");
   const [bulkRuntimeAction, setBulkRuntimeAction] = useState<"start" | "stop">();
   const [jsonPrefill, setJsonPrefill] = useState<string>();
   const [appVersion, setAppVersion] = useState("");
@@ -103,8 +103,8 @@ function App() {
   useEffect(() => {
     const requestId = manualCheckTracker.current();
     if (requestId === undefined) return;
-    const resolution = resolveManualCheckResult(manualCheckTracker.hasPending(), updateState.state);
     if (!manualCheckTracker.canResolve(requestId, updateStateSynchronizer.getRevision(), updateState.state)) return;
+    const resolution = resolveManualCheckResult(manualCheckTracker.hasPending(), updateState.state);
     if (resolution.pending) return;
     if (manualCheckTracker.complete(requestId) && resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
   }, [notify, updateState.state]);
@@ -170,7 +170,7 @@ function App() {
       setStatus(nextStatus);
       setEncryptionPreferences(nextEncryptionPreferences);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "无法加载运行状态");
+      notifyError(cause, "无法加载运行状态");
     }
   };
 
@@ -188,35 +188,32 @@ function App() {
   const save = async (nextConfig: AppConfig) => {
     const result = await window.forwarder.saveConfig(nextConfig);
     if (!result.ok) {
-      setError(result.error ?? "配置保存失败");
+      notifyError(result.error ?? "配置保存失败", "配置保存失败");
       return false;
     }
     setConfig(nextConfig);
-    setError("");
     return true;
   };
 
   const saveSharedValues = async (values: Record<string, string>) => {
     const result = await window.forwarder.saveSharedValues(values);
     if (!result.ok) {
-      setError(result.error ?? "本地变量保存失败");
+      notifyError(result.error ?? "本地变量保存失败", "本地变量保存失败");
       return false;
     }
     setSharedValues(values);
     setInstances(await window.forwarder.listProxyInstances());
-    setError("");
     return true;
   };
 
   const saveLoginCache = async (values: Record<string, string>) => {
     const result = await window.forwarder.saveLoginCache(values);
     if (!result.ok) {
-      setError(result.error ?? "登录缓存保存失败");
+      notifyError(result.error ?? "登录缓存保存失败", "登录缓存保存失败");
       return false;
     }
     setLoginCache(values);
     setInstances(await window.forwarder.listProxyInstances());
-    setError("");
     return true;
   };
 
@@ -224,7 +221,7 @@ function App() {
     const result = await window.forwarder.selectProjectDirectory();
     if (result.canceled) return false;
     if (!result.ok || result.path === undefined) {
-      setError(result.error ?? "选择项目目录失败");
+      notifyError(result.error ?? "选择项目目录失败", "选择项目目录失败");
       return false;
     }
     return save({ ...config, projectPath: result.path });
@@ -233,7 +230,7 @@ function App() {
   const selectProxyInstance = async (id: string) => {
     const result = await window.forwarder.selectProxyInstance(id);
     if (!result.ok) {
-      setError(result.error ?? "代理实例切换失败");
+      notifyError(result.error ?? "代理实例切换失败", "代理实例切换失败");
       return;
     }
     await refresh();
@@ -242,7 +239,7 @@ function App() {
   const createProxyInstance = async () => {
     const result = await window.forwarder.createProxyInstance();
     if (!result.ok) {
-      setError(result.error ?? "新增代理实例失败");
+      notifyError(result.error ?? "新增代理实例失败", "新增代理实例失败");
       return;
     }
     await refresh();
@@ -251,7 +248,7 @@ function App() {
   const duplicateProxyInstance = async () => {
     const result = await window.forwarder.duplicateProxyInstance();
     if (!result.ok) {
-      setError(result.error ?? "复制代理实例失败");
+      notifyError(result.error ?? "复制代理实例失败", "复制代理实例失败");
       return;
     }
     await refresh();
@@ -260,22 +257,20 @@ function App() {
   const renameProxyInstance = async (id: string, name: string): Promise<boolean> => {
     const result = await window.forwarder.renameProxyInstance(id, name);
     if (!result.ok) {
-      setError(result.error ?? "代理名称保存失败");
+      notifyError(result.error ?? "代理名称保存失败", "代理名称保存失败");
       return false;
     }
     setInstances(await window.forwarder.listProxyInstances());
-    setError("");
     return true;
   };
 
   const deleteProxyInstance = async (id: string): Promise<boolean> => {
     const result = await window.forwarder.deleteProxyInstance(id);
     if (!result.ok) {
-      setError(result.error ?? "删除代理实例失败");
+      notifyError(result.error ?? "删除代理实例失败", "删除代理实例失败");
       return false;
     }
     await refresh();
-    setError("");
     return true;
   };
 
@@ -285,9 +280,8 @@ function App() {
       if (instance.status.state === "running") await window.forwarder.stop(instance.id);
       else await window.forwarder.start(instance.id);
       await refresh();
-      setError("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "代理状态切换失败");
+      notifyError(cause, "代理状态切换失败");
       await refresh();
     }
   };
@@ -296,8 +290,7 @@ function App() {
     setBulkRuntimeAction("start");
     try {
       const result = await window.forwarder.startAll();
-      if (!result.ok) setError(result.error ?? "一键开启失败");
-      else setError("");
+      if (!result.ok) notifyError(result.error ?? "一键开启失败", "一键开启失败");
       await refresh();
     } finally {
       setBulkRuntimeAction(undefined);
@@ -308,8 +301,7 @@ function App() {
     setBulkRuntimeAction("stop");
     try {
       const result = await window.forwarder.stopAll();
-      if (!result.ok) setError(result.error ?? "一键关闭失败");
-      else setError("");
+      if (!result.ok) notifyError(result.error ?? "一键关闭失败", "一键关闭失败");
       await refresh();
     } finally {
       setBulkRuntimeAction(undefined);
@@ -320,9 +312,8 @@ function App() {
     try {
       setStatus(await window.forwarder.start());
       setInstances(await window.forwarder.listProxyInstances());
-      setError("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "代理启动失败");
+      notifyError(cause, "代理启动失败");
       await refresh();
     }
   };
@@ -332,7 +323,7 @@ function App() {
       setStatus(await window.forwarder.stop());
       setInstances(await window.forwarder.listProxyInstances());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "代理停止失败");
+      notifyError(cause, "代理停止失败");
     }
   };
 
@@ -340,15 +331,14 @@ function App() {
     try {
       const result = await window.forwarder.clearLogs();
       if (!result.ok) {
-        setError(result.error ?? "日志清空失败");
+        notifyError(result.error ?? "日志清空失败", "日志清空失败");
         return false;
       }
       logReaderRef.current?.invalidate();
       setLogs([]);
-      setError("");
       return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "日志清空失败");
+      notifyError(cause, "日志清空失败");
       return false;
     }
   };
@@ -361,11 +351,10 @@ function App() {
   const saveEncryptionPreferences = async (patch: EncryptionPreferencesPatch): Promise<boolean> => {
     const result = await window.forwarder.saveEncryptionPreferences(patch);
     if (!result.ok) {
-      setError(result.error ?? "保存加密目录失败");
+      notifyError(result.error ?? "保存加密目录失败", "保存加密目录失败");
       return false;
     }
     setEncryptionPreferences((current) => result.preferences ?? { ...current, ...patch });
-    setError("");
     return true;
   };
 
@@ -373,27 +362,24 @@ function App() {
     const result = await window.forwarder.selectEncryptionDirectory(kind);
     if (result.canceled) return undefined;
     if (!result.ok || result.path === undefined) {
-      setError(result.error ?? "选择加密目录失败");
+      notifyError(result.error ?? "选择加密目录失败", "选择加密目录失败");
       return undefined;
     }
     const selectedPath = result.path;
     setEncryptionPreferences((current) => result.preferences ?? (kind === "input" ? { ...current, inputDir: selectedPath } : { ...current, outputDir: selectedPath }));
-    setError("");
     return selectedPath;
   };
 
   const encryptDirectory = async (inputDir: string, outputDir: string, mode: EncryptionMode): Promise<EncryptionResult> => {
     const result = await window.forwarder.encryptDirectory(inputDir, outputDir, mode);
-    if (!result.ok) setError(result.error ?? "加密失败");
-    else setError("");
+    if (!result.ok) notifyError(result.error ?? "加密失败", "加密失败");
     return result;
   };
 
   const sendRequest = async (request: ManualRequestConfig): Promise<ManualRequestResponse> => {
     const result = await window.forwarder.sendRequest(request);
-    if (!result.ok) setError(result.error ?? "请求失败");
+    if (!result.ok) notifyError(result.error ?? "请求失败", "请求失败");
     else {
-      setError("");
       await refresh();
     }
     return result;
@@ -409,7 +395,6 @@ function App() {
       </nav>
     </aside>
     <section className={`content ${page === "request" ? "request-page-content" : ""} ${page === "json" ? "json-page-content" : ""} ${page === "logs" ? "log-page-content" : ""}`}>
-      {error && <DismissibleError message={error} onClose={() => setError("")} />}
       {page === "appearance" && <AppearancePage mode={mode} theme={theme} onModeChange={setMode} appVersion={appVersion || updateState.currentVersion} checkingForUpdates={updateState.state === "checking"} onCheckForUpdates={checkForUpdates} />}
       {page === "runtime" && <><ProxyInstancePanel instances={instances} status={status} config={config} onChange={save} onChooseProjectDirectory={chooseProjectDirectory} onRename={renameProxyInstance} onStart={start} onStop={stop} /><ConfigPages page="addresses" {...pageProps} /></>}
       <div hidden={page !== "json"}><JsonPreviewPage prefillText={jsonPrefill} onPrefillApplied={() => setJsonPrefill(undefined)} /></div>
@@ -419,6 +404,10 @@ function App() {
     </section>
     <UpdateCard state={updateState} dismissedVersion={dismissedUpdateVersion} onDownload={downloadUpdate} onInstall={installUpdate} onDismiss={dismissUpdate} />
   </main>;
+}
+
+function App() {
+  return <ToastProvider><AppContent /></ToastProvider>;
 }
 
 export default App;

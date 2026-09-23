@@ -1,4 +1,5 @@
 import type { AppConfig, LegacyData, ProxyInstance, ProxyWorkspace } from "../../shared/contracts";
+import { parseLocalCacheText } from "../../shared/local-cache";
 
 export type InternalConfig = AppConfig & { legacy: LegacyData };
 
@@ -42,10 +43,13 @@ export function createDefaultConfig(): InternalConfig {
 }
 
 export function createDefaultProxyInstance(config: AppConfig = createDefaultConfig()): ProxyInstance {
-  return { id: "default", name: "默认代理", config };
+  const loginCache = { ...config.localValues };
+  return { id: "default", name: "默认代理", config: { ...config, localValues: {} }, loginCache };
 }
 
 export function createDefaultWorkspace(config: AppConfig = createDefaultConfig()): ProxyWorkspace {
   const instance = createDefaultProxyInstance(config);
-  return { version: 1, selectedInstanceId: instance.id, instances: [instance] };
+  let sharedValues: Record<string, string> = {};
+  try { sharedValues = parseLocalCacheText(config.localText ?? ""); } catch { /* malformed legacy text remains in the legacy config only */ }
+  return { version: 1, selectedInstanceId: instance.id, sharedValues, instances: [instance] };
 }

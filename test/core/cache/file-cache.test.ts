@@ -4,7 +4,7 @@ import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { FileCache, decodeCachedResource } from "../../../src/core/cache/file-cache";
+import { FileCache, decodeCachedResource, rewriteLegacyNavigationScript } from "../../../src/core/cache/file-cache";
 
 test("rejects traversal and serves a cached file without downloading", async () => {
   const cache = new FileCache({ rootDir: await mkdtemp(path.join(os.tmpdir(), "forwarder-cache-")) });
@@ -36,4 +36,15 @@ test("decodes encrypted and gzipped .d scripts while keeping binary assets uncha
   assert.equal(decodeCachedResource("TZT.js.d", encryptedScript, codec, true).toString(), "console.log('ok')");
   const image = Buffer.from([0, 255, 1]);
   assert.deepEqual(decodeCachedResource("image.png.d", image, codec, true), image);
+});
+
+test("rewrites the TZT native navigation callback for local browser navigation", () => {
+  const source = Buffer.from([
+    "window.onJsOverrideUrlLoading = function(str, checkFlag){",
+    "window.MyWebView.onJsOverrideUrlLoading(str)",
+  ].join("\n"));
+  const rewritten = rewriteLegacyNavigationScript("TZT.js", source).toString();
+  assert.match(rewritten, /window\.location\.href = str;/);
+  assert.doesNotMatch(rewritten, /window\.MyWebView\.onJsOverrideUrlLoading/);
+  assert.ok(rewritten.includes("str = str.replace('http:/','')"));
 });

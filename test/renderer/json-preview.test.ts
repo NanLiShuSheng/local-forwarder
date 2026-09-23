@@ -5,12 +5,17 @@ import test from "node:test";
 test("JSON preview page exposes the three views and core controls", async () => {
   const source = await readFile("src/renderer/components/JsonPreviewPage.tsx", "utf8");
 
-  for (const label of ["输入 JSON", "树形视图", "表格视图", "原始 JSON", "全部展开", "全部收起", "复制当前路径"]) {
+  for (const label of ["输入 JSON", "树形视图", "表格视图", "原始 JSON", "全部展开", "全部收起"]) {
     assert.equal(source.includes(label), true, `missing JSON preview control: ${label}`);
   }
   assert.match(source, /parseJsonPreviewText/);
   assert.match(source, /flattenJsonValue/);
   assert.match(source, /navigator\.clipboard\.writeText/);
+  assert.doesNotMatch(source, /复制当前路径/);
+  assert.doesNotMatch(source, /copyCurrentPath/);
+  assert.doesNotMatch(source, /点击字段可复制路径/);
+  assert.match(source, /activeView === "tree"/);
+  assert.match(source, /格式化 JSON 原文/);
   assert.match(source, /type="file"/);
   assert.match(source, /file\.text\(\)/);
   assert.match(source, /json-preview-panel/);
@@ -58,6 +63,21 @@ test("JSON preview table supports expanding object and array rows", async () => 
   assert.match(source, /tableVisibleRows/);
 });
 
+test("JSON preview renders pipe-delimited arrays as an indexed horizontal table", async () => {
+  const [source, styles] = await Promise.all([
+    readFile("src/renderer/components/JsonPreviewPage.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+
+  assert.match(source, /parsePipeDelimitedArray/);
+  assert.match(source, /DelimitedArrayTable/);
+  assert.match(source, /字段名/);
+  assert.match(source, /索引/);
+  assert.match(styles, /\.json-preview-delimited-table-wrap[^\{]*\{[^}]*overflow-x:\s*auto/);
+  assert.match(styles, /\.json-preview-delimited-table[^\{]*\{[^}]*min-width:/);
+  assert.match(styles, /\.json-preview-delimited-table[^\{]*first-child[^\{]*\{[^}]*position:\s*sticky[^}]*left:\s*0/);
+});
+
 test("JSON preview exports the data preview through a native canvas", async () => {
   const source = await readFile("src/renderer/components/JsonPreviewPage.tsx", "utf8");
 
@@ -94,6 +114,13 @@ test("JSON preview accepts and consumes one-time prefills", async () => {
   assert.match(source, /updateInput\(prefillText\);/);
   assert.match(source, /onPrefillApplied\?\.\(\);/);
   assert.match(source, /\}, \[prefillText, onPrefillApplied\]\);/);
+});
+
+test("JSON preview stays mounted so its data survives navigation", async () => {
+  const source = await readFile("src/renderer/App.tsx", "utf8");
+
+  assert.match(source, /<div hidden=\{page !== "json"\}><JsonPreviewPage prefillText=\{jsonPrefill\} onPrefillApplied=\{\(\) => setJsonPrefill\(undefined\)\} \/><\/div>/);
+  assert.doesNotMatch(source, /\{page === "json" && <JsonPreviewPage/);
 });
 
 test("JSON preview keeps invalid prefill text while showing its parse error", async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AppConfig, ProxyInstanceSummary, RuntimeStatus } from "../../shared/contracts";
 import { parseDirectoryInput } from "../../shared/directory-path";
+import { useToast } from "./ToastProvider";
 
 interface ProxyInstancePanelProps {
   instances: ProxyInstanceSummary[];
@@ -14,12 +15,12 @@ interface ProxyInstancePanelProps {
 }
 
 export function ProxyInstancePanel({ instances, status, config, onChange, onChooseProjectDirectory, onRename, onStart, onStop }: ProxyInstancePanelProps) {
+  const { notifyError } = useToast();
   const selected = instances.find((instance) => instance.selected) ?? instances[0];
   const busy = status.state === "starting" || status.state === "stopping";
   const running = status.state === "running";
   const [nameDraft, setNameDraft] = useState(selected?.name ?? "");
   const [projectPathDraft, setProjectPathDraft] = useState(config.projectPath ?? "");
-  const [projectDirectoryError, setProjectDirectoryError] = useState("");
   const [bindHostDraft, setBindHostDraft] = useState(config.server.bindHost);
   const [portDraft, setPortDraft] = useState(String(config.server.port));
   const [timeoutDraft, setTimeoutDraft] = useState(String(config.server.timeoutMs));
@@ -50,23 +51,18 @@ export function ProxyInstancePanel({ instances, status, config, onChange, onChoo
       const saved = await onChange({ ...config, projectPath });
       if (!saved) {
         setProjectPathDraft(config.projectPath ?? "");
-        setProjectDirectoryError("配置未保存，请先停止服务");
         return;
       }
       setProjectPathDraft(projectPath);
-      setProjectDirectoryError("");
     } catch (error) {
       setProjectPathDraft(config.projectPath ?? "");
-      setProjectDirectoryError(error instanceof Error ? error.message : "项目目录路径无效");
+      notifyError(error, "项目目录路径无效");
     }
   };
 
   const saveServerPatch = async (patch: Partial<AppConfig["server"]>) => {
     const saved = await onChange({ ...config, server: { ...config.server, ...patch } });
-    if (saved) {
-      setProjectDirectoryError("");
-      return;
-    }
+    if (saved) return;
     setBindHostDraft(config.server.bindHost);
     setPortDraft(String(config.server.port));
     setTimeoutDraft(String(config.server.timeoutMs));
@@ -85,7 +81,6 @@ export function ProxyInstancePanel({ instances, status, config, onChange, onChoo
           <button type="button" onClick={function () { void onChooseProjectDirectory(); }} disabled={running || busy}>选择项目目录</button>
         </div>
       </div>
-      {projectDirectoryError && <p className="error-box" role="alert">{projectDirectoryError}</p>}
       <div className="proxy-instance-overview-fields">
         <label className="proxy-instance-overview-field"><span>监听主机 <small>HOST</small></span><input className="overview-config-input" aria-label="监听主机" value={bindHostDraft} onChange={function (event) { setBindHostDraft(event.target.value); }} onBlur={function () { void saveServerPatch({ bindHost: bindHostDraft }); }} disabled={running || busy} /><small className="overview-config-hint good">本机访问地址</small></label>
         <label className="proxy-instance-overview-field"><span>监听端口 <small>PORT</small></span><input className="overview-config-input" aria-label="监听端口" type="number" value={portDraft} onChange={function (event) { setPortDraft(event.target.value); }} onBlur={function () { void saveServerPatch({ port: Number(portDraft) }); }} disabled={running || busy} /><small className="overview-config-hint">范围 1 - 65535</small></label>

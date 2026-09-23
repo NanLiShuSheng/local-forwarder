@@ -89,6 +89,7 @@ export interface LogEntry {
   statusCode?: number;
   durationMs?: number;
   requestType?: "fetch" | "xhr";
+  requestPath?: string;
   requestParams?: string;
   responseData?: string;
 }

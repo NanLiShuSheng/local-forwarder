@@ -17,9 +17,10 @@ function workspaceWithTwoInstances(): ProxyWorkspace {
   return {
     version: 1,
     selectedInstanceId: "first",
+    ...( { sharedValues: { ACCOUNT: "shared-account" } } as any),
     instances: [
-      { id: "first", name: "行情代理", config: first },
-      { id: "second", name: "业务办理代理", config: second },
+      { id: "first", name: "行情代理", config: first, ...( { loginCache: { TOKEN: "first-token" } } as any) },
+      { id: "second", name: "业务办理代理", config: second, ...( { loginCache: { TOKEN: "second-token" } } as any) },
     ],
   };
 }
@@ -51,6 +52,52 @@ test("starts two proxy instances independently", async () => {
   const summaries = manager.list();
   assert.equal(summaries.find((item) => item.id === "first")?.status.state, "running");
   assert.equal(summaries.find((item) => item.id === "second")?.status.state, "running");
+});
+
+test("starts and stops all proxy instances", async () => {
+  const manager = new ForwardingServiceManager({ workspace: workspaceWithTwoInstances(), workspaceStore: { save: async () => undefined }, serviceFactory: fakeFactory() });
+
+  await manager.startAll();
+  assert.equal(manager.status("first").state, "running");
+  assert.equal(manager.status("second").state, "running");
+
+  await manager.stopAll();
+  assert.equal(manager.status("first").state, "stopped");
+  assert.equal(manager.status("second").state, "stopped");
+});
+
+test("renames a proxy instance and persists the new name", async () => {
+  let savedWorkspace: ProxyWorkspace | undefined;
+  const manager = new ForwardingServiceManager({ workspace: workspaceWithTwoInstances(), workspaceStore: { save: async (workspace) => { savedWorkspace = workspace; } }, serviceFactory: fakeFactory() });
+
+  await manager.rename("first", "  行情长名称  ");
+
+  assert.equal(manager.list().find((item) => item.id === "first")?.name, "行情长名称");
+  assert.equal(savedWorkspace?.instances.find((item) => item.id === "first")?.name, "行情长名称");
+  await assert.rejects(() => manager.rename("first", "   "), /代理名称不能为空/);
+});
+
+test("removes a proxy instance, stops it, selects the remaining instance, and persists the workspace", async () => {
+  let savedWorkspace: ProxyWorkspace | undefined;
+  const manager = new ForwardingServiceManager({ workspace: workspaceWithTwoInstances(), workspaceStore: { save: async (workspace) => { savedWorkspace = workspace; } }, serviceFactory: fakeFactory() });
+
+  await manager.start("first");
+  await manager.remove("first");
+
+  assert.deepEqual(manager.list().map((instance) => instance.id), ["second"]);
+  assert.equal(manager.getSelectedInstanceId(), "second");
+  assert.equal(savedWorkspace?.selectedInstanceId, "second");
+  assert.deepEqual(savedWorkspace?.instances.map((instance) => instance.id), ["second"]);
+  assert.throws(() => manager.status("first"), /代理实例不存在/);
+});
+
+test("does not remove the last proxy instance", async () => {
+  const workspace = workspaceWithTwoInstances();
+  workspace.instances = [workspace.instances[0]!];
+  const manager = new ForwardingServiceManager({ workspace, workspaceStore: { save: async () => undefined }, serviceFactory: fakeFactory() });
+
+  await assert.rejects(() => manager.remove("first"), /至少保留一个代理实例/);
+  assert.equal(manager.list().length, 1);
 });
 
 test("uses the jy forwarding address in the instance summary", () => {
@@ -92,6 +139,58 @@ test("stopping one proxy does not stop another proxy", async () => {
 
   assert.equal(manager.status("first").state, "stopped");
   assert.equal(manager.status("second").state, "running");
+});
+
+test("keeps shared values global and login cache isolated by proxy", async () => {
+  const workspace = workspaceWithTwoInstances();
+  const runtimeValues = new Map<string, Record<string, string>>();
+  const manager = new ForwardingServiceManager({
+    workspace,
+    workspaceStore: { save: async () => undefined },
+    serviceFactory: (config, persistence) => {
+      const service = fakeFactory()(config, persistence);
+      const original = service.getConfig;
+      return {
+        ...service,
+        setRuntimeValues: (values: Record<string, string>) => { runtimeValues.set(config.server.port.toString(), values); },
+        getConfig: () => original(),
+      } as any;
+    },
+  });
+
+  assert.deepEqual(manager.getSharedValues(), { ACCOUNT: "shared-account" });
+  assert.deepEqual(manager.getLoginCache("first"), { TOKEN: "first-token" });
+  await manager.saveSharedValues({ ACCOUNT: "new-account", REGION: "cn" });
+  await manager.saveLoginCache({ TOKEN: "updated-first-token" }, "first");
+
+  assert.deepEqual(manager.getLoginCache("first"), { TOKEN: "updated-first-token" });
+  assert.deepEqual(manager.getLoginCache("second"), { TOKEN: "second-token" });
+  assert.deepEqual(runtimeValues.get("18080"), { ACCOUNT: "new-account", REGION: "cn", TOKEN: "updated-first-token" });
+  assert.deepEqual(runtimeValues.get("18081"), { ACCOUNT: "new-account", REGION: "cn", TOKEN: "second-token" });
+});
+
+test("does not copy login cache when duplicating a proxy", async () => {
+  const manager = new ForwardingServiceManager({ workspace: workspaceWithTwoInstances(), workspaceStore: { save: async () => undefined }, serviceFactory: fakeFactory() });
+  const duplicate = await manager.duplicate();
+  assert.deepEqual(manager.getLoginCache(duplicate.id), {});
+});
+
+test("routes automatic login capture into the selected proxy cache", async () => {
+  const workspace = workspaceWithTwoInstances();
+  const captures = new Map<number, (values: Record<string, string>) => void>();
+  const manager = new ForwardingServiceManager({
+    workspace,
+    workspaceStore: { save: async () => undefined },
+    serviceFactory: (config, persistence, options) => {
+      if (options?.onLoginValuesChanged !== undefined) captures.set(config.server.port, options.onLoginValuesChanged);
+      return fakeFactory()(config, persistence);
+    },
+  });
+
+  captures.get(18080)?.({ SESSIONNO: "9" });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(manager.getLoginCache("first").SESSIONNO, "9");
+  assert.equal(manager.getLoginCache("second").SESSIONNO, undefined);
 });
 
 test("clears logs on the currently selected proxy instance", async () => {

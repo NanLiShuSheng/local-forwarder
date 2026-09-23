@@ -369,16 +369,23 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
         const field = Array.isArray(target) ? `conifg.${match}.target[${index}]` : `conifg.${match}.target`;
         if (typeof item !== "string") throw new ConfigParseError(filename, field, "expected a string");
         const normalizedItem = normalizeWrappedUrl(item);
+        const hasProtocol = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(normalizedItem);
+        if (!hasProtocol && !/^(?:\[[^\]]+\]|[^/:?#\s]+):\d+(?:[/?#].*)?$/.test(normalizedItem)) {
+          throw new ConfigParseError(filename, field, "invalid URL");
+        }
+        const parseableItem = hasProtocol
+          ? normalizedItem
+          : `http://${normalizedItem}`;
         let url: URL;
         try {
-          url = new URL(normalizedItem);
+          url = new URL(parseableItem);
         } catch (error) {
           throw new ConfigParseError(filename, field, "invalid URL", error);
         }
         if (url.protocol !== "http:" && url.protocol !== "https:") {
           throw new ConfigParseError(filename, field, "expected an http or https URL");
         }
-        if (!/^https?:\/\/[^/?#\s]+/i.test(normalizedItem) || url.hostname === "") {
+        if (!/^https?:\/\/[^/?#\s]+/i.test(parseableItem) || url.hostname === "") {
           throw new ConfigParseError(filename, field, "invalid URL");
         }
         const port = url.port === "" ? (url.protocol === "http:" ? 80 : 443) : Number(url.port);

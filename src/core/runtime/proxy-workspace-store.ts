@@ -1,11 +1,36 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { AppConfig, ProxyWorkspace } from "../../shared/contracts";
+import type { AppConfig, ProxyInstance, ProxyWorkspace } from "../../shared/contracts";
+import { parseLocalCacheText } from "../../shared/local-cache";
 import { isValidProxyWorkspace } from "../../shared/validation";
 import { createDefaultWorkspace } from "../config/model";
 
 function cloneWorkspace(workspace: ProxyWorkspace): ProxyWorkspace {
   return JSON.parse(JSON.stringify(workspace)) as ProxyWorkspace;
+}
+
+function migrateWorkspace(value: unknown): ProxyWorkspace {
+  const source = value as ProxyWorkspace;
+  const sharedValues = { ...(source.sharedValues ?? {}) };
+  if (Object.keys(sharedValues).length === 0) {
+    for (const instance of source.instances) {
+      try {
+        Object.assign(sharedValues, parseLocalCacheText(instance.config.localText ?? ""));
+      } catch {
+        // Keep malformed legacy text out of the new shared-variable store.
+      }
+    }
+  }
+  return {
+    version: 1,
+    selectedInstanceId: source.selectedInstanceId,
+    sharedValues,
+    instances: source.instances.map((instance) => {
+      const legacyValues = instance.loginCache ?? instance.config.localValues;
+      const config = { ...instance.config, localValues: {} };
+      return { ...(instance as ProxyInstance), config, loginCache: { ...legacyValues } };
+    }),
+  };
 }
 
 export class ProxyWorkspaceStore {
@@ -29,7 +54,9 @@ export class ProxyWorkspaceStore {
       throw new Error("Invalid proxy workspace", { cause: error });
     }
     if (!isValidProxyWorkspace(parsed)) throw new Error("Invalid proxy workspace");
-    return cloneWorkspace(parsed);
+    const migrated = migrateWorkspace(parsed);
+    await this.save(migrated);
+    return cloneWorkspace(migrated);
   }
 
   public async save(workspace: ProxyWorkspace): Promise<void> {

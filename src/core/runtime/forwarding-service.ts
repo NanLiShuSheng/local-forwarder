@@ -18,6 +18,7 @@ interface HttpRuntime extends TcpBridgeLike {
 export interface ForwardingServiceOptions {
   config: AppConfig;
   configStore?: { save(config: AppConfig): Promise<void> };
+  onLoginValuesChanged?: (values: Record<string, string>) => void;
   httpFactory?: (options: HttpProxyOptions) => HttpRuntime;
   tcpFactory?: (options: ConstructorParameters<typeof TcpBridgePool>[0]) => TcpBridgeLike & { close(): Promise<void>; getConnectionCount?: () => number };
   cacheFactory?: (options: { rootDir: string }) => Pick<FileCache, "close" | "getOrDownload" | "remove">;
@@ -30,7 +31,8 @@ function cloneConfig(config: AppConfig): AppConfig {
 
 export class ForwardingService {
   private config: AppConfig;
-  private readonly configStore?: ConfigStore;
+  private readonly configStore?: { save(config: AppConfig): Promise<void> };
+  private readonly onLoginValuesChanged?: (values: Record<string, string>) => void;
   private readonly httpFactory: (options: HttpProxyOptions) => HttpRuntime;
   private readonly tcpFactory: NonNullable<ForwardingServiceOptions["tcpFactory"]>;
   private readonly cacheFactory: NonNullable<ForwardingServiceOptions["cacheFactory"]>;
@@ -48,6 +50,7 @@ export class ForwardingService {
   public constructor(options: ForwardingServiceOptions) {
     this.config = cloneConfig(options.config);
     this.configStore = options.configStore;
+    this.onLoginValuesChanged = options.onLoginValuesChanged;
     this.httpFactory = options.httpFactory ?? ((httpOptions) => new HttpProxy(httpOptions) as unknown as HttpRuntime);
     this.tcpFactory = options.tcpFactory ?? ((tcpOptions) => new TcpBridgePool(tcpOptions));
     this.cacheFactory = options.cacheFactory ?? ((cacheOptions) => new FileCache(cacheOptions));
@@ -92,7 +95,7 @@ export class ForwardingService {
         cacheConfig: this.config.cache,
         cacheCodec: this.config.cache.decryptEnabled ? createTztCodec() : undefined,
         onLog: (entry) => this.appendLogEntry(entry),
-        onLocalValuesChanged: (values) => this.persistLocalValues(values),
+        onLoginValuesChanged: (values) => this.onLoginValuesChanged?.(values),
       });
       created.push(async () => { await this.http?.stop(); this.http = undefined; });
       this.address = await this.startHttpWithRecovery(this.http);
@@ -177,6 +180,15 @@ export class ForwardingService {
     const merged = { ...current, ...values };
     if (activeValues !== undefined) Object.assign(activeValues, values);
     this.persistLocalValues(merged);
+  }
+
+  public setRuntimeValues(values: Record<string, string>): void {
+    this.config.localValues = { ...values };
+    const activeValues = this.http?.getValues().localValues;
+    if (activeValues !== undefined) {
+      for (const key of Object.keys(activeValues)) delete activeValues[key];
+      Object.assign(activeValues, values);
+    }
   }
 
   public getLogs(): LogEntry[] {

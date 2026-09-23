@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0e1a2d"/>
+      <stop offset="1" stop-color="#111f34"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#82e8c5"/>
+      <stop offset="1" stop-color="#54cda9"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#020711" flood-opacity=".28"/>
+    </filter>
+    <style>
+      .font { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .muted { fill: #8396b2; }
+      .text { fill: #eef5ff; }
+      .soft { fill: #b9c8dc; }
+      .panel { fill: #172841; stroke: #273d5a; stroke-width: 1; }
+      .line { stroke: #2a405d; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1440" height="68" fill="#101e33"/>
+  <line x1="0" y1="68" x2="1440" y2="68" class="line"/>
+
+  <!-- top bar -->
+  <g class="font">
+    <circle cx="34" cy="34" r="16" fill="url(#accent)"/>
+    <path d="M29 39l10-10M32 29h7v7" fill="none" stroke="#092019" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="62" y="31" class="text" font-size="17" font-weight="700">本地转发工具</text>
+    <text x="62" y="49" class="muted" font-size="11">多代理实例管理</text>
+    <text x="1248" y="39" class="muted" font-size="12">服务总状态</text>
+    <circle cx="1335" cy="34" r="5" fill="#79e2c0"/>
+    <text x="1348" y="39" fill="#79e2c0" font-size="13" font-weight="600">2 个运行中</text>
+  </g>
+
+  <!-- sidebar -->
+  <rect x="0" y="69" width="330" height="831" fill="#101d31"/>
+  <line x1="330" y1="69" x2="330" y2="900" class="line"/>
+  <g class="font">
+    <text x="30" y="111" class="text" font-size="20" font-weight="700">代理实例</text>
+    <text x="30" y="136" class="muted" font-size="12">每个实例可使用独立端口和转发地址</text>
+    <rect x="235" y="94" width="65" height="32" rx="8" fill="url(#accent)"/>
+    <text x="267" y="115" text-anchor="middle" fill="#092019" font-size="13" font-weight="700">＋ 新增</text>
+
+    <!-- selected instance -->
+    <rect x="20" y="164" width="290" height="112" rx="12" fill="#203653" stroke="#79e2c0" stroke-width="1.5"/>
+    <rect x="20" y="164" width="4" height="112" rx="2" fill="#79e2c0"/>
+    <circle cx="47" cy="191" r="5" fill="#79e2c0"/>
+    <text x="62" y="196" class="text" font-size="15" font-weight="700">行情代理</text>
+    <text x="260" y="196" class="muted mono" font-size="11" text-anchor="end">:8080</text>
+    <text x="38" y="221" class="muted" font-size="11">上游地址</text>
+    <text x="38" y="241" class="soft mono" font-size="11">60.12.9.58:7778</text>
+    <text x="38" y="260" fill="#79e2c0" font-size="11">运行中 · 1,284 请求</text>
+
+    <!-- second instance -->
+    <rect x="20" y="290" width="290" height="112" rx="12" class="panel"/>
+    <circle cx="47" cy="317" r="5" fill="#79e2c0"/>
+    <text x="62" y="322" class="text" font-size="15" font-weight="700">业务办理代理</text>
+    <text x="260" y="322" class="muted mono" font-size="11" text-anchor="end">:8081</text>
+    <text x="38" y="347" class="muted" font-size="11">上游地址</text>
+    <text x="38" y="367" class="soft mono" font-size="11">123.103.83.86:7779</text>
+    <text x="38" y="386" fill="#79e2c0" font-size="11">运行中 · 426 请求</text>
+
+    <!-- third instance -->
+    <rect x="20" y="416" width="290" height="112" rx="12" class="panel" opacity=".78"/>
+    <circle cx="47" cy="443" r="5" fill="#8496b2"/>
+    <text x="62" y="448" class="text" font-size="15" font-weight="700">测试代理</text>
+    <text x="260" y="448" class="muted mono" font-size="11" text-anchor="end">:8082</text>
+    <text x="38" y="473" class="muted" font-size="11">上游地址</text>
+    <text x="38" y="493" class="soft mono" font-size="11">test.example.com:7778</text>
+    <text x="38" y="512" class="muted" font-size="11">已停止</text>
+
+    <line x1="30" y1="566" x2="300" y2="566" class="line"/>
+    <text x="30" y="597" class="muted" font-size="11">快捷操作</text>
+    <text x="30" y="628" class="soft" font-size="13">＋ 新增代理实例</text>
+    <text x="30" y="660" class="soft" font-size="13">⧉ 复制当前实例</text>
+    <text x="30" y="692" class="soft" font-size="13">⚙ 全局设置</text>
+  </g>
+
+  <!-- main content -->
+  <g class="font">
+    <text x="378" y="116" class="muted" font-size="12">代理实例 / 详情</text>
+    <text x="378" y="155" class="text" font-size="28" font-weight="750">行情代理</text>
+    <rect x="378" y="174" width="72" height="26" rx="13" fill="#173c3a"/>
+    <circle cx="393" cy="187" r="4" fill="#79e2c0"/>
+    <text x="404" y="192" fill="#79e2c0" font-size="11" font-weight="600">运行中</text>
+    <text x="478" y="192" class="muted" font-size="12">监听 127.0.0.1:8080</text>
+    <rect x="1165" y="167" width="94" height="36" rx="8" fill="#243b57" stroke="#3b5471"/>
+    <text x="1212" y="190" text-anchor="middle" class="soft" font-size="13">编辑配置</text>
+    <rect x="1270" y="167" width="90" height="36" rx="8" fill="#263647" stroke="#f19a8b"/>
+    <text x="1315" y="190" text-anchor="middle" fill="#f2a99b" font-size="13" font-weight="600">停止代理</text>
+
+    <!-- metrics -->
+    <rect x="378" y="234" width="226" height="105" rx="12" class="panel" filter="url(#shadow)"/>
+    <text x="402" y="264" class="muted" font-size="12">本地监听端口</text>
+    <text x="402" y="303" class="text mono" font-size="26" font-weight="700">8080</text>
+    <text x="550" y="303" fill="#79e2c0" font-size="11">可访问</text>
+    <rect x="620" y="234" width="226" height="105" rx="12" class="panel" filter="url(#shadow)"/>
+    <text x="644" y="264" class="muted" font-size="12">上游转发地址</text>
+    <text x="644" y="302" class="soft mono" font-size="15">60.12.9.58:7778</text>
+    <text x="644" y="322" class="muted" font-size="11">TCP / TZT</text>
+    <rect x="862" y="234" width="226" height="105" rx="12" class="panel" filter="url(#shadow)"/>
+    <text x="886" y="264" class="muted" font-size="12">累计请求</text>
+    <text x="886" y="303" class="text" font-size="26" font-weight="700">1,284</text>
+    <text x="1020" y="303" fill="#79e2c0" font-size="11">成功率 99.4%</text>
+    <rect x="1104" y="234" width="256" height="105" rx="12" class="panel" filter="url(#shadow)"/>
+    <text x="1128" y="264" class="muted" font-size="12">缓存状态</text>
+    <text x="1128" y="303" class="text" font-size="20" font-weight="700">已启用</text>
+    <text x="1128" y="322" class="muted" font-size="11">命中率 87.2%</text>
+
+    <!-- configuration -->
+    <rect x="378" y="366" width="982" height="218" rx="14" class="panel"/>
+    <text x="404" y="402" class="text" font-size="16" font-weight="700">转发配置</text>
+    <text x="404" y="426" class="muted" font-size="11">此配置仅作用于当前代理实例</text>
+    <line x1="404" y1="444" x2="1334" y2="444" class="line"/>
+    <text x="404" y="476" class="muted" font-size="12">本地访问地址</text>
+    <text x="620" y="476" class="soft mono" font-size="13">http://127.0.0.1:8080</text>
+    <text x="404" y="516" class="muted" font-size="12">上游地址</text>
+    <text x="620" y="516" class="soft mono" font-size="13">tcp://60.12.9.58:7778</text>
+    <text x="918" y="476" class="muted" font-size="12">项目目录</text>
+    <text x="1054" y="476" class="soft" font-size="12">/Users/hdw/Desktop/market-h5</text>
+    <text x="918" y="516" class="muted" font-size="12">缓存目录</text>
+    <text x="1054" y="516" class="soft" font-size="12">实例独立缓存</text>
+    <rect x="1254" y="535" width="80" height="28" rx="7" fill="#223a55"/>
+    <text x="1294" y="554" text-anchor="middle" fill="#9bb0ca" font-size="11">查看配置</text>
+
+    <!-- logs -->
+    <rect x="378" y="611" width="982" height="226" rx="14" class="panel"/>
+    <text x="404" y="647" class="text" font-size="16" font-weight="700">运行日志</text>
+    <text x="1278" y="647" class="muted" font-size="11">仅显示当前实例</text>
+    <line x1="404" y1="668" x2="1334" y2="668" class="line"/>
+    <text x="404" y="700" class="muted mono" font-size="11">10:24:31</text>
+    <text x="498" y="700" fill="#79e2c0" font-size="11">INFO</text>
+    <text x="554" y="700" class="soft mono" font-size="11">Forwarding service started on 127.0.0.1:8080</text>
+    <text x="404" y="732" class="muted mono" font-size="11">10:24:36</text>
+    <text x="498" y="732" fill="#8fc7ff" font-size="11">HTTP</text>
+    <text x="554" y="732" class="soft mono" font-size="11">GET /quote/index.html → 200 · 42ms</text>
+    <text x="404" y="764" class="muted mono" font-size="11">10:24:39</text>
+    <text x="498" y="764" fill="#8fc7ff" font-size="11">TCP</text>
+    <text x="554" y="764" class="soft mono" font-size="11">reqxml → 60.12.9.58:7778 · 86ms</text>
+    <text x="404" y="796" class="muted mono" font-size="11">10:24:42</text>
+    <text x="498" y="796" fill="#79e2c0" font-size="11">CACHE</text>
+    <text x="554" y="796" class="soft mono" font-size="11">app.js.d hit · decoded successfully</text>
+  </g>
+</svg>

@@ -24,7 +24,7 @@ export function matchRule(url: string, rules: readonly ForwardRule[]): ForwardRu
     .sort((left, right) => right.match.length - left.match.length || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0))[0];
 }
 
-const VARIABLE_PATTERN = /\$\(([A-Za-z0-9_]+)\)|\(\$([A-Za-z0-9_]+)\)|%28\$([A-Za-z0-9_]+)%29|%28%24([A-Za-z0-9_]+)%29/g;
+const VARIABLE_PATTERN = /\$\(([A-Za-z0-9_]+)\)|\(\$([A-Za-z0-9_]+)\)|\(%24([A-Za-z0-9_]+)\)|%28\$([A-Za-z0-9_]+)%29|%28%24([A-Za-z0-9_]+)%29/g;
 
 export function substituteVariables(input: string, localValues: Record<string, string>): string {
   const values = new Map<string, string>();
@@ -33,8 +33,8 @@ export function substituteVariables(input: string, localValues: Record<string, s
     if (!values.has(normalizedKey)) values.set(normalizedKey, value);
   }
 
-  return input.replace(VARIABLE_PATTERN, (placeholder, dollarKey: string | undefined, plainKey: string | undefined, encodedKey: string | undefined, fullyEncodedKey: string | undefined) => {
-    const key = dollarKey ?? plainKey ?? encodedKey ?? fullyEncodedKey;
+  return input.replace(VARIABLE_PATTERN, (placeholder, dollarKey: string | undefined, plainKey: string | undefined, partiallyEncodedKey: string | undefined, encodedKey: string | undefined, fullyEncodedKey: string | undefined) => {
+    const key = dollarKey ?? plainKey ?? partiallyEncodedKey ?? encodedKey ?? fullyEncodedKey;
     if (key === undefined) return placeholder;
     return values.get(key.toLowerCase()) ?? placeholder;
   });

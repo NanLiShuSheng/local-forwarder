@@ -4,14 +4,15 @@ import https from "node:https";
 import path from "node:path";
 import { inflateSync, gunzipSync } from "node:zlib";
 import type { AppConfig, ForwardRule, LogEntry } from "../../shared/contracts";
-import { decodeCachedResource, type CacheResult } from "../cache/file-cache";
+import { decodeCachedResource, rewriteLegacyNavigationScript, type CacheResult } from "../cache/file-cache";
 import type { TztCodec } from "../tcp/tzt-codec";
 import { matchRule, parseTarget, substituteVariables } from "../routing/rule-matcher";
 
 const MAX_BODY_SIZE = 16 * 1024 * 1024;
+const MAX_LOG_DETAIL_SIZE = 256 * 1024;
 
 export interface TcpBridgeLike {
-  request(target: { host: string; port: number }, query: Record<string, string>): Promise<Record<string, string>>;
+  request(target: { host: string; port: number }, query: Record<string, string>): Promise<Record<string, unknown>>;
 }
 
 export interface HttpProxyOptions {
@@ -31,6 +32,7 @@ export interface HttpProxyOptions {
   cacheCodec?: Pick<TztCodec, "rc4">;
   onLog?: (entry: LogEntry) => void;
   onLocalValuesChanged?: (values: Record<string, string>) => void;
+  onLoginValuesChanged?: (values: Record<string, string>) => void;
 }
 
 export interface ResourceCacheLike {
@@ -52,6 +54,66 @@ export interface HttpProxyStats {
 
 class RequestTooLargeError extends Error {}
 
+interface ResponseCapture {
+  chunks: Buffer[];
+  totalBytes: number;
+}
+
+function requestTypeFor(request: IncomingMessage): LogEntry["requestType"] {
+  const fetchDestination = typeof request.headers["sec-fetch-dest"] === "string" ? request.headers["sec-fetch-dest"].toLowerCase() : "";
+  const requestedWith = typeof request.headers["x-requested-with"] === "string" ? request.headers["x-requested-with"].toLowerCase() : "";
+  if (requestedWith === "xmlhttprequest") return "xhr";
+  if (fetchDestination === "empty") return "fetch";
+  return undefined;
+}
+
+function requestPathFor(requestUrl: string | undefined): string | undefined {
+  try {
+    return new URL(requestUrl ?? "/", "http://local-forwarder.invalid").pathname || "/";
+  } catch {
+    return undefined;
+  }
+}
+
+function captureResponse(response: ServerResponse): ResponseCapture {
+  const capture: ResponseCapture = { chunks: [], totalBytes: 0 };
+  const responseWithOverrides = response as any;
+  const originalWrite = responseWithOverrides.write.bind(response);
+  const originalEnd = responseWithOverrides.end.bind(response);
+  const remember = (chunk: unknown, encoding?: unknown) => {
+    if (chunk === undefined || typeof chunk === "function") return;
+    const buffer = Buffer.isBuffer(chunk)
+      ? chunk
+      : chunk instanceof Uint8Array
+        ? Buffer.from(chunk)
+        : Buffer.from(String(chunk), typeof encoding === "string" ? encoding as BufferEncoding : "utf8");
+    capture.totalBytes += buffer.length;
+    if (capture.totalBytes <= MAX_LOG_DETAIL_SIZE) capture.chunks.push(buffer);
+    else if (capture.totalBytes - buffer.length < MAX_LOG_DETAIL_SIZE) capture.chunks.push(buffer.subarray(0, MAX_LOG_DETAIL_SIZE - (capture.totalBytes - buffer.length)));
+  };
+  responseWithOverrides.write = (...args: any[]) => { remember(args[0], args[1]); return originalWrite(...args); };
+  responseWithOverrides.end = (...args: any[]) => { remember(args[0], args[1]); return originalEnd(...args); };
+  return capture;
+}
+
+function truncateLogDetail(value: string, totalBytes = Buffer.byteLength(value, "utf8")): string {
+  if (totalBytes <= MAX_LOG_DETAIL_SIZE) return value;
+  return `${value}\n…（内容过长，已截取前 ${MAX_LOG_DETAIL_SIZE} 字节）`;
+}
+
+function requestParamsFor(request: IncomingMessage, body: Buffer): string {
+  const requestLine = `${request.method ?? "GET"} ${request.url ?? "/"}`;
+  if (body.length === 0) return requestLine;
+  return truncateLogDetail(`${requestLine}\n\n${body.toString("utf8")}`);
+}
+
+function responseDataFor(response: ServerResponse, capture: ResponseCapture): string {
+  if (capture.totalBytes === 0) return "";
+  const contentType = String(response.getHeader("content-type") ?? "").toLowerCase();
+  if (contentType.length > 0 && !/(text|json|javascript|xml|x-www-form-urlencoded)/i.test(contentType)) return `[二进制响应，共 ${capture.totalBytes} 字节]`;
+  return truncateLogDetail(Buffer.concat(capture.chunks).toString("utf8"), capture.totalBytes);
+}
+
 function asMutable(values: Record<string, string> | undefined): Record<string, string> {
   return values ?? Object.create(null) as Record<string, string>;
 }
@@ -66,9 +128,68 @@ function parseParams(requestUrl: string, body: Buffer): Record<string, string> {
   return Object.fromEntries(params.entries());
 }
 
+interface LegacyActionResponse {
+  statusCode: 200 | 204 | 301 | 307;
+  location?: string;
+  body?: string;
+}
+
+const actionTokenPattern = /(?:^|\/)action:(\d+)(?:[/?#]|$)/i;
+const actionHostPattern = /^action:(\d+)$/i;
+
+function actionCodeFor(requestUrl: string, hostHeader?: string | string[]): string | undefined {
+  const urlMatch = actionTokenPattern.exec(requestUrl);
+  if (urlMatch?.[1] !== undefined) return urlMatch[1];
+  const host = Array.isArray(hostHeader) ? hostHeader[0] ?? "" : hostHeader ?? "";
+  return actionHostPattern.exec(host.trim())?.[1];
+}
+
+function isActionInvocationPath(requestUrl: string): boolean {
+  const pathname = new URL(requestUrl, "http://local-forwarder.invalid").pathname;
+  return pathname === "/" || /^\/action:\d+(?:\/|$)/i.test(pathname);
+}
+
+function resolveActionTarget(requestUrl: string, hostHeader?: string | string[]): string | undefined {
+  let currentUrl = requestUrl;
+  let currentHost = hostHeader;
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (actionCodeFor(currentUrl, currentHost) === undefined) return undefined;
+    const target = new URL(currentUrl, "http://local-forwarder.invalid").searchParams.get("url");
+    if (target === null) return undefined;
+    const cleanedTarget = target.replace(/[\u4e00-\u9fa5]/g, "");
+    if (actionCodeFor(cleanedTarget) === undefined) return cleanedTarget;
+    currentUrl = cleanedTarget;
+    currentHost = undefined;
+  }
+  return undefined;
+}
+
+function legacyActionResponse(requestUrl: string, hostHeader?: string | string[]): LegacyActionResponse | undefined {
+  const actionCode = actionCodeFor(requestUrl, hostHeader);
+  if (actionCode === undefined) return undefined;
+
+  if (actionCode === "10002" && isActionInvocationPath(requestUrl)) {
+    return {
+      statusCode: 200,
+      body: "<html><head><meta http-equiv=Content-Type><script type=text/javascript>window.history.go(-2);</script><body><html>",
+    };
+  }
+
+  const target = resolveActionTarget(requestUrl, hostHeader);
+  if (target !== undefined) return { statusCode: actionCode === "1964" ? 301 : 307, location: target };
+  if (isActionInvocationPath(requestUrl)) return { statusCode: 204 };
+  return undefined;
+}
+
 function uppercaseParams(params: Record<string, string>): Record<string, string> {
   const output: Record<string, string> = Object.create(null);
   for (const [key, value] of Object.entries(params)) output[key.toUpperCase()] = value;
+  return output;
+}
+
+function uppercaseRecordKeys(record: Record<string, unknown>): Record<string, unknown> {
+  const output: Record<string, unknown> = Object.create(null);
+  for (const [key, value] of Object.entries(record)) output[key.toUpperCase()] = value;
   return output;
 }
 
@@ -120,6 +241,20 @@ function decodeResponseBody(data: Buffer, encoding: string | undefined): Buffer 
   return data;
 }
 
+function uppercaseJsonKeys(data: Buffer, contentType: string | string[] | undefined): Buffer {
+  const header = Array.isArray(contentType) ? contentType.join(",") : contentType ?? "";
+  if (/application\/binary/i.test(header) || /charset\s*=\s*gbk/i.test(header)) return data;
+  try {
+    const parsed: unknown = JSON.parse(data.toString("utf8"));
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return data;
+    const output: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) output[key.toUpperCase()] = value;
+    return Buffer.from(JSON.stringify(output), "utf8");
+  } catch {
+    return data;
+  }
+}
+
 function substituteRequestUrl(input: string, requestUrl: string): string {
   return input.replace(/\$\(url\)|\(\$url\)|%28\$url%29|%28%24url%29/gi, requestUrl);
 }
@@ -150,6 +285,7 @@ export class HttpProxy {
   private readonly fileValues: Record<string, string>;
   private readonly accounts: Record<string, Record<string, string>>;
   private server: http.Server | undefined;
+  private readonly outboundRequests = new Set<http.ClientRequest>();
   private stats: HttpProxyStats = { requestCount: 0, successCount: 0, totalDurationMs: 0, tcpConnections: 0 };
 
   public constructor(options: HttpProxyOptions) {
@@ -184,7 +320,9 @@ export class HttpProxy {
   public async stop(): Promise<void> {
     const server = this.server;
     this.server = undefined;
+    for (const outbound of this.outboundRequests) outbound.destroy();
     if (server === undefined) return;
+    server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 
@@ -198,12 +336,30 @@ export class HttpProxy {
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const started = Date.now();
+    const requestType = requestTypeFor(request);
+    const requestPath = requestPathFor(request.url);
+    const responseCapture = captureResponse(response);
     this.stats.requestCount += 1;
+    let requestBody: Buffer<ArrayBufferLike> = Buffer.alloc(0);
     let statusCode = 500;
     try {
       const body = await readBody(request);
+      requestBody = body;
       const url = new URL(request.url ?? "/", "http://local-forwarder.invalid");
-      if (url.pathname === "/reqlocal") {
+      const actionResponse = legacyActionResponse(request.url ?? "/", request.headers.host);
+      if (actionResponse !== undefined) {
+        if (actionResponse.location !== undefined) {
+          response.writeHead(actionResponse.statusCode, { location: actionResponse.location });
+          response.end();
+        } else if (actionResponse.body !== undefined) {
+          response.writeHead(actionResponse.statusCode, { "content-type": "text/html" });
+          response.end(actionResponse.body);
+        } else {
+          response.writeHead(actionResponse.statusCode);
+          response.end();
+        }
+        statusCode = actionResponse.statusCode;
+      } else if (url.pathname === "/reqlocal") {
         writeJson(response, Object.fromEntries(Object.keys(parseParams(request.url ?? "/", body)).map((key) => [key.toUpperCase(), lookupValue(this.localValues, key)])));
         statusCode = 200;
       } else if (url.pathname === "/reqsavemap" || url.pathname === "/reqreadmap") {
@@ -244,7 +400,9 @@ export class HttpProxy {
     } finally {
       const durationMs = Date.now() - started;
       this.stats.totalDurationMs += durationMs;
-      this.options.onLog?.({ timestamp: new Date().toISOString(), level: statusCode >= 500 ? "error" : "info", message: `${request.method ?? "GET"} ${request.url ?? "/"}`, direction: "inbound", protocol: "http", statusCode, durationMs });
+      if (requestType !== undefined) {
+        this.options.onLog?.({ timestamp: new Date().toISOString(), level: statusCode >= 500 ? "error" : "info", message: `${request.method ?? "GET"} ${request.url ?? "/"}`, direction: "inbound", protocol: "http", statusCode, durationMs, requestType, requestPath, requestParams: requestParamsFor(request, requestBody), responseData: responseDataFor(response, responseCapture) });
+      }
     }
   }
 
@@ -259,9 +417,11 @@ export class HttpProxy {
       const type = normalizedParams.TYPE ?? "ptjy";
       Object.assign(params, this.accounts[type] ?? {});
       params.REQLINKTYPE = "1";
+      const substituted = substituteVariables(new URLSearchParams(params).toString(), this.localValues);
+      params = Object.fromEntries(new URLSearchParams(substituted).entries());
     }
     const targets = (this.options.tcpTargets ?? []).filter((target) => target.enabled);
-    const index = Number((uppercaseParams(params).REQLINKTYPE ?? (targets.length > 2 ? 2 : 0)));
+    const index = Number((uppercaseParams(params).REQLINKTYPE ?? 1));
     const target = targets[index] ?? targets[0];
     if (target === undefined) return writeJson(response, { error: "TCP target is unavailable" }, 502);
     if (target.transport === "http") {
@@ -271,8 +431,9 @@ export class HttpProxy {
     if (this.options.tcpBridge === undefined) return writeJson(response, { error: "TCP bridge is unavailable" }, 502);
     try {
       const result = await this.options.tcpBridge.request({ host: target.host, port: target.port }, params);
-      this.captureLocalValues(result);
-      writeJson(response, result);
+      const normalized = uppercaseRecordKeys(result);
+      this.captureLocalValues(normalized);
+      writeJson(response, normalized);
     } catch (error) {
       writeJson(response, { error: error instanceof Error ? error.message : "TCP request failed" }, /timeout/i.test(String(error)) ? 504 : 502);
     }
@@ -294,17 +455,22 @@ export class HttpProxy {
     }
     const client = target.protocol === "https" ? https : http;
     await new Promise<void>((resolve) => {
-      const outbound = client.request({ hostname: target.host, port: target.port, path: outgoingPath, method, headers: outgoingHeaders, rejectUnauthorized: false }, (upstream) => {
+      const outbound = this.trackOutbound(client.request({ hostname: target.host, port: target.port, path: outgoingPath, method, headers: outgoingHeaders, rejectUnauthorized: false }, (upstream) => {
         const chunks: Buffer[] = [];
         upstream.on("data", (chunk: Buffer) => chunks.push(chunk));
         upstream.once("end", () => {
-          const data = decodeResponseBody(Buffer.concat(chunks), typeof upstream.headers["content-encoding"] === "string" ? upstream.headers["content-encoding"] : undefined);
+          const data = uppercaseJsonKeys(
+            decodeResponseBody(Buffer.concat(chunks), typeof upstream.headers["content-encoding"] === "string" ? upstream.headers["content-encoding"] : undefined),
+            upstream.headers["content-type"],
+          );
           this.captureLocalValues(data);
           response.writeHead(upstream.statusCode ?? 502, cleanResponseHeaders(upstream.headers));
           response.end(data);
           resolve();
         });
-      });
+        upstream.once("error", () => finish(502, "upstream request failed"));
+        upstream.once("aborted", () => finish(502, "upstream request failed"));
+      }));
       let settled = false;
       const finish = (status: number, message: string) => {
         if (settled) return;
@@ -330,15 +496,21 @@ export class HttpProxy {
     if (record === undefined) return;
     const normalized = uppercaseParams(Object.fromEntries(Object.entries(record).filter(([, entry]) => typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean").map(([key, entry]) => [key, String(entry)])));
     let changed = false;
+    let captured: Record<string, string> = {};
     if (normalized.ACTION === "100") {
       for (const [key, entry] of Object.entries(normalized)) {
         if (this.localValues[key] !== entry) { this.localValues[key] = entry; changed = true; }
+        captured[key] = entry;
       }
     } else if (normalized.TOKEN !== undefined && this.localValues.TOKEN !== normalized.TOKEN) {
       this.localValues.TOKEN = normalized.TOKEN;
       changed = true;
+      captured.TOKEN = normalized.TOKEN;
     }
-    if (changed) this.options.onLocalValuesChanged?.({ ...this.localValues });
+    if (changed) {
+      this.options.onLoginValuesChanged?.({ ...captured });
+      this.options.onLocalValuesChanged?.({ ...this.localValues });
+    }
   }
 
   private async serveProjectFile(requestPath: string, response: ServerResponse): Promise<boolean> {
@@ -360,6 +532,7 @@ export class HttpProxy {
     }
     let data: Buffer = Buffer.from(await readFile(actual));
     if (actual.endsWith(".d") && this.options.cacheCodec !== undefined) data = Buffer.from(decodeCachedResource(paths.relative, data, this.options.cacheCodec, true));
+    if (!actual.endsWith(".d") || this.options.cacheCodec !== undefined) data = rewriteLegacyNavigationScript(paths.relative, data);
     response.writeHead(200, { "content-type": contentTypeFor(paths.relative), "content-length": data.length });
     response.end(data);
     return true;
@@ -376,18 +549,25 @@ export class HttpProxy {
       await this.serveCachedResource(request, response, rule, substitutedUrl);
       return;
     }
+    const outgoingBody = body.length === 0
+      ? body
+      : Buffer.from(substituteVariables(body.toString("utf8"), this.localValues), "utf8");
     const outgoingPath = rule.rewrite === undefined ? substitutedUrl : substituteRequestUrl(substituteVariables(rule.rewrite, this.localValues), substitutedUrl);
     const targetPath = target.pathname === "/" ? outgoingPath : `${target.pathname.replace(/\/$/, "")}${outgoingPath.startsWith("/") ? outgoingPath : `/${outgoingPath}`}`;
     const requestHeaders = { ...request.headers };
     delete requestHeaders.connection;
+    if (outgoingBody.length > 0) requestHeaders["content-length"] = String(outgoingBody.length);
     const client = target.protocol === "https" ? https : http;
     await new Promise<void>((resolve) => {
-      const outbound = client.request({ hostname: target.hostname, port: target.port, path: `${targetPath}${target.search}`, method: request.method, headers: requestHeaders, rejectUnauthorized: false }, (upstream) => {
+      const outbound = this.trackOutbound(client.request({ hostname: target.hostname, port: target.port, path: `${targetPath}${target.search}`, method: request.method, headers: requestHeaders, rejectUnauthorized: false }, (upstream) => {
         const chunks: Buffer[] = [];
         upstream.on("data", (chunk: Buffer) => chunks.push(chunk));
         upstream.once("end", () => {
           try {
-            const decoded = decodeResponseBody(Buffer.concat(chunks), typeof upstream.headers["content-encoding"] === "string" ? upstream.headers["content-encoding"] : undefined);
+            const decoded = uppercaseJsonKeys(
+              decodeResponseBody(Buffer.concat(chunks), typeof upstream.headers["content-encoding"] === "string" ? upstream.headers["content-encoding"] : undefined),
+              upstream.headers["content-type"],
+            );
             this.captureLocalValues(decoded);
             const headers = cleanResponseHeaders(upstream.headers);
             response.writeHead(upstream.statusCode ?? 502, headers);
@@ -397,7 +577,9 @@ export class HttpProxy {
           }
           resolve();
         });
-      });
+        upstream.once("error", () => finish(502, "upstream request failed"));
+        upstream.once("aborted", () => finish(502, "upstream request failed"));
+      }));
       let settled = false;
       const finish = (status: number, message: string) => {
         if (settled) return;
@@ -408,7 +590,7 @@ export class HttpProxy {
       };
       outbound.once("error", () => finish(502, "upstream request failed"));
       outbound.setTimeout(this.options.timeoutMs, () => finish(504, "upstream request timeout"));
-      if (body.length > 0) outbound.write(body);
+      if (outgoingBody.length > 0) outbound.write(outgoingBody);
       outbound.end();
     });
   }
@@ -435,6 +617,7 @@ export class HttpProxy {
       } else {
         data = Buffer.from(result.data);
       }
+      if (!cacheKey.toLowerCase().endsWith(".d") || cacheConfig.decryptEnabled) data = rewriteLegacyNavigationScript(cacheKey, data);
     } catch (error) {
       await cache.remove(cacheKey).catch(() => undefined);
       throw error;
@@ -447,7 +630,7 @@ export class HttpProxy {
   private downloadResource(target: ReturnType<typeof parseTarget>, resourcePath: string): Promise<Buffer> {
     const client = target.protocol === "https" ? https : http;
     return new Promise((resolve, reject) => {
-      const outbound = client.request({ hostname: target.hostname, port: target.port, path: resourcePath, method: "GET", rejectUnauthorized: false }, (upstream) => {
+      const outbound = this.trackOutbound(client.request({ hostname: target.hostname, port: target.port, path: resourcePath, method: "GET", rejectUnauthorized: false }, (upstream) => {
         const chunks: Buffer[] = [];
         upstream.on("data", (chunk: Buffer) => chunks.push(chunk));
         upstream.once("end", () => {
@@ -457,7 +640,9 @@ export class HttpProxy {
           }
           resolve(Buffer.concat(chunks));
         });
-      });
+        upstream.once("error", reject);
+        upstream.once("aborted", () => reject(new Error("resource download aborted")));
+      }));
       outbound.once("error", reject);
       outbound.setTimeout(this.options.timeoutMs, () => {
         outbound.destroy();
@@ -465,6 +650,12 @@ export class HttpProxy {
       });
       outbound.end();
     });
+  }
+
+  private trackOutbound(request: http.ClientRequest): http.ClientRequest {
+    this.outboundRequests.add(request);
+    request.once("close", () => this.outboundRequests.delete(request));
+    return request;
   }
 }
 

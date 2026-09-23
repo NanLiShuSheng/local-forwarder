@@ -13,6 +13,7 @@ export interface ManagedForwardingService {
   getLogs(): LogEntry[];
   clearLogs(): void;
   mergeLocalValues(values: Record<string, string>): void;
+  setRuntimeValues?(values: Record<string, string>): void;
 }
 
 interface WorkspacePersistence {
@@ -22,7 +23,7 @@ interface WorkspacePersistence {
 export interface ForwardingServiceManagerOptions {
   workspace: ProxyWorkspace;
   workspaceStore: WorkspacePersistence;
-  serviceFactory?: (config: AppConfig, configStore: ForwardingServiceOptions["configStore"]) => ManagedForwardingService;
+  serviceFactory?: (config: AppConfig, configStore: ForwardingServiceOptions["configStore"], options?: Pick<ForwardingServiceOptions, "onLoginValuesChanged">) => ManagedForwardingService;
   defaultCacheRoot?: string;
 }
 
@@ -55,7 +56,7 @@ export class ForwardingServiceManager {
   private saveQueue: Promise<void> = Promise.resolve();
 
   public constructor(options: ForwardingServiceManagerOptions) {
-    this.workspace = clone(options.workspace);
+    this.workspace = this.normalizeWorkspace(options.workspace);
     this.workspaceStore = options.workspaceStore;
     this.defaultCacheRoot = options.defaultCacheRoot;
     this.serviceFactory = options.serviceFactory ?? ((config, configStore) => new ForwardingService({ config, configStore }));
@@ -85,7 +86,7 @@ export class ForwardingServiceManager {
     config.server.bindHost = selected.config.server.bindHost;
     config.server.port = this.nextPort();
     this.assignCacheRoot(config, id);
-    const instance: ProxyInstance = { id, name: `代理实例 ${this.workspace.instances.length + 1}`, config };
+    const instance: ProxyInstance = { id, name: `代理实例 ${this.workspace.instances.length + 1}`, config, loginCache: {} };
     this.workspace.instances.push(instance);
     this.workspace.selectedInstanceId = id;
     this.createService(instance);
@@ -99,7 +100,7 @@ export class ForwardingServiceManager {
     const config = clone(source.config);
     config.server.port = this.nextPort();
     this.assignCacheRoot(config, id);
-    const instance: ProxyInstance = { id, name: `${source.name} 副本`, config };
+    const instance: ProxyInstance = { id, name: `${source.name} 副本`, config, loginCache: {} };
     this.workspace.instances.push(instance);
     this.workspace.selectedInstanceId = id;
     this.createService(instance);
@@ -107,12 +108,31 @@ export class ForwardingServiceManager {
     return this.summary(instance);
   }
 
+  public async rename(id: string, name: string): Promise<void> {
+    const normalizedName = name.trim();
+    if (normalizedName === "") throw new Error("代理名称不能为空");
+    const instance = this.requireInstance(id);
+    instance.name = normalizedName;
+    await this.persist();
+  }
+
+  public async remove(id: string): Promise<void> {
+    if (this.workspace.instances.length <= 1) throw new Error("至少保留一个代理实例");
+    this.requireInstance(id);
+    await this.requireService(id).stop();
+    this.services.delete(id);
+    this.workspace.instances = this.workspace.instances.filter((candidate) => candidate.id !== id);
+    if (this.workspace.selectedInstanceId === id) this.workspace.selectedInstanceId = this.workspace.instances[0]!.id;
+    await this.persist();
+  }
+
   public getConfig(id = this.workspace.selectedInstanceId): AppConfig {
     return this.requireService(id).getConfig();
   }
 
   public async saveConfig(config: AppConfig): Promise<void> {
-    await this.requireService().saveConfig(config);
+    const instance = this.currentInstance();
+    await this.requireService().saveConfig({ ...config, localValues: this.runtimeValues(instance) });
   }
 
   public async start(id = this.workspace.selectedInstanceId): Promise<RuntimeStatus> {
@@ -123,6 +143,20 @@ export class ForwardingServiceManager {
 
   public async stop(id = this.workspace.selectedInstanceId): Promise<RuntimeStatus> {
     return this.requireService(id).stop();
+  }
+
+  public async startAll(): Promise<void> {
+    const failures: string[] = [];
+    for (const instance of this.workspace.instances) {
+      const state = this.requireService(instance.id).status().state;
+      if (state === "running" || state === "starting") continue;
+      try {
+        await this.start(instance.id);
+      } catch (error) {
+        failures.push(`${instance.name}：${error instanceof Error ? error.message : "启动失败"}`);
+      }
+    }
+    if (failures.length > 0) throw new Error(failures.join("；"));
   }
 
   public status(id = this.workspace.selectedInstanceId): RuntimeStatus {
@@ -138,7 +172,35 @@ export class ForwardingServiceManager {
   }
 
   public mergeLocalValues(values: Record<string, string>): void {
-    this.requireService().mergeLocalValues(values);
+    this.mergeLoginCache(values);
+  }
+
+  public getSharedValues(): Record<string, string> {
+    return { ...(this.workspace.sharedValues ?? {}) };
+  }
+
+  public async saveSharedValues(values: Record<string, string>): Promise<void> {
+    this.workspace.sharedValues = { ...values };
+    for (const instance of this.workspace.instances) this.applyRuntimeValues(instance);
+    await this.persist();
+  }
+
+  public getLoginCache(id = this.workspace.selectedInstanceId): Record<string, string> {
+    return { ...(this.requireInstance(id).loginCache ?? {}) };
+  }
+
+  public async saveLoginCache(values: Record<string, string>, id = this.workspace.selectedInstanceId): Promise<void> {
+    const instance = this.requireInstance(id);
+    instance.loginCache = { ...values };
+    this.applyRuntimeValues(instance);
+    await this.persist();
+  }
+
+  public mergeLoginCache(values: Record<string, string>, id = this.workspace.selectedInstanceId): void {
+    const instance = this.requireInstance(id);
+    instance.loginCache = { ...(instance.loginCache ?? {}), ...values };
+    this.applyRuntimeValues(instance);
+    void this.persist();
   }
 
   public async stopAll(): Promise<void> {
@@ -165,7 +227,9 @@ export class ForwardingServiceManager {
   }
 
   private createService(instance: ProxyInstance): void {
-    this.services.set(instance.id, this.serviceFactory(instance.config, { save: (config) => this.persistConfig(instance.id, config) }));
+    this.services.set(instance.id, this.serviceFactory(this.runtimeConfig(instance), { save: (config) => this.persistConfig(instance.id, config) }, {
+      onLoginValuesChanged: (values) => this.mergeLoginCache(values, instance.id),
+    }));
   }
 
   private summary(instance: ProxyInstance): ProxyInstanceSummary {
@@ -177,6 +241,7 @@ export class ForwardingServiceManager {
       bindHost: config.server.bindHost,
       port: config.server.port,
       target: targetForConfig(config),
+      loginCacheCount: Object.keys(instance.loginCache ?? {}).length,
       status: this.requireService(instance.id).status(),
     };
   }
@@ -214,8 +279,33 @@ export class ForwardingServiceManager {
 
   private persistConfig(id: string, config: AppConfig): Promise<void> {
     const instance = this.requireInstance(id);
-    instance.config = clone(config);
+    instance.config = { ...clone(config), localValues: {} };
     return this.persist();
+  }
+
+  private normalizeWorkspace(workspace: ProxyWorkspace): ProxyWorkspace {
+    return {
+      version: 1,
+      selectedInstanceId: workspace.selectedInstanceId,
+      sharedValues: { ...(workspace.sharedValues ?? {}) },
+      instances: workspace.instances.map((instance) => ({
+        ...clone(instance),
+        config: { ...clone(instance.config), localValues: {} },
+        loginCache: { ...(instance.loginCache ?? instance.config.localValues) },
+      })),
+    };
+  }
+
+  private runtimeValues(instance: ProxyInstance): Record<string, string> {
+    return { ...(this.workspace.sharedValues ?? {}), ...(instance.loginCache ?? {}) };
+  }
+
+  private runtimeConfig(instance: ProxyInstance): AppConfig {
+    return { ...clone(instance.config), localValues: this.runtimeValues(instance) };
+  }
+
+  private applyRuntimeValues(instance: ProxyInstance): void {
+    this.services.get(instance.id)?.setRuntimeValues?.(this.runtimeValues(instance));
   }
 
   private persist(): Promise<void> {

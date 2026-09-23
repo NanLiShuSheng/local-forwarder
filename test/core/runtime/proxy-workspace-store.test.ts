@@ -19,7 +19,43 @@ test("migrates a legacy config into a default proxy instance", async () => {
   assert.equal(workspace.selectedInstanceId, "default");
   assert.deepEqual(workspace.instances.map((instance) => instance.name), ["默认代理"]);
   assert.equal(workspace.instances[0]?.config.server.port, 8080);
+  assert.deepEqual((workspace as any).sharedValues, {});
+  assert.deepEqual((workspace.instances[0] as any)?.loginCache, {});
   assert.equal((await readFile(workspacePath, "utf8")).includes("默认代理"), true);
+});
+
+test("migrates legacy instance local values into its login cache", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "proxy-workspace-"));
+  const workspacePath = path.join(directory, "instances.json");
+  const legacy = {
+    version: 1,
+    selectedInstanceId: "first",
+    instances: [{ id: "first", name: "旧代理", config: { ...createDefaultConfig(), localValues: { TOKEN: "old-token" } } }],
+  };
+  await writeFile(workspacePath, JSON.stringify(legacy), "utf8");
+
+  const workspace = await new ProxyWorkspaceStore(workspacePath).load(async () => { throw new Error("fallback should not run"); });
+
+  assert.deepEqual((workspace as any).sharedValues, {});
+  assert.deepEqual((workspace.instances[0] as any)?.loginCache, { TOKEN: "old-token" });
+  assert.deepEqual(workspace.instances[0]?.config.localValues, {});
+});
+
+test("recovers shared local variables from the legacy local text", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "proxy-workspace-"));
+  const workspacePath = path.join(directory, "instances.json");
+  const config = { ...createDefaultConfig(), localText: "tztuniqueid = public-id\nMobileCode = 17000000000", localValues: { TOKEN: "login-token" } };
+  await writeFile(workspacePath, JSON.stringify({
+    version: 1,
+    selectedInstanceId: "first",
+    sharedValues: {},
+    instances: [{ id: "first", name: "旧代理", config, loginCache: { TOKEN: "login-token" } }],
+  }), "utf8");
+
+  const workspace = await new ProxyWorkspaceStore(workspacePath).load(async () => { throw new Error("fallback should not run"); });
+
+  assert.deepEqual((workspace as any).sharedValues, { TZTUNIQUEID: "public-id", MOBILECODE: "17000000000" });
+  assert.deepEqual((workspace.instances[0] as any)?.loginCache, { TOKEN: "login-token" });
 });
 
 test("saves and reloads multiple proxy instances", async () => {
@@ -31,9 +67,10 @@ test("saves and reloads multiple proxy instances", async () => {
   const workspace: ProxyWorkspace = {
     version: 1,
     selectedInstanceId: "second",
+    sharedValues: {},
     instances: [
-      { id: "first", name: "行情代理", config: first },
-      { id: "second", name: "业务办理代理", config: second },
+      { id: "first", name: "行情代理", config: first, loginCache: {} },
+      { id: "second", name: "业务办理代理", config: second, loginCache: {} },
     ],
   };
 

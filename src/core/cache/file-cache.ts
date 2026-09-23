@@ -112,3 +112,18 @@ export function decodeCachedResource(
   }
   return decrypted;
 }
+
+export function rewriteLegacyNavigationScript(relativePath: string, data: Uint8Array): Buffer {
+  const input = Buffer.from(data);
+  if (!relativePath.includes("TZT.js")) return input;
+  return Buffer.from(
+    input
+      .toString("utf8")
+      .replace(
+        "window.onJsOverrideUrlLoading = function(str, checkFlag){",
+        "window.onJsOverrideUrlLoading = function (str,  checkFlag) {str = str.replace('http:/','').replace('http%3A%2F','');",
+      )
+      .replace("window.MyWebView.onJsOverrideUrlLoading(str)", "window.location.href = str;"),
+    "utf8",
+  );
+}
