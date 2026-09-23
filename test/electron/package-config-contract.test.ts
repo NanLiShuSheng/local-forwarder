@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("Electron Builder exposes a cross-platform Windows NSIS target", async () => {
-  const builderConfig = await readFile("electron-builder.yml", "utf8");
+  const builderConfig = (await readFile("electron-builder.yml", "utf8")).replace(/\r\n/g, "\n");
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
     name: string;
     description: string;

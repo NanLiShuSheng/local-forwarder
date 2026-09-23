@@ -316,9 +316,14 @@ test("ConfigStore rejects deeply nested internal legacy data with a field path",
   let nested: unknown = "leaf";
   for (let index = 0; index < 12_000; index += 1) nested = { child: nested };
   const invalid = { ...original, legacy: { files: {}, extra: { hostile: nested } } };
+  const placeholder = "__deeply_nested_internal_config_placeholder__";
+  let nestedJson = JSON.stringify("leaf");
+  for (let index = 0; index < 12_000; index += 1) nestedJson = `{"child":${nestedJson}}`;
+  const invalidJson = JSON.stringify({ ...original, legacy: { files: {}, extra: { hostile: placeholder } } })
+    .replace(JSON.stringify(placeholder), nestedJson);
 
   assert.throws(() => exportInternalJson(invalid), /internal\.json.*legacy\.extra\.hostile/i);
-  await writeFile(filePath, JSON.stringify(invalid), "utf8");
+  await writeFile(filePath, invalidJson, "utf8");
   await assert.rejects(() => store.load(), /internal\.json.*legacy\.extra\.hostile/i);
 });
 

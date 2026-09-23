@@ -29,6 +29,7 @@ test("stops a listener with SIGTERM after skipping the current process", async (
   const signals: Array<[number, NodeJS.Signals]> = [];
   let listCalls = 0;
   await recoverOccupiedPort(8080, {
+    platform: "linux",
     listListeningProcessIds: async () => {
       listCalls += 1;
       return listCalls === 1 ? [1234, process.pid] : [];
@@ -46,6 +47,7 @@ test("uses SIGKILL when SIGTERM does not release the listener", async () => {
   const signals: Array<[number, NodeJS.Signals]> = [];
   let listCalls = 0;
   await recoverOccupiedPort(8081, {
+    platform: "linux",
     listListeningProcessIds: async () => {
       listCalls += 1;
       return listCalls < 3 ? [1234] : [];

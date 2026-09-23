@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   importLegacyConfig,
   parseLegacyConfigJs,
@@ -402,7 +403,8 @@ test("does not expose a host module prototype or constructor escape", () => {
 
 function runParserInChild(source: string) {
   const parserPath = path.resolve("src/core/config/legacy-parser.ts");
-  const script = `import { parseLegacyConfigJs } from ${JSON.stringify(parserPath)};
+  const parserUrl = pathToFileURL(parserPath).href;
+  const script = `import { parseLegacyConfigJs } from ${JSON.stringify(parserUrl)};
 try { parseLegacyConfigJs(${JSON.stringify(source)}, "config.js"); process.exitCode = 1; }
 catch (error) { if (!String(error).includes("config.js")) process.exitCode = 2; }`;
   return spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], {
@@ -414,7 +416,8 @@ catch (error) { if (!String(error).includes("config.js")) process.exitCode = 2; 
 
 function runParserInChildExpecting(source: string, expected: RegExp) {
   const parserPath = path.resolve("src/core/config/legacy-parser.ts");
-  const script = `import { parseLegacyConfigJs } from ${JSON.stringify(parserPath)};
+  const parserUrl = pathToFileURL(parserPath).href;
+  const script = `import { parseLegacyConfigJs } from ${JSON.stringify(parserUrl)};
 try { parseLegacyConfigJs(${JSON.stringify(source)}, "config.js"); process.exitCode = 1; }
 catch (error) { if (!${expected}.test(String(error))) process.exitCode = 2; }`;
   return spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], {

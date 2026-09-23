@@ -5,6 +5,8 @@ import path from "node:path";
 import test from "node:test";
 import { collectFiles, encryptDirectory } from "../../../src/core/encryption/encryptor";
 
+const expectedRelativePaths = ["app.js", path.join("dist", "bundle.js"), path.join("nested", "page.html")].sort();
+
 async function makeFixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-encryption-test-"));
   const inputDir = path.join(root, "input");
@@ -39,8 +41,8 @@ test("collectFiles recursively applies the reference exclusion rules", async () 
   const fixture = await makeFixture();
   try {
     assert.deepEqual(
-    (await collectFiles(fixture.inputDir)).map((filePath) => path.relative(fixture.inputDir, filePath)).sort(),
-      ["app.js", "dist/bundle.js", "nested/page.html"],
+      (await collectFiles(fixture.inputDir)).map((filePath) => path.relative(fixture.inputDir, filePath)).sort(),
+      expectedRelativePaths,
     );
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
@@ -52,7 +54,7 @@ test("encryptDirectory preserves relative paths and appends .d after encoding", 
   try {
     const result = await encryptDirectory({ ...fixture });
     assert.equal(result.totalFiles, 3);
-    assert.deepEqual(result.files.map((file) => file.relativePath).sort(), ["app.js", "dist/bundle.js", "nested/page.html"]);
+    assert.deepEqual(result.files.map((file) => file.relativePath).sort(), expectedRelativePaths);
     assert.equal(await readFile(path.join(fixture.outputDir, "app.js.d"), "utf8"), "console.log('app');");
     assert.equal(await readFile(path.join(fixture.outputDir, "dist", "bundle.js.d"), "utf8"), "bundle");
     assert.equal(await readFile(path.join(fixture.outputDir, "nested", "page.html.d"), "utf8"), "<main>page</main>");
@@ -69,7 +71,7 @@ test("encryptDirectory reports scan and per-file progress while it runs", async 
     await encryptDirectory({ ...fixture, onProgress: (event: typeof progress[number]) => progress.push(event) } as any);
     assert.equal(progress[0]?.phase, "scanning");
     assert.equal(progress[1]?.phase, "processing");
-    assert.deepEqual(progress.filter((event) => event.status === "encrypting").map((event) => event.relativePath).sort(), ["app.js", "dist/bundle.js", "nested/page.html"]);
+    assert.deepEqual(progress.filter((event) => event.status === "encrypting").map((event) => event.relativePath).sort(), expectedRelativePaths);
     assert.equal(progress.at(-1)?.phase, "completed");
     assert.equal(progress.at(-1)?.current, 3);
     assert.equal(progress.at(-1)?.total, 3);
