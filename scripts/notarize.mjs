@@ -15,7 +15,7 @@ function requireSigningEnvironment() {
 }
 
 export default async function notarizeApp(context) {
-  if (process.env.GITHUB_ACTIONS !== "true") return;
+  if (process.env.GITHUB_ACTIONS !== "true" || context.electronPlatformName !== "darwin") return;
   requireSigningEnvironment();
 
   const { appOutDir, packager } = context;
