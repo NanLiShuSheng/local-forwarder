@@ -1,7 +1,7 @@
 # GitHub Releases 自动更新交接文档
 
-日期：2026-09-21  
-状态：暂停，明天继续
+日期：2026-09-28
+状态：v0.1.1 本地候选准备中；GitHub Release 尚未推送
 
 ## 目标
 
@@ -9,7 +9,25 @@
 
 GitHub 仓库已确认：`NanLiShuSheng/local-forwarder`，公开仓库，默认分支 `main`。
 
-## 已完成
+## 最新状态（2026-09-28）
+
+- 当前工作树：分支 `local-forwarder`，`package.json` 已更新为 `0.1.1`。GitHub 的 `main` 指向 `0a2242d`，远端 `v0.1.0` Tag 指向 `b502073`；当前分支包含该发布提交及其后的 `8d19ef6`、`65420d2`。本地同名 `v0.1.0` Tag 却指向 `65420d2`，与 GitHub 已发布 Tag 不同。不要推送本地 `v0.1.0` Tag，也不要使用 `git push --tags`。发布改动尚未提交，当前 checkout 未配置 Git remote，尚无 `v0.1.1` Tag。
+- 更新安装保护问题已修复：`install()` 在停止代理前、后都检查当前状态仍为 `downloaded`；`test/electron/update-service.test.ts` 有对应回归覆盖。
+- Windows 候选包位于 [`release/v0.1.1-candidate`](../../../release/v0.1.1-candidate)：本轮重新核对安装器相对 `latest.yml` 的 SHA-512 和文件大小，并通过 Release 资产校验。
+- macOS x64 候选包本轮通过 Release 资产校验；ZIP 的 SHA-512 和文件大小与 `latest-mac.yml` 一致，DMG 也通过只包含 x86_64 主程序的架构校验。本地 ARM64 runtime 下载因 GitHub 连接超时无法完成；此前使用临时 x64 runtime 生成的 arm64 ZIP 已确认架构错误，未放入候选目录。项目配置没有该临时覆盖，GitHub Actions 会按 arm64 目标下载 runtime 并执行 DMG 验证。
+- Release workflow 将 macOS 资产先放入 `macos-release-assets/` 再上传，保证下载到 publish job 后的 DMG、ZIP、`.blockmap` 和 `latest-mac.yml` 都处于同一层。
+- 本地 macOS 包未签名/公证。正式 Release 需要在 GitHub 仓库配置 `MACOS_CERTIFICATE_BASE64`、`MACOS_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`。
+- 此前全量验证为 426 项通过、1 项跳过、0 项失败；本轮未重新运行测试。此次新增的发布资产哈希和 Tag 检查已单独通过。
+- `src/renderer/styles.css` 有既有未提交修改，继续保留；暂存发布改动时应显式选择文件。正式资产由 GitHub Actions 从最终 Tag 重建，候选目录只用于本地预检。
+
+## 仍需完成
+
+1. 配置 `origin` 后推送 `local-forwarder` 分支，并将分支现有提交和发布改动审阅、合入 `main`；不要推送本地 `v0.1.0` Tag。
+2. 在 GitHub Actions Secrets 配置上面列出的 macOS 签名/公证变量。
+3. 在已合入 `main` 的发布提交上创建并单独推送 `v0.1.1` Tag；Release workflow 会在 GitHub runner 上构建并验证 x64/arm64 资产。
+4. 发布后用 `0.1.0` 安装包验证升级到 `0.1.1`。
+
+## 历史记录（截至 2026-09-21）
 
 ### 设计与计划
 
@@ -60,45 +78,11 @@ GitHub 仓库已确认：`NanLiShuSheng/local-forwarder`，公开仓库，默认
 
 验证结果：专项测试 11/11 通过；当时运行的全量测试为 395 通过、1 个 Windows-only 跳过、0 失败；构建和 diff 检查通过。
 
-## 当前未完成问题
+## 当时发现的问题（当前代码已修复）
 
-任务 2 的规格审查发现一个必须先修复的问题，修复子代理已在今天暂停时停止，尚未产生 follow-up commit：
+2026-09-21 交接时发现 `install()` 依赖旧的 `downloadReady` 标记。当前实现已改为检查 `state.state === "downloaded"`，并在停止代理后再次确认状态；回归测试位于 `test/electron/update-service.test.ts`。
 
-1. [`electron/update-service.ts`](../../../electron/update-service.ts) 当前使用 `downloadReady` 标记判断是否允许安装。规格要求必须检查当前 `state === "downloaded"`。
-2. 如果下载完成后状态变为 `checking`、`downloading` 或 `error`，当前实现仍可能调用 `stopAll()` 和 `quitAndInstall()`。
-3. 需要补充测试：
-   - 从 `downloaded` 转为非 `downloaded` 后，`install()` 必须失败。
-   - 此时不得调用 `stopAll()` 或 `quitAndInstall()`。
-   - `updater` 未提供时，check/download/install 不应访问任何 adapter。
-
-当前没有针对这项修复的未提交代码；工作树保留任务 2 已提交版本。
-
-## 明天第一步
-
-在工作树中执行：
-
-```bash
-cd /Users/hdw/proxy/.worktrees/local-forwarder
-git status --short
-git log -8 --oneline
-npx tsx --test test/electron/update-service.test.ts
-```
-
-然后修复 `downloadReady` 问题：
-
-- `install()` 入口改为检查 `state.state === "downloaded"`。
-- 状态离开 `downloaded` 后立即禁止安装。
-- 增加上述两个回归测试。
-- 只提交 `electron/update-service.ts` 和 `test/electron/update-service.test.ts` 的 follow-up commit。
-- 重新执行任务 2 的规格审查，再执行代码质量审查；两者都通过后才能进入任务 3。
-
-建议 follow-up 提交信息：
-
-```text
-fix: guard update installation by current state
-```
-
-## 后续任务顺序
+## 原始实现任务顺序（截至 2026-09-21）
 
 按实现计划继续，不要跳过审查关卡：
 
@@ -130,4 +114,4 @@ APPLE_TEAM_ID
 
 ## 工作树注意事项
 
-当前分支为 `local-forwarder`。除本交接相关提交外，工作树仍有大量既有未提交修改，包括核心服务、renderer、Toast、测试和文档文件。这些修改属于用户现有工作，不要整理、回退或批量格式化。
+当前分支为 `local-forwarder`，发布实现尚未提交，checkout 和父工作树均未配置 Git remote。本地 `v0.1.0` Tag 与 GitHub 已发布 Tag 指向不同提交，禁止推送本地 `v0.1.0` Tag。保留 `src/renderer/styles.css` 的既有修改；提交时只显式暂存已审阅的发布文件，不要批量暂存或回退工作区。

@@ -55,7 +55,7 @@
 - 任务 10：`electron-builder.yml` 已固定 DMG/x64 构建入口、`resources/protocol` 资源和 asar 文件范围；Electron 已移入 devDependencies。
 - 当前验证：`npm test` 通过 120/120，`npm run build` 通过；已用 `/Users/hdw/Desktop/proxy 2` 做脱敏导入回归：项目目录解析正确，三组 `/reqxml` 地址和 74 项登录缓存可 round-trip 保留。
 - smoke 验证：`npm run smoke` 和 `FORWARDER_SMOKE_NO_SANDBOX=1 npm run smoke` 均因 Electron GUI 进程直接 `SIGABRT` 失败；最小 BrowserWindow 复现同样失败，故已定位为当前 Electron GUI 运行环境，不是应用 IPC 握手失败。
-- 打包根因：Electron 缓存 ZIP 的 SHA-512 为 `6cdde2f6...`，与官方校验值 `7ab39ec1...` 不一致；electron-builder 默认解包阶段因此长期无产物。已固定 `electronDist: node_modules/electron/dist`，并改为先构建 `dir`、再用 macOS 原生 `hdiutil` 创建 DMG。
+- 打包处理：本机曾遇到 electron-builder 默认 DMG 阶段长时间无产物，当前方案先构建 `dir`，再用 macOS 原生 `hdiutil` 创建 DMG；仓库配置未覆盖 `electronDist`，Electron runtime 使用已安装的 `electron` 包。
 - 打包验证：`npm run package:x64` 已成功退出并生成 `release/Local Forwarder-0.1.0.dmg`；DMG 已通过 `hdiutil` CRC 校验、只读挂载、`app.asar`/`resources/protocol` 存在性检查和卸载。
 - 安装包自动验证：`npm run verify:package` 已加入 `package:x64` 尾部，自动执行 DMG CRC 校验、只读挂载、应用包、`app.asar`、bundle identifier 和 TZT 协议资源检查，并自动卸载。
 - 剩余环境阻塞：Electron GUI smoke 在当前环境直接 `SIGABRT`，因此从 DMG 安装后启动、HTTP/TCP 真实验收仍需在可运行 Electron GUI 的 Intel Mac 桌面会话完成；当前无 Developer ID 签名身份，产物为未签名 DMG。

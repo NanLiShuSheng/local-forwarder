@@ -534,8 +534,8 @@ npx tsx --test test/electron/release-script-contract.test.ts
 
 `verify-release-assets.mjs` 接受 `win` 或 `mac`：
 
-- `win` 检查 `dist/Local Forwarder Setup ${version}.exe`、`dist/latest.yml`，并验证 YAML 文本包含 `version: ${version}`、安装器文件名和 `sha512:`。
-- `mac` 检查 `release/Local Forwarder-${version}.dmg`、`dist/*-mac.zip`、`dist/latest-mac.yml`，并验证 ZIP 文件名、版本和 `sha512:`。
+- `win` 检查 `dist/Local-Forwarder-Setup-${version}.exe`、对应 `.blockmap` 和 `dist/latest.yml`，并验证 YAML 文本包含版本、安装器文件名和 `sha512:`。
+- `mac` 检查 x64 和 arm64 的 DMG、ZIP 与 `.blockmap`，以及 `dist/latest-mac.yml`；更新元数据中的架构文件名必须分别匹配 `Local-Forwarder-${version}-x64-mac.zip` 和 `Local-Forwarder-${version}-arm64-mac.zip`。
 - 缺少文件、文件为空或版本不一致时退出码为 1。
 
 脚本只读取和验证，不删除已有产物。
@@ -570,12 +570,12 @@ export default async function notarizeApp(context) {
 运行：
 
 ```bash
-GITHUB_REF_NAME=v0.1.0 node scripts/verify-release-tag.mjs
+GITHUB_REF_NAME=v0.1.1 node scripts/verify-release-tag.mjs
 node scripts/verify-macos-signing-env.mjs
 npx tsx --test test/electron/release-script-contract.test.ts
 ```
 
-预期：Tag 校验成功，本地签名环境检查成功，契约测试 PASS。再运行 `GITHUB_REF_NAME=v0.1.1 node scripts/verify-release-tag.mjs`，预期退出码为 1。
+预期：Tag 校验成功，本地签名环境检查成功，契约测试 PASS。再运行 `GITHUB_REF_NAME=v0.1.0 node scripts/verify-release-tag.mjs`，预期退出码为 1。
 
 - [ ] **步骤 6：提交**
 
@@ -657,7 +657,8 @@ jobs:
           name: local-forwarder-windows-release
           if-no-files-found: error
           path: |
-            dist/Local Forwarder Setup *.exe
+            dist/Local-Forwarder-Setup-*.exe
+            dist/Local-Forwarder-Setup-*.exe.blockmap
             dist/latest.yml
 
   build-macos:
@@ -679,17 +680,19 @@ jobs:
       - run: npm test
       - run: node scripts/verify-macos-signing-env.mjs
       - run: npm run verify:release:tag
-      - run: npm run package:release:mac:x64
+      - run: npm run package:release:mac:x64-arm64
         env:
           GITHUB_REF_NAME: ${{ github.ref_name }}
+      - name: Stage macOS release assets
+        run: |
+          mkdir -p macos-release-assets
+          cp release/Local-Forwarder-*-mac.dmg macos-release-assets/
+          cp dist/Local-Forwarder-*-mac.zip dist/Local-Forwarder-*-mac.zip.blockmap dist/latest-mac.yml macos-release-assets/
       - uses: actions/upload-artifact@v4
         with:
           name: local-forwarder-macos-release
           if-no-files-found: error
-          path: |
-            release/Local Forwarder-*.dmg
-            dist/*-mac.zip
-            dist/latest-mac.yml
+          path: macos-release-assets/*
 
   publish:
     needs: [build-windows, build-macos]
@@ -710,16 +713,18 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             release-assets/windows/*.exe \
+            release-assets/windows/*.exe.blockmap \
             release-assets/windows/latest.yml \
             release-assets/macos/*.dmg \
             release-assets/macos/*-mac.zip \
+            release-assets/macos/*-mac.zip.blockmap \
             release-assets/macos/latest-mac.yml \
             --verify-tag \
             --title "Local Forwarder $GITHUB_REF_NAME" \
             --generate-notes
 ```
 
-如果 `workflow_dispatch` 没有 Tag 上下文，第一步 `verify:release:tag` 必须失败，防止手工运行生成没有对应版本的 Release。macOS job 固定使用 Intel x64 runner `macos-13`。
+如果 `workflow_dispatch` 没有 Tag 上下文，第一步 `verify:release:tag` 必须失败，防止手工运行生成没有对应版本的 Release。macOS job 固定使用 Intel x64 runner `macos-13`，并在该 runner 上构建 x64 和 arm64 资产。
 
 - [ ] **步骤 4：运行契约测试和 YAML 文本检查**
 
@@ -762,7 +767,7 @@ git diff --check
 运行：
 
 ```bash
-GITHUB_REF_NAME=v0.1.0 npm run verify:release:tag
+GITHUB_REF_NAME=v0.1.1 npm run verify:release:tag
 npx tsx --test test/electron/update-service.test.ts test/electron/release-script-contract.test.ts
 ```
 
@@ -773,10 +778,10 @@ npx tsx --test test/electron/update-service.test.ts test/electron/release-script
 运行：
 
 ```bash
-npm run package:release:mac:x64
+npm run package:release:mac:x64-arm64
 ```
 
-预期：生成 `release/Local Forwarder-0.1.0.dmg`、`dist/*-mac.zip` 和 `dist/latest-mac.yml`；DMG、ZIP、app.asar、协议资源、版本和 SHA512 验证通过。没有 Apple Secrets 的本地构建保持未签名，不执行 notarization。
+预期：生成 x64/arm64 DMG、`dist/Local-Forwarder-0.1.1-x64-mac.zip`、`dist/Local-Forwarder-0.1.1-arm64-mac.zip` 及各自的 `.blockmap`，并完成 `latest-mac.yml`、DMG、app.asar、协议资源、版本和 SHA512 校验。没有 Apple Secrets 的本地构建保持未签名，不执行 notarization。
 
 - [ ] **步骤 4：在 Windows x64 runner 执行 Windows 产物验证**
 
@@ -790,7 +795,7 @@ node scripts/smoke-win-resources.mjs
 
 预期：生成 NSIS 安装器、`dist/latest.yml` 和 x64 unpacked 包，现有协议资源、端口恢复和 packaged smoke 全部通过。
 
-- [ ] **步骤 5：配置 GitHub Secrets 后推送第一个 Tag**
+- [ ] **步骤 5：配置 GitHub Secrets 并推送 `v0.1.1` Tag**
 
 在仓库 `Settings → Secrets and variables → Actions` 创建以下 Secrets：
 
@@ -802,18 +807,18 @@ APPLE_APP_SPECIFIC_PASSWORD
 APPLE_TEAM_ID
 ```
 
-将当前 `package.json.version` 设为 `0.1.0` 的提交推送到 `main`，再执行：
+先将包含 `package.json.version = 0.1.1` 和 Release workflow 的提交合入并推送到 `main`。配置 Secrets 后，在该提交上执行：
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
-预期：Windows job、macOS 签名/公证 job、publish job 依次成功，GitHub Release 包含 NSIS、DMG、macOS ZIP、`latest.yml` 和 `latest-mac.yml`。
+预期：Windows job、macOS 签名/公证 job、publish job 依次成功，GitHub Release `v0.1.1` 包含 NSIS、x64/arm64 DMG、macOS ZIP、blockmap、`latest.yml` 和 `latest-mac.yml`。
 
-- [ ] **步骤 6：执行两版本自动更新验收**
+- [ ] **步骤 6：执行 `0.1.0` 到 `0.1.1` 自动更新验收**
 
-将版本提升到 `0.1.1` 后重复测试：旧版客户端启动发现新版本；点击下载显示进度；点击立即更新前代理停止；应用重启后版本为 `0.1.1`，代理实例、端口、规则、登录缓存和主题设置均保留。断网和删除资产场景确认当前版本仍可运行，错误只显示中文 Toast。
+使用 `0.1.0` 安装包验收升级到 `v0.1.1`：旧版客户端启动发现新版本；点击下载显示进度；点击立即更新前代理停止；应用重启后版本为 `0.1.1`，代理实例、端口、规则、登录缓存和主题设置均保留。断网和删除资产场景确认当前版本仍可运行，错误只显示中文 Toast。
 
 - [ ] **步骤 7：提交工作计划进度和最终实现**
 

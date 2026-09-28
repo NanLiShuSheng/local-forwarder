@@ -86,8 +86,15 @@ export async function collectFiles(rootDir: string): Promise<string[]> {
 
 function errorDetails(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
-  const detail = error as Error & { stdout?: string; stderr?: string };
-  return [detail.message, detail.stdout, detail.stderr].filter(Boolean).join("\n");
+  const detail = error as Error & { code?: string; errno?: number; stdout?: string; stderr?: string };
+  const output = [detail.message, detail.stdout, detail.stderr].filter(Boolean).join("\n");
+  const isAppleSiliconRosettaError = process.platform === "darwin"
+    && process.arch === "arm64"
+    && (detail.code === "EBADARCH" || detail.errno === -86 || /bad cpu type in executable/i.test(output));
+  if (isAppleSiliconRosettaError) {
+    return output + "\nApple 芯片 Mac 上运行加密器需要 Rosetta 2。请安装 Rosetta 2 后重试。";
+  }
+  return output;
 }
 
 export async function runEncoder({

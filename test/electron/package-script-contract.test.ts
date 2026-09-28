@@ -26,12 +26,41 @@ test("Windows package verification and packaged smoke scripts use the unpacked a
   assert.match(verifyScript, /--version/);
   assert.match(verifyScript, /v16\.13\.0/);
   assert.match(verifyScript, /process\.platform === "win32"/);
-  assert.match(verifyScript, /Local Forwarder Setup/);
+  assert.match(verifyScript, /Local-Forwarder-Setup-/);
   assert.match(smokeScript, /path\.join\(\"dist\", \"win-unpacked\"/);
   assert.match(smokeScript, /Local Forwarder\.exe/);
   assert.match(smokeScript, /--smoke/);
   assert.match(smokeScript, /forwarder-ready/);
   assert.match(smokeScript, /10000/);
+});
+
+test("GitHub update URLs match the uploaded Windows installer asset name", async () => {
+  const builderConfig = await readFile("electron-builder.yml", "utf8");
+  const releaseWorkflow = await readFile(".github/workflows/release.yml", "utf8");
+  const releaseAssets = await readFile("scripts/verify-release-assets.mjs", "utf8");
+  const verifyScript = await readFile("scripts/verify-win.mjs", "utf8");
+
+  assert.match(builderConfig, /artifactName:\s*Local-Forwarder-Setup-\$\{version\}\.\$\{ext\}/);
+  assert.match(releaseWorkflow, /dist\/Local-Forwarder-Setup-\*\.exe/);
+  assert.match(releaseAssets, /Local-Forwarder-Setup-\$\{version\}\.exe/);
+  assert.match(verifyScript, /Local-Forwarder-Setup-\$\{packageJson\.version\}\.exe/);
+});
+
+test("GitHub update URLs match the uploaded macOS ZIP and DMG asset names", async () => {
+  const builderConfig = await readFile("electron-builder.yml", "utf8");
+  const releaseWorkflow = await readFile(".github/workflows/release.yml", "utf8");
+  const releaseAssets = await readFile("scripts/verify-release-assets.mjs", "utf8");
+  const createDmg = await readFile("scripts/create-dmg.mjs", "utf8");
+  const verifyDmg = await readFile("scripts/verify-dmg.mjs", "utf8");
+
+  assert.match(builderConfig, /artifactName:\s*Local-Forwarder-\$\{version\}-\$\{arch\}-mac\.\$\{ext\}/);
+  assert.match(releaseWorkflow, /release\/Local-Forwarder-\*-mac\.dmg/);
+  assert.match(releaseWorkflow, /dist\/Local-Forwarder-\*-mac\.zip/);
+  assert.match(releaseWorkflow, /dist\/Local-Forwarder-\*-mac\.zip\.blockmap/);
+  assert.match(releaseAssets, /"Local-Forwarder-" \+ version \+ dmgArchitectureSuffix \+ "-mac\.dmg"/);
+  assert.match(releaseAssets, /"Local-Forwarder-" \+ version \+ zipArchitectureSuffix \+ "-mac\.zip"/);
+  assert.match(createDmg, /"Local-Forwarder-" \+ packageJson\.version \+ architectureSuffix \+ "-mac\.dmg"/);
+  assert.match(verifyDmg, /"Local-Forwarder-" \+ packageJson\.version \+ architectureSuffix \+ "-mac\.dmg"/);
 });
 
 test("release package scripts verify platform-specific release assets", async () => {

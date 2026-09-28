@@ -11,7 +11,12 @@ test("release workflow builds signed platform assets and publishes a GitHub Rele
   assert.match(workflow, /windows-latest/);
   assert.match(workflow, /macos-13/);
   assert.match(workflow, /package:release:win:x64/);
-  assert.match(workflow, /package:release:mac:x64/);
+  assert.match(workflow, /package:release:mac:x64-arm64/);
+  assert.match(workflow, /dist\/Local-Forwarder-Setup-\*\.exe\.blockmap/);
+  assert.match(workflow, /release-assets\/windows\/\*\.exe\.blockmap/);
+  assert.match(workflow, /dist\/Local-Forwarder-\*-mac\.zip/);
+  assert.match(workflow, /dist\/Local-Forwarder-\*-mac\.zip\.blockmap/);
+  assert.match(workflow, /release-assets\/macos\/\*-mac\.zip\.blockmap/);
   assert.match(workflow, /latest\.yml/);
   assert.match(workflow, /latest-mac\.yml/);
   assert.match(workflow, /MACOS_CERTIFICATE_BASE64/);

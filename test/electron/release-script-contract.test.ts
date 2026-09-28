@@ -16,7 +16,11 @@ test("release scripts validate versions, update metadata, signing and notarizati
   assert.match(assets, /latest\.yml/);
   assert.match(assets, /latest-mac\.yml/);
   assert.match(assets, /sha512/);
-  assert.match(assets, /manifest\.includes\(artifactName\)\s*\|\|\s*manifest\.includes\(encodeURI\(artifactName\)\)/);
+  assert.match(
+    assets,
+    /manifest\.includes\(artifactName\)\s*\|\|\s*manifest\.includes\(encodeURI\(artifactName\)\)\s*\|\|\s*manifest\.includes\(normalizedArtifactName\)/,
+  );
+  assert.match(assets, /artifactName\.replace\(\/ \/g, "-"\)/);
   assert.match(signing, /MACOS_CERTIFICATE_BASE64/);
   assert.match(signing, /APPLE_APP_SPECIFIC_PASSWORD/);
   assert.match(notarize, /notarize/);

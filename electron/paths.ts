@@ -16,7 +16,10 @@ export function getEncryptionEncoderPath(
   arch = process.arch,
 ): string {
   const resourceRoot = isPackaged ? resourcesPath : path.resolve(compiledMainDir, "../../resources");
-  if (platform === "darwin" && arch === "x64") return path.join(resourceRoot, "protocol", "encode", "h5encode-mac-amd64");
+  if (platform === "darwin" && (arch === "x64" || arch === "arm64")) {
+    // Apple Silicon uses the bundled Intel encoder through Rosetta 2.
+    return path.join(resourceRoot, "protocol", "encode", "h5encode-mac-amd64");
+  }
   if (platform === "win32" && arch === "x64") return path.join(resourceRoot, "protocol", "encode", "h5encode-win-x86.exe");
   throw new Error(`Unsupported encryption encoder platform: ${platform}/${arch}`);
 }

@@ -44,7 +44,7 @@ function verifyWindowsPackage() {
 
   const installerPath = path.join(
     distDir,
-    `Local Forwarder Setup ${packageJson.version}.exe`,
+    `Local-Forwarder-Setup-${packageJson.version}.exe`,
   );
   requireFile(installerPath, "NSIS installer");
 
