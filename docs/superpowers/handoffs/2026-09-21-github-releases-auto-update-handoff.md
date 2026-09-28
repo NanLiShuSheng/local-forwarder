@@ -11,7 +11,7 @@ GitHub 仓库已确认：`NanLiShuSheng/local-forwarder`，公开仓库，默认
 
 ## 最新状态（2026-09-28）
 
-- 当前工作树：分支 `local-forwarder`，`package.json` 已更新为 `0.1.1`。GitHub 的 `main` 指向 `0a2242d`，远端 `v0.1.0` Tag 指向 `b502073`；当前分支包含该发布提交及其后的 `8d19ef6`、`65420d2`。本地同名 `v0.1.0` Tag 却指向 `65420d2`，与 GitHub 已发布 Tag 不同。不要推送本地 `v0.1.0` Tag，也不要使用 `git push --tags`。发布改动尚未提交，当前 checkout 未配置 Git remote，尚无 `v0.1.1` Tag。
+- 当前工作树：分支 `local-forwarder` 上的 `4fe8f1d` 已包含 v0.1.1 发布改动，`package.json` 版本为 `0.1.1`；工作区只剩 `src/renderer/styles.css` 的既有修改。`origin` 已配置为 `https://github.com/NanLiShuSheng/local-forwarder.git`，但分支尚未推送，也没有本地 `v0.1.1` Tag。GitHub 的 `main` 指向 `0a2242d`，远端 `v0.1.0` Tag 指向 `b502073`；当前分支包含该发布提交及其后的 `8d19ef6`、`65420d2`。本地同名 `v0.1.0` Tag 却指向 `65420d2`，与 GitHub 已发布 Tag 不同。不要推送本地 `v0.1.0` Tag，也不要使用 `git push --tags`。
 - 更新安装保护问题已修复：`install()` 在停止代理前、后都检查当前状态仍为 `downloaded`；`test/electron/update-service.test.ts` 有对应回归覆盖。
 - Windows 候选包位于 [`release/v0.1.1-candidate`](../../../release/v0.1.1-candidate)：本轮重新核对安装器相对 `latest.yml` 的 SHA-512 和文件大小，并通过 Release 资产校验。
 - macOS x64 候选包本轮通过 Release 资产校验；ZIP 的 SHA-512 和文件大小与 `latest-mac.yml` 一致，DMG 也通过只包含 x86_64 主程序的架构校验。本地 ARM64 runtime 下载因 GitHub 连接超时无法完成；此前使用临时 x64 runtime 生成的 arm64 ZIP 已确认架构错误，未放入候选目录。项目配置没有该临时覆盖，GitHub Actions 会按 arm64 目标下载 runtime 并执行 DMG 验证。
@@ -22,7 +22,7 @@ GitHub 仓库已确认：`NanLiShuSheng/local-forwarder`，公开仓库，默认
 
 ## 仍需完成
 
-1. 配置 `origin` 后推送 `local-forwarder` 分支，并将分支现有提交和发布改动审阅、合入 `main`；不要推送本地 `v0.1.0` Tag。
+1. 推送 `local-forwarder` 分支，并将分支现有提交和发布改动审阅、合入 `main`；不要推送本地 `v0.1.0` Tag。
 2. 在 GitHub Actions Secrets 配置上面列出的 macOS 签名/公证变量。
 3. 在已合入 `main` 的发布提交上创建并单独推送 `v0.1.1` Tag；Release workflow 会在 GitHub runner 上构建并验证 x64/arm64 资产。
 4. 发布后用 `0.1.0` 安装包验证升级到 `0.1.1`。
@@ -114,4 +114,4 @@ APPLE_TEAM_ID
 
 ## 工作树注意事项
 
-当前分支为 `local-forwarder`，发布实现尚未提交，checkout 和父工作树均未配置 Git remote。本地 `v0.1.0` Tag 与 GitHub 已发布 Tag 指向不同提交，禁止推送本地 `v0.1.0` Tag。保留 `src/renderer/styles.css` 的既有修改；提交时只显式暂存已审阅的发布文件，不要批量暂存或回退工作区。
+当前分支为 `local-forwarder`，发布实现已提交到 `4fe8f1d`，`origin` 已配置但分支尚未推送。本地 `v0.1.0` Tag 与 GitHub 已发布 Tag 指向不同提交，禁止推送本地 `v0.1.0` Tag。保留 `src/renderer/styles.css` 的既有修改，不要批量暂存或回退工作区。
