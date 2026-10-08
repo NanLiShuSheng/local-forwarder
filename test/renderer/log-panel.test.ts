@@ -97,7 +97,8 @@ test("log panel supports expandable request and response details with wrapped te
   assert.match(panelSource, /responseData/);
   assert.match(panelSource, /onClick/);
   assert.match(panelSource, /日志详情/);
-  assert.match(styleSource, /\.log-message[^\{]*\{[^}]*overflow-wrap:\s*anywhere/);
+  assert.match(styleSource, /\.log-message[^\{]*\{[^}]*white-space:\s*nowrap/);
+  assert.match(styleSource, /\.log-message[^\{]*\{[^}]*text-overflow:\s*ellipsis/);
   assert.match(styleSource, /\.log-detail-body[^\{]*\{[^}]*white-space:\s*pre-wrap/);
   assert.match(styleSource, /\.log-detail-body[^\{]*\{[^}]*overflow-wrap:\s*anywhere/);
 });
@@ -112,6 +113,7 @@ test("log panel keeps the list visible beside the selected detail", async () => 
   assert.match(panelSource, /选择一条日志查看详情/);
   assert.match(styleSource, /\.log-workspace[^\{]*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) minmax\(320px, 1\.05fr\)/);
   assert.match(styleSource, /\.log-list[^}]*max-height:\s*520px/);
+  assert.match(styleSource, /\.log-list\s*\{[^}]*align-content:\s*start/);
   assert.match(styleSource, /\.log-list[^}]*overflow-y:\s*auto/);
   assert.match(styleSource, /@media\s*\(max-width:\s*820px\)[\s\S]*?\.log-workspace[\s\S]*?grid-template-columns:\s*1fr/);
 });
@@ -138,7 +140,8 @@ test("log panel marks the selected log row with an accessible selected state", a
   assert.match(markup, /class="log-row selected"/);
   assert.match(markup, /aria-current="true"/);
   assert.match(panelSource, /toLocaleTimeString\(undefined, \{ hour12: false \}\)/);
-  assert.match(styles, /\.log-row\s*\{[^}]*padding:\s*9px 0 9px 8px;/);
+  assert.match(styles, /\.log-row\s*\{[^}]*height:\s*34px;/);
+  assert.match(styles, /\.log-row\s*\{[^}]*align-items:\s*center/);
   assert.match(styles, /\.log-row:hover, \.log-row\.selected\s*\{[^}]*background:\s*var\(--selection-background\)/);
   assert.doesNotMatch(styles, /\.log-row\.selected\s*\{[^}]*box-shadow:/);
 });

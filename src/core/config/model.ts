@@ -12,7 +12,11 @@ export function createDefaultConfig(): InternalConfig {
       loggingEnabled: true,
     },
     httpRules: [],
-    tcpTargets: [],
+    tcpTargets: [
+      { id: "hq", name: "hq", host: "123.60.102.92", port: 7778 },
+      { id: "jy", name: "jy", host: "123.103.83.98", port: 17772 },
+      { id: "zx", name: "zx", host: "123.103.83.98", port: 17772 },
+    ],
     forwardingAddressHistory: { hq: [], jy: [], zx: [] },
     localValues: {},
     mapValues: {},

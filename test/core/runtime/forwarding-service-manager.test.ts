@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import http from "node:http";
 import { createDefaultConfig } from "../../../src/core/config/model";
 import { ForwardingServiceManager, type ManagedForwardingService } from "../../../src/core/runtime/forwarding-service-manager";
 import type { AppConfig, ProxyWorkspace, RuntimeStatus } from "../../../src/shared/contracts";
@@ -7,13 +8,14 @@ import type { AppConfig, ProxyWorkspace, RuntimeStatus } from "../../../src/shar
 function workspaceWithTwoInstances(): ProxyWorkspace {
   const first = createDefaultConfig();
   first.server.port = 18080;
+  first.cardTargetId = "jy";
   first.tcpTargets = [
-    { id: "hq", name: "hq", host: "market.example.com", port: 7778, enabled: true },
-    { id: "jy", name: "jy", host: "business.example.com", port: 7779, enabled: true },
+    { id: "hq", name: "hq", host: "market.example.com", port: 7778 },
+    { id: "jy", name: "jy", host: "business.example.com", port: 7779 },
   ];
   const second = createDefaultConfig();
   second.server.port = 18081;
-  second.tcpTargets = [{ id: "second-target", name: "业务", host: "business.example.com", port: 7779, enabled: true }];
+  second.tcpTargets = [{ id: "second-target", name: "业务", host: "business.example.com", port: 7779 }];
   return {
     version: 1,
     selectedInstanceId: "first",
@@ -38,9 +40,30 @@ function fakeFactory() {
       getConfig: () => structuredClone(current),
       saveConfig: async (next) => { current = structuredClone(next); await persistence.save(current); },
       mergeLocalValues: (values) => { current.localValues = { ...current.localValues, ...values }; void persistence.save(current); },
+      setStoredValues: (mapValues, fileValues) => {
+        current.mapValues = { ...mapValues };
+        current.legacy = { ...(current.legacy ?? { files: {}, extra: {} }), files: { ...fileValues } };
+        void persistence.save(current);
+      },
     };
   };
 }
+
+test("saves stored values into map and file stores and notifies", async () => {
+  let notifications = 0;
+  const manager = new ForwardingServiceManager({
+    workspace: workspaceWithTwoInstances(),
+    workspaceStore: { save: async () => undefined },
+    serviceFactory: fakeFactory(),
+    onValuesChanged: () => { notifications += 1; },
+  });
+
+  await manager.saveStoredValues({ mapValues: { M: "1" }, fileValues: { "F.TXT": "x" } });
+
+  assert.equal(notifications, 1);
+  assert.equal(manager.getStoredValues("first").mapValues.M, "1");
+  assert.equal(manager.getStoredValues("first").fileValues["F.TXT"], "x");
+});
 
 test("starts two proxy instances independently", async () => {
   const workspace = workspaceWithTwoInstances();
@@ -52,6 +75,60 @@ test("starts two proxy instances independently", async () => {
   const summaries = manager.list();
   assert.equal(summaries.find((item) => item.id === "first")?.status.state, "running");
   assert.equal(summaries.find((item) => item.id === "second")?.status.state, "running");
+});
+
+test("routes runtime login captures into the login cache with the default service factory", async () => {
+  const upstream = http.createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ ACTION: "100", TOKEN: "captured-token" }));
+  });
+  await new Promise<void>((resolve, reject) => {
+    upstream.once("error", reject);
+    upstream.listen({ host: "127.0.0.1", port: 0 }, () => resolve());
+  });
+  const upstreamAddress = upstream.address();
+  assert.ok(upstreamAddress && typeof upstreamAddress !== "string");
+
+  let notifications = 0;
+  const workspace = workspaceWithTwoInstances();
+  workspace.instances[0]!.config.tcpTargets = [{ id: "hq", name: "hq", host: "127.0.0.1", port: upstreamAddress.port, transport: "http" }];
+  const manager = new ForwardingServiceManager({
+    workspace,
+    workspaceStore: { save: async () => undefined },
+    onValuesChanged: () => { notifications += 1; },
+  });
+
+  try {
+    await manager.start("first");
+    const response = await fetch("http://127.0.0.1:18080/reqxml?Action=100&ReqLinkType=0");
+    assert.equal(response.status, 200);
+    assert.equal(manager.getLoginCache("first").TOKEN, "captured-token");
+    assert.ok(notifications > 0);
+    const afterCapture = notifications;
+    const saveFile = await fetch("http://127.0.0.1:18080/reqsavefile?filename=PLAY_STATUS.TXT", { method: "POST", body: "1" });
+    assert.equal(saveFile.status, 200);
+    assert.equal(manager.getStoredValues("first").fileValues["PLAY_STATUS.TXT"], "1");
+    assert.ok(notifications > afterCapture);
+  } finally {
+    await manager.stopAll();
+    await new Promise<void>((resolve) => upstream.close(() => resolve()));
+  }
+});
+
+test("notifies when shared values or login cache change", async () => {
+  let notifications = 0;
+  const manager = new ForwardingServiceManager({
+    workspace: workspaceWithTwoInstances(),
+    workspaceStore: { save: async () => undefined },
+    serviceFactory: fakeFactory(),
+    onValuesChanged: () => { notifications += 1; },
+  });
+
+  await manager.saveSharedValues({ FOO: "1" });
+  manager.mergeLoginCache({ TOKEN: "captured" });
+  await manager.saveLoginCache({ TOKEN: "manual" });
+
+  assert.equal(notifications, 3);
 });
 
 test("starts and stops all proxy instances", async () => {
@@ -100,10 +177,26 @@ test("does not remove the last proxy instance", async () => {
   assert.equal(manager.list().length, 1);
 });
 
+test("defaults the card target to the zx address when nothing is pinned", () => {
+  const workspace = workspaceWithTwoInstances();
+  const config = createDefaultConfig();
+  config.server.port = 18082;
+  config.tcpTargets = [
+    { id: "hq", name: "hq", host: "hq.example.com", port: 1 },
+    { id: "jy", name: "jy", host: "jy.example.com", port: 2 },
+    { id: "zx", name: "zx", host: "zx.example.com", port: 3 },
+  ];
+  workspace.instances.push({ id: "third", name: "资讯代理", config, loginCache: {} });
+  const manager = new ForwardingServiceManager({ workspace, workspaceStore: { save: async () => undefined }, serviceFactory: fakeFactory() });
+
+  assert.equal(manager.list().find((item) => item.id === "third")?.cardTarget, "zx zx.example.com:3");
+});
+
 test("uses the jy forwarding address in the instance summary", () => {
   const manager = new ForwardingServiceManager({ workspace: workspaceWithTwoInstances(), workspaceStore: { save: async () => undefined }, serviceFactory: fakeFactory() });
 
   assert.equal(manager.list().find((item) => item.id === "first")?.target, "business.example.com:7779");
+  assert.equal(manager.list().find((item) => item.id === "first")?.cardTarget, "jy business.example.com:7779");
 });
 
 test("rejects a port conflict without stopping the running instance", async () => {
@@ -127,6 +220,18 @@ test("duplicates the selected proxy with a new port and independent config", asy
   assert.equal(result.name, "行情代理 副本");
   assert.notEqual(result.port, 18080);
   assert.equal(manager.list().length, 3);
+});
+
+test("creates a new proxy carrying the first proxy's forwarding addresses", async () => {
+  const workspace = workspaceWithTwoInstances();
+  workspace.instances[0]!.config.forwardingAddressHistory = { hq: ["hq-history:1"], jy: [], zx: [] };
+  const manager = new ForwardingServiceManager({ workspace, workspaceStore: { save: async () => undefined }, serviceFactory: fakeFactory() });
+
+  const result = await manager.create();
+
+  assert.deepEqual(manager.getConfig(result.id).tcpTargets, workspaceWithTwoInstances().instances[0]!.config.tcpTargets);
+  assert.deepEqual(manager.getConfig(result.id).forwardingAddressHistory, { hq: ["hq-history:1"], jy: [], zx: [] });
+  assert.notEqual(result.port, 18080);
 });
 
 test("stopping one proxy does not stop another proxy", async () => {

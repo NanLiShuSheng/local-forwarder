@@ -13,6 +13,12 @@ const MAX_LOG_DETAIL_SIZE = 256 * 1024;
 
 export interface TcpBridgeLike {
   request(target: { host: string; port: number }, query: Record<string, string>): Promise<Record<string, unknown>>;
+  requestStream?(target: { host: string; port: number }, query: Record<string, string>, onFrame: (frame: Record<string, unknown>) => boolean): TcpBridgeStream;
+}
+
+export interface TcpBridgeStream {
+  done: Promise<void>;
+  cancel: () => void;
 }
 
 export interface HttpProxyOptions {
@@ -33,6 +39,7 @@ export interface HttpProxyOptions {
   onLog?: (entry: LogEntry) => void;
   onLocalValuesChanged?: (values: Record<string, string>) => void;
   onLoginValuesChanged?: (values: Record<string, string>) => void;
+  onValuesWritten?: () => void;
 }
 
 export interface ResourceCacheLike {
@@ -193,6 +200,27 @@ function uppercaseRecordKeys(record: Record<string, unknown>): Record<string, un
   return output;
 }
 
+function sseFramePayload(frame: Record<string, unknown>, binary: boolean): { payload: string; terminal: boolean } {
+  const grid: unknown = frame.GRID0 || frame.Grid0;
+  const terminal = typeof grid === "string" && grid !== "" && Number(grid) === 0;
+  if (binary) {
+    const zzkeyByte = frame.zzkeyByte as Record<string, unknown> | undefined;
+    const raw = zzkeyByte?.Grid0;
+    const bytes = Array.isArray(raw)
+      ? Buffer.from(raw as number[])
+      : raw !== null && typeof raw === "object" && Array.isArray((raw as { data?: unknown }).data)
+        ? Buffer.from((raw as { data: number[] }).data)
+        : undefined;
+    return { payload: bytes === undefined ? "" : `${bytes.toString("base64")}\r\n\r\n`, terminal };
+  }
+  if (grid) {
+    if (Array.isArray(grid)) return { payload: grid.map((entry) => entry === null || entry === undefined || entry === "" ? "\r\n" : String(entry)).join("\r\n"), terminal };
+    return { payload: String(grid), terminal };
+  }
+  const { zzbytes: _zzbytes, zzkeyByte: _zzkeyByte, ...rest } = frame;
+  return { payload: JSON.stringify(uppercaseRecordKeys(rest)), terminal };
+}
+
 function lookupValue(values: Record<string, string>, key: string): string {
   const wanted = key.toUpperCase();
   for (const [candidate, value] of Object.entries(values)) if (candidate.toUpperCase() === wanted) return value;
@@ -334,6 +362,19 @@ export class HttpProxy {
     return { localValues: this.localValues, mapValues: this.mapValues, fileValues: this.fileValues };
   }
 
+  public updateOptions(patch: { tcpTargets?: AppConfig["tcpTargets"]; mapValues?: Record<string, string>; fileValues?: Record<string, string>; projectPath?: string }): void {
+    if (patch.tcpTargets !== undefined) this.options.tcpTargets = patch.tcpTargets;
+    if (patch.projectPath !== undefined) this.options.projectPath = patch.projectPath;
+    if (patch.mapValues !== undefined) {
+      for (const key of Object.keys(this.mapValues)) delete this.mapValues[key];
+      Object.assign(this.mapValues, patch.mapValues);
+    }
+    if (patch.fileValues !== undefined) {
+      for (const key of Object.keys(this.fileValues)) delete this.fileValues[key];
+      Object.assign(this.fileValues, patch.fileValues);
+    }
+  }
+
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const started = Date.now();
     const requestType = requestTypeFor(request);
@@ -347,7 +388,10 @@ export class HttpProxy {
       requestBody = body;
       const url = new URL(request.url ?? "/", "http://local-forwarder.invalid");
       const actionResponse = legacyActionResponse(request.url ?? "/", request.headers.host);
-      if (actionResponse !== undefined) {
+      if (request.headers["tztforward"] === "forward" || url.pathname === "/reqsse") {
+        await this.handleSse(request.url ?? "/reqsse", body, response, request.headers);
+        statusCode = response.statusCode;
+      } else if (actionResponse !== undefined) {
         if (actionResponse.location !== undefined) {
           response.writeHead(actionResponse.statusCode, { location: actionResponse.location });
           response.end();
@@ -367,6 +411,7 @@ export class HttpProxy {
         if (url.pathname === "/reqsavemap") {
           Object.assign(this.mapValues, params);
           writeJson(response, { ERRORNO: "0" });
+          this.options.onValuesWritten?.();
         } else {
           writeJson(response, Object.fromEntries(Object.keys(params).map((key) => [key, lookupValue(this.mapValues, key)])));
         }
@@ -378,6 +423,7 @@ export class HttpProxy {
         } else if (url.pathname === "/reqsavefile") {
           this.fileValues[filename.toUpperCase()] = body.toString("utf8");
           writeJson(response, { ERRORNO: "0" });
+          this.options.onValuesWritten?.();
         } else {
           const value = this.fileValues[filename.toUpperCase()] ?? "";
           response.writeHead(200, { "content-type": "application/octet-stream" });
@@ -406,6 +452,56 @@ export class HttpProxy {
     }
   }
 
+  private async handleSse(route: string, body: Buffer, response: ServerResponse, headers: IncomingHttpHeaders): Promise<void> {
+    const bridge = this.options.tcpBridge;
+    if (bridge?.requestStream === undefined) {
+      writeJson(response, { error: "TCP bridge is unavailable" }, 502);
+      return;
+    }
+    const substituted = substituteVariables(new URLSearchParams(parseParams(route, body)).toString(), this.localValues);
+    const params = Object.fromEntries(new URLSearchParams(substituted).entries());
+    const targets = this.options.tcpTargets ?? [];
+    const target = targets[Number(uppercaseParams(params).REQLINKTYPE ?? 0)] ?? targets[0];
+    if (target === undefined) {
+      writeJson(response, { error: "TCP target is unavailable" }, 502);
+      return;
+    }
+    if (target.transport === "http") {
+      writeJson(response, { error: "SSE streaming requires a TCP target" }, 502);
+      return;
+    }
+    const binary = headers["tztcontenttype"] === "application/octet-stream";
+    let headersSent = false;
+    const ensureHeaders = () => {
+      if (headersSent) return;
+      headersSent = true;
+      response.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache, no-store", connection: "keep-alive" });
+    };
+    const stream = bridge.requestStream({ host: target.host, port: target.port }, params, (frame) => {
+      this.captureLocalValues(frame);
+      const { payload, terminal } = sseFramePayload(frame, binary);
+      if (payload.length === 0 && !terminal) return true;
+      ensureHeaders();
+      if (payload.length > 0) response.write(payload);
+      if (terminal) {
+        response.end();
+        return false;
+      }
+      return true;
+    });
+    response.once("close", () => stream.cancel());
+    try {
+      await stream.done;
+      if (!response.writableEnded && !response.destroyed) {
+        ensureHeaders();
+        response.end();
+      }
+    } catch (error) {
+      if (!headersSent) writeJson(response, { error: error instanceof Error ? error.message : "TCP stream failed" }, /timeout/i.test(String(error)) ? 504 : 502);
+      else if (!response.writableEnded) response.end();
+    }
+  }
+
   private async handleTcp(route: string, body: Buffer, response: ServerResponse, login = false, method = "GET", headers: IncomingHttpHeaders = {}): Promise<void> {
     let params = parseParams(route, body);
     if (!login) {
@@ -420,8 +516,8 @@ export class HttpProxy {
       const substituted = substituteVariables(new URLSearchParams(params).toString(), this.localValues);
       params = Object.fromEntries(new URLSearchParams(substituted).entries());
     }
-    const targets = (this.options.tcpTargets ?? []).filter((target) => target.enabled);
-    const index = Number((uppercaseParams(params).REQLINKTYPE ?? 1));
+    const targets = this.options.tcpTargets ?? [];
+    const index = Number(uppercaseParams(params).REQLINKTYPE ?? 0);
     const target = targets[index] ?? targets[0];
     if (target === undefined) return writeJson(response, { error: "TCP target is unavailable" }, 502);
     if (target.transport === "http") {

@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
+import { Button, Input } from "antd";
 import type { AppConfig, ProxyInstanceSummary, RuntimeStatus } from "../../shared/contracts";
 import { parseDirectoryInput } from "../../shared/directory-path";
 import { useToast } from "./ToastProvider";
+
+export const DEFAULT_LAUNCH_PATH = "/dist/src/ai-assistant/index.html#/index";
+
+export function resolveOpenUrl(input: string, host: string, port: number): string {
+  const trimmed = input.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  const displayHost = host === "0.0.0.0" || host === "::" || host === "[::]" ? "127.0.0.1" : host;
+  return `http://${displayHost}:${port}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
+}
 
 interface ProxyInstancePanelProps {
   instances: ProxyInstanceSummary[];
@@ -24,6 +34,7 @@ export function ProxyInstancePanel({ instances, status, config, onChange, onChoo
   const [bindHostDraft, setBindHostDraft] = useState(config.server.bindHost);
   const [portDraft, setPortDraft] = useState(String(config.server.port));
   const [timeoutDraft, setTimeoutDraft] = useState(String(config.server.timeoutMs));
+  const [launchPathDraft, setLaunchPathDraft] = useState(config.launchPath ?? DEFAULT_LAUNCH_PATH);
 
   useEffect(() => {
     setNameDraft(selected?.name ?? "");
@@ -31,7 +42,19 @@ export function ProxyInstancePanel({ instances, status, config, onChange, onChoo
     setBindHostDraft(config.server.bindHost);
     setPortDraft(String(config.server.port));
     setTimeoutDraft(String(config.server.timeoutMs));
-  }, [selected?.id, selected?.name, config.projectPath, config.server.bindHost, config.server.port, config.server.timeoutMs]);
+    setLaunchPathDraft(config.launchPath ?? DEFAULT_LAUNCH_PATH);
+  }, [selected?.id, selected?.name, config.projectPath, config.server.bindHost, config.server.port, config.server.timeoutMs, config.launchPath]);
+
+  const saveLaunchPath = async () => {
+    if (launchPathDraft === (config.launchPath ?? DEFAULT_LAUNCH_PATH)) return;
+    await onChange({ ...config, launchPath: launchPathDraft });
+  };
+
+  const openInBrowser = async () => {
+    await saveLaunchPath();
+    const result = await window.forwarder.openExternal(resolveOpenUrl(launchPathDraft, config.server.bindHost, config.server.port));
+    if (!result.ok) notifyError(result.error ?? "打开失败", "打开失败");
+  };
 
   const commitName = async () => {
     if (!selected) return;
@@ -72,14 +95,18 @@ export function ProxyInstancePanel({ instances, status, config, onChange, onChoo
     {selected ? <>
       <div className="proxy-instance-overview-heading">
         <span className={`status-pill ${status.state}`}><span className="status-dot" />{status.state === "running" ? "运行中" : status.state === "error" ? "异常" : "已停止"}</span>
-        <div className="proxy-instance-overview-title"><input className="proxy-instance-overview-name-input" aria-label="编辑代理名称" value={nameDraft} onChange={function (event) { setNameDraft(event.target.value); }} onBlur={function () { void commitName(); }} onKeyDown={function (event) { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } else if (event.key === "Escape") { setNameDraft(selected.name); event.currentTarget.blur(); } }} disabled={running || busy} /></div>
+        <div className="proxy-instance-overview-title"><input className="proxy-instance-overview-name-input" aria-label="编辑代理名称" value={nameDraft} onChange={function (event) { setNameDraft(event.target.value); }} onBlur={function () { void commitName(); }} onKeyDown={function (event) { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } else if (event.key === "Escape") { setNameDraft(selected.name); event.currentTarget.blur(); } }} /></div>
         <div className="proxy-instance-actions"><button className={`proxy-instance-sidebar-action ${running ? "stop" : "start"}`} type="button" disabled={busy} onClick={() => { if (status.state === "running") void onStop(); else void onStart(); }}>{status.state === "running" ? "停止代理" : "启动代理"}</button></div>
       </div>
       <div className="proxy-instance-project-card">
         <div className="proxy-instance-project-field input-with-button">
-          <input aria-label="项目目录" value={projectPathDraft} placeholder="请选择项目目录" onChange={function (event) { setProjectPathDraft(event.target.value); }} onBlur={function () { void saveProjectDirectory(); }} onKeyDown={function (event) { if (event.key === "Enter") { event.preventDefault(); void saveProjectDirectory(); } }} disabled={running || busy} />
-          <button type="button" onClick={function () { void onChooseProjectDirectory(); }} disabled={running || busy}>选择项目目录</button>
+          <input aria-label="项目目录" value={projectPathDraft} placeholder="请选择项目目录" onChange={function (event) { setProjectPathDraft(event.target.value); }} onBlur={function () { void saveProjectDirectory(); }} onKeyDown={function (event) { if (event.key === "Enter") { event.preventDefault(); void saveProjectDirectory(); } }} disabled={busy} />
+          <button type="button" onClick={function () { void onChooseProjectDirectory(); }} disabled={busy}>选择项目目录</button>
         </div>
+      </div>
+      <div className="proxy-instance-launch">
+        <Input aria-label="页面地址" value={launchPathDraft} placeholder={DEFAULT_LAUNCH_PATH} onChange={(event) => setLaunchPathDraft(event.target.value)} onBlur={() => void saveLaunchPath()} onPressEnter={() => void openInBrowser()} />
+        <Button type="primary" onClick={() => void openInBrowser()}>在浏览器打开</Button>
       </div>
       <div className="proxy-instance-overview-fields">
         <label className="proxy-instance-overview-field"><span>监听主机 <small>HOST</small></span><input className="overview-config-input" aria-label="监听主机" value={bindHostDraft} onChange={function (event) { setBindHostDraft(event.target.value); }} onBlur={function () { void saveServerPatch({ bindHost: bindHostDraft }); }} disabled={running || busy} /><small className="overview-config-hint good">本机访问地址</small></label>

@@ -6,6 +6,7 @@ import path from "node:path";
 import { importLegacyConfig, parseLegacyConfigJs } from "../../../src/core/config/legacy-parser";
 import { createDefaultConfig } from "../../../src/core/config/model";
 import { parseLocalCacheText } from "../../../src/shared/local-cache";
+import { getAppConfigValidationError } from "../../../src/shared/validation";
 import {
   ConfigStore,
   exportInternalJson,
@@ -20,6 +21,16 @@ test("export and re-import preserves normalized config", async () => {
   assert.deepEqual(restored.httpRules, original.httpRules);
   assert.equal(restored.accounts.ptjy.password, original.accounts.ptjy.password);
   assert.deepEqual(restored.legacy, original.legacy);
+});
+
+test("default config seeds the legacy hq, jy, and zx forwarding addresses", () => {
+  const config = createDefaultConfig();
+  assert.deepEqual(config.tcpTargets, [
+    { id: "hq", name: "hq", host: "123.60.102.92", port: 7778 },
+    { id: "jy", name: "jy", host: "123.103.83.98", port: 17772 },
+    { id: "zx", name: "zx", host: "123.103.83.98", port: 17772 },
+  ]);
+  assert.equal(getAppConfigValidationError(config), undefined);
 });
 
 test("saves multiline pasted login cache values and reloads them", async () => {
@@ -236,7 +247,7 @@ test("ConfigStore preserves HTTP and TCP rules that both use /reqxml", async () 
   };`);
   const edited = {
     ...source,
-    tcpTargets: [{ id: "tcp-reqxml", name: "TCP reqxml", host: "127.0.0.1", port: 9100, protocol: "https" as const, enabled: true }],
+    tcpTargets: [{ id: "tcp-reqxml", name: "TCP reqxml", host: "127.0.0.1", port: 9100, protocol: "https" as const }],
   };
 
   await store.exportLegacy(edited, directory);
@@ -256,8 +267,8 @@ test("ConfigStore preserves all edited TCP target metadata through legacy array 
   const edited = {
     ...source,
     tcpTargets: [
-      { ...source.tcpTargets[0], id: "first", name: "primary", enabled: false, protocol: "http" as const },
-      { ...source.tcpTargets[0], id: "second", name: "secure", enabled: true, protocol: "https" as const, host: "secure.example.test", port: 9443 },
+      { ...source.tcpTargets[0], id: "first", name: "primary", protocol: "http" as const },
+      { ...source.tcpTargets[0], id: "second", name: "secure", protocol: "https" as const, host: "secure.example.test", port: 9443 },
     ],
   };
 

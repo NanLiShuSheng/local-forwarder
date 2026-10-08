@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import path from "node:path";
 import { encryptDirectory } from "../src/core/encryption/encryptor";
 import { readEncryptionPreferences, saveEncryptionPreferences } from "../src/core/encryption/preferences";
@@ -11,7 +11,7 @@ import { getEncryptionEncoderPath, getEncryptionPreferencesPath, getPreloadPath,
 import { createRendererSecurityPolicy, type RendererSecurityPolicy } from "./security";
 import { createSaveConfigHandler, createTrustedIpcHandler, type IpcHandler } from "./ipc";
 import { extractManualLoginValues, sendManualRequest } from "../src/core/request/manual-request";
-import { getManualRequestConfigValidationError, isValidManualRequestConfig } from "../src/shared/validation";
+import { getManualRequestConfigValidationError, isValidManualRequestConfig, isValidTcpTargetList } from "../src/shared/validation";
 import { createElectronUpdateAdapter, createUpdateService, type UpdateService } from "./update-service";
 import { createUpdateLifecycleGate } from "./update-lifecycle";
 
@@ -28,6 +28,7 @@ const IPC_CHANNELS = {
   saveSharedValues: "values:shared:save",
   getLoginCache: "values:login:get",
   saveLoginCache: "values:login:save",
+  saveStoredValues: "values:stored:save",
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
   getEncryptionPreferences: "encryption:get-preferences",
@@ -48,6 +49,9 @@ const IPC_CHANNELS = {
   status: "runtime:status",
   logs: "runtime:logs",
   clearLogs: "runtime:logs:clear",
+  openExternal: "app:open-external",
+  valuesChanged: "values:changed",
+  applyForwardingTargets: "runtime:apply-targets",
 } as const;
 
 const smokeMode = process.argv.includes("--smoke");
@@ -58,6 +62,12 @@ let updateService: UpdateService | undefined;
 let updateInstallInProgress = false;
 const updateLifecycle = createUpdateLifecycleGate();
 let quitting = false;
+let mainWindow: BrowserWindow | undefined;
+
+function showOpenDialogInMainWindow(options: Electron.OpenDialogOptions) {
+  const target = mainWindow !== undefined && !mainWindow.isDestroyed() ? mainWindow : BrowserWindow.getAllWindows()[0];
+  return target === undefined ? dialog.showOpenDialog(options) : dialog.showOpenDialog(target, options);
+}
 
 function registerIpcHandler(
   policy: RendererSecurityPolicy,
@@ -106,6 +116,24 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       return { ok: false, error: error instanceof Error ? error.message : "登录缓存保存失败" };
     }
   });
+  registerIpcHandler(policy, IPC_CHANNELS.applyForwardingTargets, async (_event, targets) => {
+    if (!isValidTcpTargetList(targets)) return { ok: false, error: "转发地址无效" };
+    try {
+      manager.applyForwardingTargets(targets);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "转发地址应用失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.saveStoredValues, async (_event, values) => {
+    if (typeof values !== "object" || values === null || !isStringRecord((values as Record<string, unknown>).mapValues) || !isStringRecord((values as Record<string, unknown>).fileValues)) return { ok: false, error: "缓存格式无效" };
+    try {
+      await manager.saveStoredValues(values as { mapValues: Record<string, string>; fileValues: Record<string, string> });
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "缓存保存失败" };
+    }
+  });
   registerIpcHandler(policy, IPC_CHANNELS.listProxyInstances, (): ProxyInstanceSummary[] => manager.list());
   registerIpcHandler(policy, IPC_CHANNELS.selectProxyInstance, async (_event, id) => {
     if (typeof id !== "string" || id.length === 0) return { ok: false, error: "代理实例参数无效" };
@@ -149,13 +177,13 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.selectProjectDirectory, async () => {
-    const selected = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+    const selected = await showOpenDialogInMainWindow({ properties: ["openDirectory"] });
     if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, canceled: true };
     return { ok: true, path: selected.filePaths[0] };
   });
   registerIpcHandler(policy, IPC_CHANNELS.selectEncryptionDirectory, async (_event, kind) => {
     if (kind !== "input" && kind !== "output") return { ok: false, error: "目录类型无效" };
-    const selected = await dialog.showOpenDialog({
+    const selected = await showOpenDialogInMainWindow({
       properties: ["openDirectory", "createDirectory"],
       title: kind === "input" ? "选择加密前文件夹目录" : "选择加密后文件夹目录",
     });
@@ -270,6 +298,18 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       return { ok: false, error: error instanceof Error ? error.message : "日志清空失败" };
     }
   });
+  registerIpcHandler(policy, IPC_CHANNELS.openExternal, async (_event, url) => {
+    if (typeof url !== "string") return { ok: false, error: "地址无效" };
+    let protocol: string;
+    try {
+      protocol = new URL(url).protocol;
+    } catch {
+      return { ok: false, error: "地址无效" };
+    }
+    if (protocol !== "http:" && protocol !== "https:") return { ok: false, error: "仅支持 http/https 地址" };
+    await shell.openExternal(url);
+    return { ok: true };
+  });
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {
@@ -299,6 +339,10 @@ async function loadService(): Promise<void> {
     workspace,
     workspaceStore,
     defaultCacheRoot: path.join(app.getPath("userData"), "cache"),
+    onValuesChanged: () => {
+      const payload = { sharedValues: manager.getSharedValues(), loginCache: manager.getLoginCache(), ...manager.getStoredValues() };
+      for (const window of BrowserWindow.getAllWindows()) window.webContents.send(IPC_CHANNELS.valuesChanged, payload);
+    },
   });
 }
 
@@ -355,6 +399,8 @@ function createWindow(policy: RendererSecurityPolicy): void {
     },
   });
 
+  mainWindow = window;
+  window.on("closed", () => { if (mainWindow === window) mainWindow = undefined; });
   window.webContents.on("will-navigate", (event, url) => {
     if (!policy.shouldAllowNavigation(url)) {
       event.preventDefault();

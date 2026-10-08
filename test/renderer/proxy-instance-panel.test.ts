@@ -1,6 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { DEFAULT_LAUNCH_PATH, resolveOpenUrl } from "../../src/renderer/components/ProxyInstancePanel";
+
+test("overview launch row opens the default page path in the browser", async () => {
+  const panel = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");
+  assert.match(panel, /proxy-instance-launch/);
+  assert.match(panel, /在浏览器打开/);
+  assert.match(panel, /openExternal/);
+  assert.equal(DEFAULT_LAUNCH_PATH, "/dist/src/ai-assistant/index.html#/index");
+  assert.match(panel, /config\.launchPath/);
+});
+
+test("resolveOpenUrl keeps full URLs and prefixes bare paths with the listening address", () => {
+  assert.equal(resolveOpenUrl("https://example.com/a?b=1", "127.0.0.1", 8080), "https://example.com/a?b=1");
+  assert.equal(resolveOpenUrl("http://example.com", "0.0.0.0", 8080), "http://example.com");
+  assert.equal(resolveOpenUrl("/dist/src/ai-assistant/index.html#/index", "127.0.0.1", 8080), "http://127.0.0.1:8080/dist/src/ai-assistant/index.html#/index");
+  assert.equal(resolveOpenUrl("dist/index.html", "127.0.0.1", 8080), "http://127.0.0.1:8080/dist/index.html");
+  assert.equal(resolveOpenUrl("/x", "0.0.0.0", 9000), "http://127.0.0.1:9000/x");
+  assert.equal(resolveOpenUrl(" /x ", "::", 9000), "http://127.0.0.1:9000/x");
+});
 
 test("overview renders proxy instance management actions", async () => {
   const panel = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");
@@ -49,11 +68,11 @@ test("overview places the proxy name and status above the project directory", as
   assert.doesNotMatch(panel, /切换左侧代理后，右侧内容会跟随当前选中实例更新/);
 });
 
-test("overview disables editable data while the proxy is running", async () => {
+test("overview disables editable data while the proxy is running except the name and project directory", async () => {
   const panel = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");
-  assert.match(panel, /<input(?=[^>]*aria-label="编辑代理名称")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
-  assert.match(panel, /<input(?=[^>]*aria-label="项目目录")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
-  assert.match(panel, /<button(?=[^>]*disabled=\{running \|\| busy\})[^>]*>选择项目目录<\/button>/);
+  assert.doesNotMatch(panel, /<input(?=[^>]*aria-label="编辑代理名称")(?=[^>]*disabled=)[^>]*>/);
+  assert.match(panel, /<input(?=[^>]*aria-label="项目目录")(?=[^>]*disabled=\{busy\})[^>]*>/);
+  assert.match(panel, /<button(?=[^>]*disabled=\{busy\})[^>]*>选择项目目录<\/button>/);
   assert.match(panel, /<input(?=[^>]*aria-label="监听主机")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
   assert.match(panel, /<input(?=[^>]*aria-label="监听端口")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
   assert.match(panel, /<input(?=[^>]*aria-label="超时时间")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
@@ -192,7 +211,7 @@ test("proxy sidebar supports editing names and bulk runtime actions", async () =
 
 test("proxy sidebar shows three cards and previews the next card", async () => {
   const styles = await readFile("src/renderer/styles.css", "utf8");
-  assert.match(styles, /\.proxy-instance-sidebar-list[^}]*grid-auto-rows:\s*64px/);
+  assert.match(styles, /\.proxy-instance-sidebar-list[^}]*grid-auto-rows:\s*minmax\(64px, auto\)/);
   assert.match(styles, /\.proxy-instance-sidebar-list[^}]*max-height:\s*calc\(\(64px \* 3\) \+ \(8px \* 2\) \+ 6px \+ 20px\)/);
   assert.match(styles, /\.proxy-instance-sidebar-list[^}]*overflow-y:\s*auto/);
 });

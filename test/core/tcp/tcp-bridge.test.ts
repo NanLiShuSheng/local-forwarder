@@ -4,7 +4,7 @@ import net from "node:net";
 import type { TztCodec, TztQuery, TztResponse } from "../../../src/core/tcp/tzt-codec";
 import { TcpBridgePool } from "../../../src/core/tcp/tcp-bridge";
 
-type FakeMode = "normal" | "silent" | "disconnect" | "late";
+type FakeMode = "normal" | "silent" | "disconnect" | "late" | "stream" | "big";
 
 function createFastCodec(): TztCodec {
   return {
@@ -51,6 +51,17 @@ async function createFakeTztServer(mode: FakeMode = "normal") {
         if (mode === "disconnect") {
           socket.destroy();
           return;
+        }
+        if (mode === "stream" && request.Action === "52100") {
+          const serial = Number(request.HandleSerialNo);
+          socket.write(codec.encode({ GRID0: "chunk-1" }, serial));
+          setTimeout(() => socket.write(codec.encode({ GRID0: "chunk-2" }, serial)), 30);
+          setTimeout(() => socket.write(codec.encode({ GRID0: "chunk-3" }, serial)), 150);
+          continue;
+        }
+        if (mode === "big") {
+          socket.write(codec.encode({ Action: request.Action ?? "", ERRORNO: "0", BIG: "x".repeat(1_500_000) }, Number(request.HandleSerialNo)));
+          continue;
         }
 
         const response = codec.encode(
@@ -176,6 +187,19 @@ test("bridge isolates one request timeout and ignores its late response", async 
   }
 });
 
+test("bridge accepts frames larger than 1 MiB", async () => {
+  const fake = await createFakeTztServer("big");
+  const bridge = new TcpBridgePool({ connectTimeoutMs: 200, requestTimeoutMs: 2000, codec: createFastCodec() });
+
+  try {
+    const result = await bridge.request({ host: "127.0.0.1", port: fake.port }, { Action: "100" });
+    assert.equal(String(result.BIG).length, 1_500_000);
+  } finally {
+    await bridge.close();
+    await fake.close();
+  }
+});
+
 test("bridge close rejects pending requests", async () => {
   const fake = await createFakeTztServer("silent");
   const bridge = new TcpBridgePool({ connectTimeoutMs: 200, requestTimeoutMs: 500, codec: createFastCodec() });
@@ -184,4 +208,59 @@ test("bridge close rejects pending requests", async () => {
   await bridge.close();
   await assert.rejects(request, /closed/i);
   await fake.close();
+});
+
+test("bridge streams frames until the consumer terminates and ignores the late frame", async () => {
+  const fake = await createFakeTztServer("stream");
+  const bridge = new TcpBridgePool({ connectTimeoutMs: 200, requestTimeoutMs: 500, codec: createFastCodec() });
+
+  try {
+    const received: string[] = [];
+    const stream = bridge.requestStream({ host: "127.0.0.1", port: fake.port }, { Action: "52100" }, (frame) => {
+      received.push(String(frame.GRID0));
+      return received.length < 2;
+    });
+    await stream.done;
+    assert.deepEqual(received, ["chunk-1", "chunk-2"]);
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const followUp = await bridge.request({ host: "127.0.0.1", port: fake.port }, { Action: "100" });
+    assert.deepEqual(followUp, { Action: "100", ERRORNO: "0" });
+    assert.equal(fake.connectionCount, 1);
+  } finally {
+    await bridge.close();
+    await fake.close();
+  }
+});
+
+test("bridge stream cancel stops delivery and idle timeout rejects silent streams", async () => {
+  const fake = await createFakeTztServer("stream");
+  const bridge = new TcpBridgePool({ connectTimeoutMs: 200, requestTimeoutMs: 500, codec: createFastCodec() });
+
+  try {
+    const received: unknown[] = [];
+    const stream = bridge.requestStream({ host: "127.0.0.1", port: fake.port }, { Action: "52100" }, (frame) => {
+      received.push(frame);
+      return true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    stream.cancel();
+    await stream.done;
+    assert.equal(received.length, 2);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.equal(received.length, 2);
+  } finally {
+    await bridge.close();
+    await fake.close();
+  }
+
+  const silent = await createFakeTztServer("silent");
+  const idleBridge = new TcpBridgePool({ connectTimeoutMs: 200, requestTimeoutMs: 40, codec: createFastCodec() });
+  try {
+    const idle = idleBridge.requestStream({ host: "127.0.0.1", port: silent.port }, { Action: "52100" }, () => true);
+    await assert.rejects(idle.done, /timeout/i);
+  } finally {
+    await idleBridge.close();
+    await silent.close();
+  }
 });

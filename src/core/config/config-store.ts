@@ -104,7 +104,6 @@ function exportTcpTarget(target: InternalConfig["tcpTargets"][number], index: nu
   if (target.protocol !== undefined) setSafePath(output, ["protocol"], target.protocol, `tcpTargets[${index}].protocol`);
   if (target.basePath !== undefined) setSafePath(output, ["basePath"], target.basePath, `tcpTargets[${index}].basePath`);
   if (target.transport !== undefined) setSafePath(output, ["transport"], target.transport, `tcpTargets[${index}].transport`);
-  setSafePath(output, ["enabled"], target.enabled, `tcpTargets[${index}].enabled`);
   return output;
 }
 

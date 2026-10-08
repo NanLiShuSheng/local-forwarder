@@ -384,7 +384,7 @@ test("forwards reqxml through an HTTP target base path", async () => {
     bindHost: "127.0.0.1",
     port: 0,
     rules: [],
-    tcpTargets: [{ id: "hq", name: "hq", host: "127.0.0.1", port: targetPort, protocol: "http", basePath: "/ant", transport: "http", enabled: true }],
+    tcpTargets: [{ id: "hq", name: "hq", host: "127.0.0.1", port: targetPort, protocol: "http", basePath: "/ant", transport: "http"}],
     timeoutMs: 500,
   });
 
@@ -413,7 +413,7 @@ test("substitutes local variables in login account fields like proxy3", async ()
     rules: [],
     localValues: { MOBILECODE: "17000000000" },
     accounts: { ptjy: { mobilecode: "($mobileCode)" } },
-    tcpTargets: [{ id: "jy", name: "jy", host: "127.0.0.1", port: targetPort, protocol: "http", transport: "http", enabled: true }],
+    tcpTargets: [{ id: "jy", name: "jy", host: "127.0.0.1", port: targetPort, protocol: "http", transport: "http"}],
     timeoutMs: 500,
   });
 
@@ -427,7 +427,7 @@ test("substitutes local variables in login account fields like proxy3", async ()
   }
 });
 
-test("uses the jy reqxml target when ReqLinkType is omitted", async () => {
+test("uses the hq reqxml target when ReqLinkType is omitted", async () => {
   const bridge = {
     request: async (target: { host: string }, _query: Record<string, string>) => ({ TARGET: target.host }),
   };
@@ -436,9 +436,9 @@ test("uses the jy reqxml target when ReqLinkType is omitted", async () => {
     port: 0,
     rules: [],
     tcpTargets: [
-      { id: "hq", name: "hq", host: "hq-target", port: 9000, enabled: true },
-      { id: "jy", name: "jy", host: "jy-target", port: 9001, enabled: true },
-      { id: "zx", name: "zx", host: "zx-target", port: 9002, enabled: true },
+      { id: "hq", name: "hq", host: "hq-target", port: 9000},
+      { id: "jy", name: "jy", host: "jy-target", port: 9001},
+      { id: "zx", name: "zx", host: "zx-target", port: 9002},
     ],
     tcpBridge: bridge,
     timeoutMs: 500,
@@ -447,11 +447,114 @@ test("uses the jy reqxml target when ReqLinkType is omitted", async () => {
   try {
     const address = await proxy.start();
     const response = await fetch(`http://127.0.0.1:${address.port}/reqxml?Action=100`);
-    assert.deepEqual(await response.json(), { TARGET: "jy-target" });
+    assert.deepEqual(await response.json(), { TARGET: "hq-target" });
     for (const [linkType, target] of [["0", "hq-target"], ["1", "jy-target"], ["2", "zx-target"]] as const) {
       const typed = await fetch(`http://127.0.0.1:${address.port}/reqxml?ReqLinkType=${linkType}&Action=100`);
       assert.deepEqual(await typed.json(), { TARGET: target });
     }
+  } finally {
+    await proxy.stop();
+  }
+});
+
+test("streams reqsse frames over TCP until the zero sentinel ends the response", async () => {
+  const calls: Array<{ target: { host: string; port: number }; query: Record<string, string> }> = [];
+  const bridge = {
+    request: async () => ({}),
+    requestStream: (target: { host: string; port: number }, query: Record<string, string>, onFrame: (frame: Record<string, unknown>) => boolean) => {
+      calls.push({ target, query });
+      let resolveDone!: () => void;
+      const done = new Promise<void>((resolve) => { resolveDone = resolve; });
+      queueMicrotask(() => {
+        for (const frame of [
+          { GRID0: "first\r\n" },
+          { GRID0: ["row1", null, "row3"] },
+          { ACTION: "210" },
+          { GRID0: "0" },
+        ]) {
+          if (!onFrame(frame)) break;
+        }
+        resolveDone();
+      });
+      return { done, cancel: () => resolveDone() };
+    },
+  };
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    rules: [],
+    tcpTargets: [
+      { id: "hq", name: "hq", host: "hq-target", port: 9000},
+      { id: "jy", name: "jy", host: "jy-target", port: 9001},
+    ],
+    tcpBridge: bridge,
+    timeoutMs: 500,
+  });
+
+  try {
+    const address = await proxy.start();
+    const response = await fetch(`http://127.0.0.1:${address.port}/reqsse?Action=52100`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") ?? "", /text\/event-stream/);
+    assert.equal(await response.text(), 'first\r\nrow1\r\n\r\n\r\nrow3{"ACTION":"210"}0');
+    assert.equal(calls[0]?.target.host, "hq-target");
+  } finally {
+    await proxy.stop();
+  }
+});
+
+test("routes tztforward header requests into the SSE stream", async () => {
+  const bridge = {
+    request: async () => ({}),
+    requestStream: (_target: { host: string; port: number }, _query: Record<string, string>, onFrame: (frame: Record<string, unknown>) => boolean) => {
+      let resolveDone!: () => void;
+      const done = new Promise<void>((resolve) => { resolveDone = resolve; });
+      queueMicrotask(() => {
+        onFrame({ GRID0: "tick\r\n" });
+        onFrame({ GRID0: "0" });
+        resolveDone();
+      });
+      return { done, cancel: () => resolveDone() };
+    },
+  };
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    rules: [],
+    tcpTargets: [{ id: "hq", name: "hq", host: "hq-target", port: 9000}],
+    tcpBridge: bridge,
+    timeoutMs: 500,
+  });
+
+  try {
+    const address = await proxy.start();
+    const response = await fetch(`http://127.0.0.1:${address.port}/ordinary/path`, { headers: { tztforward: "forward" } });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") ?? "", /text\/event-stream/);
+    assert.equal(await response.text(), "tick\r\n0");
+  } finally {
+    await proxy.stop();
+  }
+});
+
+test("rejects reqsse when the selected target uses HTTP transport", async () => {
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    rules: [],
+    tcpTargets: [{ id: "hq", name: "hq", host: "127.0.0.1", port: 9000, protocol: "http", transport: "http"}],
+    tcpBridge: {
+      request: async () => ({}),
+      requestStream: () => { throw new Error("requestStream must not be called"); },
+    },
+    timeoutMs: 500,
+  });
+
+  try {
+    const address = await proxy.start();
+    const response = await fetch(`http://127.0.0.1:${address.port}/reqsse?Action=52100`);
+    assert.equal(response.status, 502);
+    assert.deepEqual(await response.json(), { error: "SSE streaming requires a TCP target" });
   } finally {
     await proxy.stop();
   }
@@ -468,7 +571,7 @@ test("handles local values, maps, files, and TCP reqxml without leaving data in 
     mapValues: {},
     fileValues: {},
     accounts: {},
-    tcpTargets: [{ id: "tcp", name: "tcp", host: "127.0.0.1", port: 9000, enabled: true }],
+    tcpTargets: [{ id: "tcp", name: "tcp", host: "127.0.0.1", port: 9000}],
     tcpBridge: bridge,
     timeoutMs: 500,
     onLog: (entry) => logs.push(entry),
@@ -489,6 +592,29 @@ test("handles local values, maps, files, and TCP reqxml without leaving data in 
     assert.equal(await readFile.text(), "file-data");
     const xml = await fetch(`http://127.0.0.1:${address.port}/reqxml?Action=100`);
     assert.deepEqual(await xml.json(), { ACTION: "100", ERRORNO: "0" });
+  } finally {
+    await proxy.stop();
+  }
+});
+
+test("notifies when the map and file stores are written", async () => {
+  let writes = 0;
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    rules: [],
+    timeoutMs: 500,
+    onValuesWritten: () => { writes += 1; },
+  });
+  try {
+    const address = await proxy.start();
+    const saveMap = await fetch(`http://127.0.0.1:${address.port}/reqsavemap?FOO=bar`);
+    assert.deepEqual(await saveMap.json(), { ERRORNO: "0" });
+    const saveFile = await fetch(`http://127.0.0.1:${address.port}/reqsavefile?filename=fixture.txt`, { method: "POST", body: "file-data" });
+    assert.deepEqual(await saveFile.json(), { ERRORNO: "0" });
+    assert.equal(writes, 2);
+    assert.equal(proxy.getValues().mapValues.FOO, "bar");
+    assert.equal(proxy.getValues().fileValues["FIXTURE.TXT"], "file-data");
   } finally {
     await proxy.stop();
   }

@@ -28,7 +28,7 @@ interface LegacyResponse {
 
 const MAGIC = 0x07b7;
 const HEADER_SIZE = 6;
-const MAX_FRAME_SIZE = 1024 * 1024;
+const MAX_FRAME_SIZE = 64 * 1024 * 1024;
 const FIXED_FRAME = "b707250000006400000000020000003132009617e8f7adba12dc8067265b85505ab73a8b8040e9ccde05f0";
 const FIXED_FILE_RC4 = "7ad9f940a0c3d07a8f";
 const FIXED_X_RC4 = "c03aeaeaaaa119a7f4";
@@ -61,9 +61,7 @@ export function getNode16BinaryCandidates(
   arch: string,
   env: NodeJS.ProcessEnv,
 ): string[] {
-  const bundled = platform === "win32" && arch === "x64"
-    ? [path.join(protocolDir, "node", "win-x64", "node.exe")]
-    : [];
+  const bundled = [path.join(protocolDir, "node", `${platform === "win32" ? "win" : platform}-${arch}`, platform === "win32" ? "node.exe" : "node")];
   const external = [
     path.join(os.homedir(), ".nvm/versions/node/v16.13.0/bin/node"),
     env.NVM_BIN === undefined ? undefined : path.join(env.NVM_BIN, "node"),

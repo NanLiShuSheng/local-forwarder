@@ -4,9 +4,9 @@ import { spawnSync } from "node:child_process";
 import packageJson from "../package.json" with { type: "json" };
 
 const projectRoot = process.cwd();
-const appPath = path.join(projectRoot, "dist", "mac", `${packageJson.productName ?? "Local Forwarder"}.app`);
+const appPath = path.resolve(process.argv[2] ?? path.join(projectRoot, "dist", "mac", `${packageJson.productName ?? "Local Forwarder"}.app`));
 const releaseDir = path.join(projectRoot, "release");
-const outputPath = path.join(releaseDir, `${packageJson.productName ?? "Local Forwarder"}-${packageJson.version}.dmg`);
+const outputPath = path.join(releaseDir, process.argv[3] ?? `${packageJson.productName ?? "Local Forwarder"}-${packageJson.version}.dmg`);
 
 if (!existsSync(appPath)) {
   console.error(`Cannot create DMG: missing packaged app at ${appPath}`);

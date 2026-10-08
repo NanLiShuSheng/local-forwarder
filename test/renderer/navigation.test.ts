@@ -27,6 +27,14 @@ test("sidebar navigation removes the visible feature heading without changing it
   assert.match(styles, /\.sidebar-nav::before/);
 });
 
+test("login cache refreshes on values page entry instead of background polling", async () => {
+  const source = await readFile("src/renderer/App.tsx", "utf8");
+  const interval = source.match(/setInterval\(\(\) => \{[\s\S]*?\}, 2000\)/);
+  assert.ok(interval);
+  assert.doesNotMatch(interval[0], /getLoginCache/);
+  assert.match(source, /if \(page === "values"\) void window\.forwarder\.getLoginCache\(\)\.then\(setLoginCache\)/);
+});
+
 test("sidebar navigation gives every tab an icon without changing its label", async () => {
   const source = await readFile("src/renderer/App.tsx", "utf8");
   const styles = await readFile("src/renderer/styles.css", "utf8");

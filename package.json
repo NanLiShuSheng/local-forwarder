@@ -22,6 +22,7 @@
     "smoke": "node scripts/smoke-electron.mjs"
   },
   "dependencies": {
+    "antd": "^6.6.5",
     "electron-updater": "^6.8.9",
     "react": "latest",
     "react-dom": "latest"

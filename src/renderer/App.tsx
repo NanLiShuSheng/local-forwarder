@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus, UpdateState } from "../shared/contracts";
+import { ConfigProvider, theme as antdTheme } from "antd";
+import zhCN from "antd/locale/zh_CN";
+import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus, StoredValues, UpdateState } from "../shared/contracts";
 import { AppearancePage } from "./components/AppearancePage";
 import { ConfigPages, type Page } from "./components/ConfigPages";
 import { LogPanel } from "./components/LogPanel";
@@ -55,6 +57,8 @@ function AppContent() {
   const [config, setConfig] = useState(initialConfig);
   const [sharedValues, setSharedValues] = useState<Record<string, string>>({});
   const [loginCache, setLoginCache] = useState<Record<string, string>>({});
+  const [mapValues, setMapValues] = useState<Record<string, string>>({});
+  const [fileValues, setFileValues] = useState<Record<string, string>>({});
   const [encryptionPreferences, setEncryptionPreferences] = useState(initialEncryptionPreferences);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEntry>();
@@ -167,6 +171,8 @@ function AppContent() {
       setConfig(nextConfig);
       setSharedValues(nextSharedValues);
       setLoginCache(nextLoginCache);
+      setMapValues({ ...nextConfig.mapValues });
+      setFileValues(Object.fromEntries(Object.entries(nextConfig.legacy?.files ?? {}).filter(([, value]) => typeof value === "string")) as Record<string, string>);
       setStatus(nextStatus);
       setEncryptionPreferences(nextEncryptionPreferences);
     } catch (cause) {
@@ -178,12 +184,22 @@ function AppContent() {
     void refresh();
     const timer = window.setInterval(() => {
       void window.forwarder.listProxyInstances().then(setInstances).catch(() => undefined);
-      void window.forwarder.getLoginCache().then(setLoginCache).catch(() => undefined);
       void window.forwarder.status().then(setStatus).catch(() => undefined);
       void readLogs().catch(() => undefined);
     }, 2000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (page === "values") void window.forwarder.getLoginCache().then(setLoginCache).catch(() => undefined);
+  }, [page]);
+
+  useEffect(() => window.forwarder.onValuesChanged((values) => {
+    setSharedValues(values.sharedValues);
+    setLoginCache(values.loginCache);
+    setMapValues(values.mapValues);
+    setFileValues(values.fileValues);
+  }), []);
 
   const save = async (nextConfig: AppConfig) => {
     const result = await window.forwarder.saveConfig(nextConfig);
@@ -214,6 +230,17 @@ function AppContent() {
     }
     setLoginCache(values);
     setInstances(await window.forwarder.listProxyInstances());
+    return true;
+  };
+
+  const saveStoredValues = async (values: StoredValues) => {
+    const result = await window.forwarder.saveStoredValues(values);
+    if (!result.ok) {
+      notifyError(result.error ?? "缓存保存失败", "缓存保存失败");
+      return false;
+    }
+    setMapValues(values.mapValues);
+    setFileValues(values.fileValues);
     return true;
   };
 
@@ -385,9 +412,9 @@ function AppContent() {
     return result;
   };
 
-  const pageProps = { config, logs, onChange: save, encryptionPreferences, onSelectEncryptionDirectory: selectEncryptionDirectory, onSaveEncryptionPreferences: saveEncryptionPreferences, onEncryptDirectory: encryptDirectory, onEncryptionProgress: window.forwarder.onEncryptionProgress, onSendRequest: sendRequest, sharedValues, loginCache, onSaveSharedValues: saveSharedValues, onSaveLoginCache: saveLoginCache };
+  const pageProps = { config, logs, onChange: save, encryptionPreferences, onSelectEncryptionDirectory: selectEncryptionDirectory, onSaveEncryptionPreferences: saveEncryptionPreferences, onEncryptDirectory: encryptDirectory, onEncryptionProgress: window.forwarder.onEncryptionProgress, onSendRequest: sendRequest, sharedValues, loginCache, mapValues, fileValues, onSaveSharedValues: saveSharedValues, onSaveLoginCache: saveLoginCache, onSaveStoredValues: saveStoredValues };
 
-  return <main className="app-shell" data-theme={theme}>
+  return <ConfigProvider locale={zhCN} theme={{ algorithm: theme === "dark" ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm }}><main className="app-shell" data-theme={theme}>
     <aside className="sidebar">
       <ProxyInstanceSidebar instances={instances} onSelect={selectProxyInstance} onCreate={createProxyInstance} onDelete={deleteProxyInstance} onDuplicate={duplicateProxyInstance} onToggle={toggleProxyInstance} onStartAll={startAll} onStopAll={stopAll} bulkBusy={bulkRuntimeAction !== undefined} />
       <nav className="sidebar-nav" aria-label="功能导航">
@@ -403,7 +430,7 @@ function AppContent() {
       {page === "logs" && <LogPanel logs={logs} selected={selectedLog} onSelect={setSelectedLog} onClear={clearLogs} onFillJson={fillJsonPreview} />}
     </section>
     <UpdateCard state={updateState} dismissedVersion={dismissedUpdateVersion} onDownload={downloadUpdate} onInstall={installUpdate} onDismiss={dismissUpdate} />
-  </main>;
+  </main></ConfigProvider>;
 }
 
 function App() {

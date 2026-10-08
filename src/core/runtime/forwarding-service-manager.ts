@@ -14,6 +14,8 @@ export interface ManagedForwardingService {
   clearLogs(): void;
   mergeLocalValues(values: Record<string, string>): void;
   setRuntimeValues?(values: Record<string, string>): void;
+  setStoredValues?(mapValues: Record<string, string>, fileValues: Record<string, string>): void;
+  applyTcpTargets?(targets: AppConfig["tcpTargets"]): void;
 }
 
 interface WorkspacePersistence {
@@ -23,8 +25,9 @@ interface WorkspacePersistence {
 export interface ForwardingServiceManagerOptions {
   workspace: ProxyWorkspace;
   workspaceStore: WorkspacePersistence;
-  serviceFactory?: (config: AppConfig, configStore: ForwardingServiceOptions["configStore"], options?: Pick<ForwardingServiceOptions, "onLoginValuesChanged">) => ManagedForwardingService;
+  serviceFactory?: (config: AppConfig, configStore: ForwardingServiceOptions["configStore"], options?: Pick<ForwardingServiceOptions, "onLoginValuesChanged" | "onValuesWritten">) => ManagedForwardingService;
   defaultCacheRoot?: string;
+  onValuesChanged?: () => void;
 }
 
 function clone<T>(value: T): T {
@@ -39,9 +42,23 @@ function hostsConflict(left: string, right: string): boolean {
   return left === right || isWildcardHost(left) || isWildcardHost(right);
 }
 
+const cardTargetLabels = ["hq", "jy", "zx"] as const;
+
+function cardTargetForConfig(config: AppConfig): string | undefined {
+  if (config.cardTargetId !== undefined) {
+    const index = config.tcpTargets.findIndex((target) => target.id === config.cardTargetId);
+    const target = config.tcpTargets[index];
+    if (target === undefined) return undefined;
+    return `${cardTargetLabels[index] ?? target.name} ${target.host}:${target.port}`;
+  }
+  const zx = config.tcpTargets[2];
+  if (zx === undefined) return undefined;
+  return `zx ${zx.host}:${zx.port}`;
+}
+
 function targetForConfig(config: AppConfig): string {
   const jyTarget = config.tcpTargets.find((target) => target.id.toLowerCase() === "jy" || target.name.toLowerCase() === "jy");
-  const tcpTarget = jyTarget ?? config.tcpTargets[1] ?? config.tcpTargets.find((target) => target.enabled) ?? config.tcpTargets[0];
+  const tcpTarget = jyTarget ?? config.tcpTargets[1] ?? config.tcpTargets[0];
   if (tcpTarget !== undefined) return `${tcpTarget.host}:${tcpTarget.port}`;
   const httpTarget = config.httpRules.find((rule) => rule.enabled)?.target ?? config.httpRules[0]?.target;
   return httpTarget ?? "未配置";
@@ -52,6 +69,7 @@ export class ForwardingServiceManager {
   private readonly workspaceStore: WorkspacePersistence;
   private readonly defaultCacheRoot: string | undefined;
   private readonly serviceFactory: NonNullable<ForwardingServiceManagerOptions["serviceFactory"]>;
+  private readonly onValuesChanged: (() => void) | undefined;
   private readonly services = new Map<string, ManagedForwardingService>();
   private saveQueue: Promise<void> = Promise.resolve();
 
@@ -59,7 +77,8 @@ export class ForwardingServiceManager {
     this.workspace = this.normalizeWorkspace(options.workspace);
     this.workspaceStore = options.workspaceStore;
     this.defaultCacheRoot = options.defaultCacheRoot;
-    this.serviceFactory = options.serviceFactory ?? ((config, configStore) => new ForwardingService({ config, configStore }));
+    this.onValuesChanged = options.onValuesChanged;
+    this.serviceFactory = options.serviceFactory ?? ((config, configStore, serviceOptions) => new ForwardingService({ config, configStore, onLoginValuesChanged: serviceOptions?.onLoginValuesChanged, onValuesWritten: serviceOptions?.onValuesWritten }));
     for (const instance of this.workspace.instances) {
       this.createService(instance);
     }
@@ -85,6 +104,10 @@ export class ForwardingServiceManager {
     const selected = this.currentInstance();
     config.server.bindHost = selected.config.server.bindHost;
     config.server.port = this.nextPort();
+    const firstTargets = this.workspace.instances[0]?.config.tcpTargets;
+    if (firstTargets !== undefined) config.tcpTargets = clone(firstTargets);
+    const firstHistory = this.workspace.instances[0]?.config.forwardingAddressHistory;
+    if (firstHistory !== undefined) config.forwardingAddressHistory = clone(firstHistory);
     this.assignCacheRoot(config, id);
     const instance: ProxyInstance = { id, name: `代理实例 ${this.workspace.instances.length + 1}`, config, loginCache: {} };
     this.workspace.instances.push(instance);
@@ -182,7 +205,12 @@ export class ForwardingServiceManager {
   public async saveSharedValues(values: Record<string, string>): Promise<void> {
     this.workspace.sharedValues = { ...values };
     for (const instance of this.workspace.instances) this.applyRuntimeValues(instance);
+    this.onValuesChanged?.();
     await this.persist();
+  }
+
+  public applyForwardingTargets(targets: AppConfig["tcpTargets"], id = this.workspace.selectedInstanceId): void {
+    this.requireService(id).applyTcpTargets?.(targets);
   }
 
   public getLoginCache(id = this.workspace.selectedInstanceId): Record<string, string> {
@@ -193,6 +221,7 @@ export class ForwardingServiceManager {
     const instance = this.requireInstance(id);
     instance.loginCache = { ...values };
     this.applyRuntimeValues(instance);
+    this.onValuesChanged?.();
     await this.persist();
   }
 
@@ -200,6 +229,7 @@ export class ForwardingServiceManager {
     const instance = this.requireInstance(id);
     instance.loginCache = { ...(instance.loginCache ?? {}), ...values };
     this.applyRuntimeValues(instance);
+    this.onValuesChanged?.();
     void this.persist();
   }
 
@@ -229,7 +259,30 @@ export class ForwardingServiceManager {
   private createService(instance: ProxyInstance): void {
     this.services.set(instance.id, this.serviceFactory(this.runtimeConfig(instance), { save: (config) => this.persistConfig(instance.id, config) }, {
       onLoginValuesChanged: (values) => this.mergeLoginCache(values, instance.id),
+      onValuesWritten: () => this.onValuesChanged?.(),
     }));
+  }
+
+  public getStoredValues(id = this.workspace.selectedInstanceId): { mapValues: Record<string, string>; fileValues: Record<string, string> } {
+    const config = this.requireService(id).getConfig();
+    return {
+      mapValues: { ...config.mapValues },
+      fileValues: Object.fromEntries(Object.entries(config.legacy?.files ?? {}).filter(([, value]) => typeof value === "string")) as Record<string, string>,
+    };
+  }
+
+  public async saveStoredValues(values: { mapValues: Record<string, string>; fileValues: Record<string, string> }, id = this.workspace.selectedInstanceId): Promise<void> {
+    const instance = this.requireInstance(id);
+    const service = this.requireService(id);
+    if (service.setStoredValues !== undefined) {
+      service.setStoredValues(values.mapValues, values.fileValues);
+    } else {
+      instance.config.mapValues = { ...values.mapValues };
+      const legacy = (instance.config.legacy ??= { files: {}, extra: {} });
+      legacy.files = { ...values.fileValues };
+    }
+    this.onValuesChanged?.();
+    await this.persist();
   }
 
   private summary(instance: ProxyInstance): ProxyInstanceSummary {
@@ -241,6 +294,7 @@ export class ForwardingServiceManager {
       bindHost: config.server.bindHost,
       port: config.server.port,
       target: targetForConfig(config),
+      cardTarget: cardTargetForConfig(config),
       loginCacheCount: Object.keys(instance.loginCache ?? {}).length,
       status: this.requireService(instance.id).status(),
     };

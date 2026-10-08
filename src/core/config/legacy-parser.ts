@@ -328,14 +328,12 @@ function applyCanonicalRules(config: InternalConfig, raw: UnknownRecord, filenam
       if (id !== undefined && typeof id !== "string") throw new ConfigParseError(filename, `tcpTargets[${index}].id`, "expected a string");
       if (name !== undefined && typeof name !== "string") throw new ConfigParseError(filename, `tcpTargets[${index}].name`, "expected a string");
       if (protocol !== undefined && protocol !== "http" && protocol !== "https") throw new ConfigParseError(filename, `tcpTargets[${index}].protocol`, "expected http or https");
-      const enabled = valueOf(value, "enabled");
-      if (enabled !== undefined && typeof enabled !== "boolean") throw new ConfigParseError(filename, `tcpTargets[${index}].enabled`, "expected a boolean");
       const basePath = valueOf(value, "basepath");
       if (basePath !== undefined && (typeof basePath !== "string" || !basePath.startsWith("/"))) throw new ConfigParseError(filename, `tcpTargets[${index}].basePath`, "expected an absolute path");
       const transport = valueOf(value, "transport");
       if (transport !== undefined && transport !== "tcp" && transport !== "http") throw new ConfigParseError(filename, `tcpTargets[${index}].transport`, "expected tcp or http");
       const normalizedHost = normalizeHost(host);
-      if (isRecord(value)) preserveUnknown(config, value, ["id", "name", "host", "port", "protocol", "basePath", "transport", "enabled"], `tcpTargets[${index}]`);
+      if (isRecord(value)) preserveUnknown(config, value, ["id", "name", "host", "port", "protocol", "basePath", "transport"], `tcpTargets[${index}]`);
       return {
         id: id === undefined ? `tcp-${index + 1}` : id,
         name: name === undefined ? normalizedHost : name,
@@ -344,7 +342,6 @@ function applyCanonicalRules(config: InternalConfig, raw: UnknownRecord, filenam
         ...(protocol === undefined ? {} : { protocol }),
         ...(basePath === undefined ? {} : { basePath }),
         ...(transport === undefined ? {} : { transport }),
-        enabled: enabled === undefined ? true : enabled,
       };
     });
   }
@@ -398,7 +395,6 @@ function applyLegacyConifg(config: InternalConfig, raw: UnknownRecord, filename:
           protocol: url.protocol === "https:" ? "https" : "http",
           ...(url.pathname === "/" ? {} : { basePath: url.pathname.replace(/\/+$/, "") }),
           ...(useHttp === true ? { transport: "http" as const } : {}),
-          enabled: metadata?.enabled ?? true,
         });
       }
       continue;

@@ -86,7 +86,7 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
     "mapValues",
     "accounts",
     "cache",
-  ], ["legacy", "projectPath", "localText", "request", "stringTool", "forwardingAddressHistory"])) return "root";
+  ], ["legacy", "projectPath", "localText", "launchPath", "cardTargetId", "request", "stringTool", "forwardingAddressHistory"])) return "root";
 
   const server = value.server;
   if (!isRecord(server)) return "server";
@@ -118,7 +118,7 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
   for (const [index, target] of value.tcpTargets.entries()) {
     const prefix = `tcpTargets[${index}]`;
     if (!isRecord(target)) return prefix;
-    if (!hasOnlyKeys(target, ["id", "name", "host", "port", "enabled"], ["protocol", "basePath", "transport"])) return prefix;
+    if (!hasOnlyKeys(target, ["id", "name", "host", "port"], ["protocol", "basePath", "transport", "enabled"])) return prefix;
     if (typeof target.id !== "string" || target.id.length === 0) return `${prefix}.id`;
     if (typeof target.name !== "string" || target.name.length === 0) return `${prefix}.name`;
     if (typeof target.host !== "string" || target.host.length === 0) return `${prefix}.host`;
@@ -126,7 +126,8 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
     if (target.protocol !== undefined && target.protocol !== "http" && target.protocol !== "https") return `${prefix}.protocol`;
     if (target.basePath !== undefined && (typeof target.basePath !== "string" || !target.basePath.startsWith("/"))) return `${prefix}.basePath`;
     if (target.transport !== undefined && target.transport !== "tcp" && target.transport !== "http") return `${prefix}.transport`;
-    if (typeof target.enabled !== "boolean") return `${prefix}.enabled`;
+    // Legacy field, accepted but ignored: forwarding addresses no longer have an enable switch.
+    if (target.enabled !== undefined && typeof target.enabled !== "boolean") return `${prefix}.enabled`;
   }
 
   if (value.forwardingAddressHistory !== undefined) {
@@ -150,6 +151,8 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
 
   if (value.projectPath !== undefined && typeof value.projectPath !== "string") return "projectPath";
   if (value.localText !== undefined && typeof value.localText !== "string") return "localText";
+  if (value.launchPath !== undefined && typeof value.launchPath !== "string") return "launchPath";
+  if (value.cardTargetId !== undefined && typeof value.cardTargetId !== "string") return "cardTargetId";
   if (value.request !== undefined) {
     const requestField = getManualRequestConfigValidationError(value.request);
     if (requestField !== undefined) return requestField;
@@ -184,6 +187,21 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
   if (typeof cache.autoDownload !== "boolean") return "cache.autoDownload";
   if (value.legacy !== undefined && !isLegacyData(value.legacy)) return "legacy";
   return undefined;
+}
+
+export function isValidTcpTargetList(value: unknown): value is AppConfig["tcpTargets"] {
+  if (!Array.isArray(value)) return false;
+  return value.every((target) => {
+    if (!isRecord(target)) return false;
+    if (typeof target.id !== "string" || target.id.length === 0) return false;
+    if (typeof target.name !== "string") return false;
+    if (typeof target.host !== "string" || target.host.length === 0) return false;
+    if (typeof target.port !== "number" || !Number.isInteger(target.port) || target.port < 1 || target.port > 65535) return false;
+    if (target.protocol !== undefined && target.protocol !== "http" && target.protocol !== "https") return false;
+    if (target.transport !== undefined && target.transport !== "tcp" && target.transport !== "http") return false;
+    if (target.basePath !== undefined && typeof target.basePath !== "string") return false;
+    return true;
+  });
 }
 
 export function isValidAppConfig(value: unknown): value is AppConfig {

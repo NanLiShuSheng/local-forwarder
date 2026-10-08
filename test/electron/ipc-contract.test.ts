@@ -37,9 +37,26 @@ test("IPC channels expose stable runtime commands", () => {
     status: "runtime:status",
     logs: "runtime:logs",
     clearLogs: "runtime:logs:clear",
+    openExternal: "app:open-external",
+    valuesChanged: "values:changed",
+    saveStoredValues: "values:stored:save",
+    applyForwardingTargets: "runtime:apply-targets",
   });
   const status: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
   assert.equal(status.state, "stopped");
+});
+
+test("directory open dialogs attach to the main window", async () => {
+  const source = await readFile("electron/main.ts", "utf8");
+  assert.match(source, /mainWindow = window/);
+  assert.match(source, /dialog\.showOpenDialog\(target, options\)/);
+});
+
+test("openExternal handler only opens http and https URLs", async () => {
+  const source = await readFile("electron/main.ts", "utf8");
+  assert.match(source, /IPC_CHANNELS\.openExternal/);
+  assert.match(source, /shell\.openExternal/);
+  assert.match(source, /protocol !== "http:" && protocol !== "https:"/);
 });
 
 test("update installation verifies that all proxy instances stopped", async () => {

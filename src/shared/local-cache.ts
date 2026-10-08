@@ -23,3 +23,13 @@ export function parseLocalCacheText(text: string): Record<string, string> {
 export function formatLocalCacheText(values: Record<string, string>): string {
   return Object.entries(values).map(([key, value]) => `${key} = ${value}`).join("\n");
 }
+
+export function splitH5StoreEntries(values: Record<string, string>, mapValues: Record<string, string>, fileValues: Record<string, string>): { mapValues: Record<string, string>; fileValues: Record<string, string> } {
+  const nextMapValues: Record<string, string> = {};
+  const nextFileValues: Record<string, string> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (key in mapValues && !(key in fileValues)) nextMapValues[key] = value;
+    else nextFileValues[key] = value;
+  }
+  return { mapValues: nextMapValues, fileValues: nextFileValues };
+}

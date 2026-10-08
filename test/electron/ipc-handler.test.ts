@@ -49,7 +49,7 @@ test("save config handler reports the rejected configuration field", () => {
   const trustedEvent = { senderFrame: { url: "http://localhost:5173/" } };
   const invalidConfig = {
     ...validConfig,
-    tcpTargets: [{ id: "hq", name: "hq", host: "127.0.0.1", port: 0, enabled: true }],
+    tcpTargets: [{ id: "hq", name: "hq", host: "127.0.0.1", port: 0 }],
   };
 
   assert.deepEqual(handler(trustedEvent, invalidConfig), {

@@ -56,10 +56,11 @@ export interface AppConfig {
     protocol?: "http" | "https";
     basePath?: string;
     transport?: "tcp" | "http";
-    enabled: boolean;
   }>;
   forwardingAddressHistory?: ForwardingAddressHistory | string[];
   localText?: string;
+  launchPath?: string;
+  cardTargetId?: string;
   localValues: Record<string, string>;
   mapValues: Record<string, string>;
   accounts: Record<string, Record<string, string>>;
@@ -122,6 +123,7 @@ export interface ProxyInstanceSummary {
   bindHost: string;
   port: number;
   target: string;
+  cardTarget?: string;
   loginCacheCount: number;
   status: RuntimeStatus;
 }
@@ -201,6 +203,18 @@ export interface EncryptionProgress {
   relativePath?: string;
 }
 
+export interface ValuesSnapshot {
+  sharedValues: Record<string, string>;
+  loginCache: Record<string, string>;
+  mapValues: Record<string, string>;
+  fileValues: Record<string, string>;
+}
+
+export interface StoredValues {
+  mapValues: Record<string, string>;
+  fileValues: Record<string, string>;
+}
+
 export interface ForwarderApi {
   getConfig(): Promise<AppConfig>;
   getAppVersion(): Promise<string>;
@@ -214,6 +228,9 @@ export interface ForwarderApi {
   saveSharedValues(values: Record<string, string>): Promise<OperationResult>;
   getLoginCache(): Promise<Record<string, string>>;
   saveLoginCache(values: Record<string, string>): Promise<OperationResult>;
+  saveStoredValues(values: StoredValues): Promise<OperationResult>;
+  applyForwardingTargets(targets: AppConfig["tcpTargets"]): Promise<OperationResult>;
+  onValuesChanged(listener: (values: ValuesSnapshot) => void): () => void;
   listProxyInstances(): Promise<ProxyInstanceSummary[]>;
   selectProxyInstance(id: string): Promise<OperationResult & { instanceId?: string }>;
   createProxyInstance(): Promise<OperationResult & { instance?: ProxyInstanceSummary }>;
@@ -234,6 +251,7 @@ export interface ForwarderApi {
   status(): Promise<RuntimeStatus>;
   logs(): Promise<LogEntry[]>;
   clearLogs(): Promise<OperationResult>;
+  openExternal(url: string): Promise<OperationResult>;
 }
 
 export const IPC_CHANNELS = {
@@ -269,6 +287,10 @@ export const IPC_CHANNELS = {
   status: "runtime:status",
   logs: "runtime:logs",
   clearLogs: "runtime:logs:clear",
+  openExternal: "app:open-external",
+  valuesChanged: "values:changed",
+  saveStoredValues: "values:stored:save",
+  applyForwardingTargets: "runtime:apply-targets",
 } as const;
 
 declare global {

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, ForwardingAddressHistory, LogEntry, ManualRequestConfig, ManualRequestResponse } from "../../shared/contracts";
+import { AutoComplete, Button } from "antd";
+import { PushpinFilled, PushpinOutlined } from "@ant-design/icons";
+import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, ForwardingAddressHistory, LogEntry, ManualRequestConfig, ManualRequestResponse, StoredValues } from "../../shared/contracts";
 import { parseDirectoryInput } from "../../shared/directory-path";
-import { formatLocalCacheText, parseLocalCacheText } from "../../shared/local-cache";
+import { formatLocalCacheText, parseLocalCacheText, splitH5StoreEntries } from "../../shared/local-cache";
 import { RequestPage } from "./RequestPage";
 import { StringToolPage } from "./StringToolPage";
 import { useToast } from "./ToastProvider";
@@ -20,8 +22,11 @@ interface ConfigPagesProps {
   onSendRequest: (request: ManualRequestConfig) => Promise<ManualRequestResponse>;
   sharedValues: Record<string, string>;
   loginCache: Record<string, string>;
+  mapValues: Record<string, string>;
+  fileValues: Record<string, string>;
   onSaveSharedValues: (values: Record<string, string>) => Promise<boolean>;
   onSaveLoginCache: (values: Record<string, string>) => Promise<boolean>;
+  onSaveStoredValues: (values: StoredValues) => Promise<boolean>;
 }
 const addressLabels = ["hq", "jy", "zx"] as const;
 const forwardingAddressPlaceholders = {
@@ -35,7 +40,7 @@ export function forwardingAddressPlaceholder(index: number): string | undefined 
   return key === undefined ? undefined : forwardingAddressPlaceholders[key];
 }
 
-export interface AddressDraft { id: string; name: string; address: string; enabled: boolean; }
+export interface AddressDraft { id: string; name: string; address: string; }
 
 export function addressForTarget(target: AppConfig["tcpTargets"][number]): string {
   const protocol = target.transport === "http" ? target.protocol ?? "http" : "tcp";
@@ -53,6 +58,16 @@ export function appendForwardingAddressHistory(history: readonly string[] | unde
 export function forwardingAddressHistoryForTarget(history: AppConfig["forwardingAddressHistory"], key: keyof ForwardingAddressHistory): string[] {
   if (history === undefined || Array.isArray(history)) return [];
   return history[key] ?? [];
+}
+
+export function removeForwardingAddressHistory(history: AppConfig["forwardingAddressHistory"], key: keyof ForwardingAddressHistory, address: string): ForwardingAddressHistory {
+  const next: ForwardingAddressHistory = {
+    hq: forwardingAddressHistoryForTarget(history, "hq"),
+    jy: forwardingAddressHistoryForTarget(history, "jy"),
+    zx: forwardingAddressHistoryForTarget(history, "zx"),
+  };
+  next[key] = next[key].filter((entry) => entry !== address);
+  return next;
 }
 
 export function encryptionDirectoryHistoryForKind(preferences: EncryptionPreferences, kind: EncryptionDirectoryKind): string[] {
@@ -104,7 +119,6 @@ function draftsForTargets(targets: AppConfig["tcpTargets"]): AddressDraft[] {
       id: target?.id ?? `tcp-${index + 1}`,
       name: target?.name ?? addressLabels[index] ?? `地址${index + 1}`,
       address: target === undefined ? "" : addressForTarget(target),
-      enabled: target?.enabled ?? true,
     };
   });
 }
@@ -130,25 +144,31 @@ export function targetFromDraft(draft: AddressDraft, index: number): AppConfig["
     ...(parsed.protocol === "http:" || parsed.protocol === "https:" ? { protocol: parsed.protocol.slice(0, -1) as "http" | "https" } : {}),
     ...(basePath === undefined ? {} : { basePath }),
     ...(parsed.protocol === "http:" || parsed.protocol === "https:" ? { transport: "http" as const } : {}),
-    enabled: draft.enabled,
   };
 }
 
-export function ConfigPages({ page, config, logs, onChange, encryptionPreferences, onSelectEncryptionDirectory, onSaveEncryptionPreferences, onEncryptDirectory, onEncryptionProgress, onSendRequest, sharedValues, loginCache, onSaveSharedValues, onSaveLoginCache }: ConfigPagesProps) {
+export function ConfigPages({ page, config, logs, onChange, encryptionPreferences, onSelectEncryptionDirectory, onSaveEncryptionPreferences, onEncryptDirectory, onEncryptionProgress, onSendRequest, sharedValues, loginCache, mapValues, fileValues, onSaveSharedValues, onSaveLoginCache, onSaveStoredValues }: ConfigPagesProps) {
   const { notifyError } = useToast();
   const [addressDrafts, setAddressDrafts] = useState(() => draftsForTargets(config.tcpTargets));
-  const [openHistoryIndex, setOpenHistoryIndex] = useState<number>();
   const [openEncryptionHistoryKind, setOpenEncryptionHistoryKind] = useState<EncryptionDirectoryKind>();
   const [localText, setLocalText] = useState(() => formatLocalCacheText(sharedValues));
   const [cacheText, setCacheText] = useState(() => formatLocalCacheText(loginCache));
+  const [localEditing, setLocalEditing] = useState(false);
+  const [cacheEditing, setCacheEditing] = useState(false);
+  const [h5Text, setH5Text] = useState(() => formatLocalCacheText({ ...mapValues, ...fileValues }));
+  const [h5Editing, setH5Editing] = useState(false);
+  const [loginText, setLoginText] = useState(() => formatLocalCacheText(loginCache));
+  const [loginEditing, setLoginEditing] = useState(false);
   const [encryptionInputDir, setEncryptionInputDir] = useState(() => encryptionPreferences.inputDir);
   const [encryptionOutputDir, setEncryptionOutputDir] = useState(() => encryptionPreferences.outputDir);
   const [encryptionRunning, setEncryptionRunning] = useState(false);
   const [encryptionLogs, setEncryptionLogs] = useState<string[]>([]);
   const [encryptionProgress, setEncryptionProgress] = useState({ current: 0, total: 0, processedFiles: 0 });
   useEffect(() => { setAddressDrafts(draftsForTargets(config.tcpTargets)); }, [config.tcpTargets]);
-  useEffect(() => { setLocalText(formatLocalCacheText(sharedValues)); }, [sharedValues]);
-  useEffect(() => { setCacheText(formatLocalCacheText(loginCache)); }, [loginCache]);
+  useEffect(() => { if (!localEditing) setLocalText(formatLocalCacheText(sharedValues)); }, [sharedValues, localEditing]);
+  useEffect(() => { if (!cacheEditing) setCacheText(formatLocalCacheText(loginCache)); }, [loginCache, cacheEditing]);
+  useEffect(() => { if (!h5Editing) setH5Text(formatLocalCacheText({ ...mapValues, ...fileValues })); }, [mapValues, fileValues, h5Editing]);
+  useEffect(() => { if (!loginEditing) setLoginText(formatLocalCacheText(loginCache)); }, [loginCache, loginEditing]);
   useEffect(() => { setEncryptionInputDir(encryptionPreferences.inputDir); setEncryptionOutputDir(encryptionPreferences.outputDir); }, [encryptionPreferences]);
   useEffect(() => onEncryptionProgress((progress) => {
     setEncryptionProgress({
@@ -168,7 +188,7 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     }
   }), [onEncryptionProgress]);
   useEffect(() => {
-    if (openHistoryIndex === undefined && openEncryptionHistoryKind === undefined) return;
+    if (openEncryptionHistoryKind === undefined) return;
     const closeOnOutsidePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Element && target.closest(".address-input-shell") !== null) {
@@ -177,43 +197,56 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
       }
       const encryptionShell = target instanceof Element ? target.closest(".encryption-input-shell") : null;
       if (encryptionShell !== null) {
-        setOpenHistoryIndex(undefined);
         const encryptionKind = encryptionShell.getAttribute("data-encryption-kind");
         if (encryptionKind !== openEncryptionHistoryKind) {
           setOpenEncryptionHistoryKind(undefined);
         }
         return;
       }
-      setOpenHistoryIndex(undefined);
       setOpenEncryptionHistoryKind(undefined);
     };
     document.addEventListener("pointerdown", closeOnOutsidePointerDown);
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
-  }, [openHistoryIndex, openEncryptionHistoryKind]);
+  }, [openEncryptionHistoryKind]);
 
-  const saveLocalValues = async () => {
+  const saveLocalValues = async (text: string): Promise<boolean> => {
     try {
-      const parsed = parseLocalCacheText(localText);
-      if (Object.keys(parsed).length === 0) {
-        await onSaveSharedValues({});
-        return;
-      }
-      await onSaveSharedValues(parsed);
-    } catch (error) {
-      notifyError(error, "本地变量格式无效");
+      const parsed = parseLocalCacheText(text);
+      return await onSaveSharedValues(parsed);
+    } catch {
+      return false;
     }
   };
 
-  const saveLoginCache = async () => {
+  const saveH5Values = async (text: string): Promise<boolean> => {
+    try {
+      const parsed = splitH5StoreEntries(parseLocalCacheText(text), mapValues, fileValues);
+      return await onSaveStoredValues(parsed);
+    } catch {
+      return false;
+    }
+  };
+
+  const saveLoginSectionValues = async (text: string): Promise<boolean> => {
+    try {
+      const pasted = parseLocalCacheText(text);
+      return await onSaveLoginCache(pasted);
+    } catch {
+      return false;
+    }
+  };
+
+  const saveLoginCache = async (): Promise<boolean> => {
     try {
       const pasted = parseLocalCacheText(cacheText);
-      await onSaveLoginCache(pasted);
+      return await onSaveLoginCache(pasted);
     } catch (error) {
       notifyError(error, "登录缓存格式无效");
+      return false;
     }
   };
 
-  const saveAddressDrafts = async (drafts = addressDrafts) => {
+  const saveAddressDrafts = async (drafts: typeof addressDrafts) => {
     try {
       const firstEmpty = drafts.findIndex((draft) => draft.address.trim() === "");
       const laterFilled = firstEmpty >= 0 && drafts.slice(firstEmpty + 1).some((draft) => draft.address.trim() !== "");
@@ -238,15 +271,37 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     }
   };
 
-  const updateAddress = (index: number, value: string) => {
-    setAddressDrafts((current) => current.map((draft, draftIndex) => draftIndex === index ? { ...draft, address: value } : draft));
+  const applyAddressDrafts = async (drafts: typeof addressDrafts) => {
+    try {
+      const firstEmpty = drafts.findIndex((draft) => draft.address.trim() === "");
+      if (firstEmpty >= 0 && drafts.slice(firstEmpty + 1).some((draft) => draft.address.trim() !== "")) return;
+      const tcpTargets = drafts.filter((draft) => draft.address.trim() !== "").map((draft, index) => targetFromDraft(draft, index));
+      await window.forwarder.applyForwardingTargets(tcpTargets);
+    } catch {
+      // 输入中间态不合法时不热应用
+    }
   };
 
-  const selectAddressHistory = (index: number, address: string) => {
-    const nextDrafts = addressDrafts.map((draft, draftIndex) => draftIndex === index ? { ...draft, address } : draft);
-    setAddressDrafts(nextDrafts);
-    setOpenHistoryIndex(undefined);
-    void saveAddressDrafts(nextDrafts);
+  const changeAddress = (index: number, value: string) => {
+    const next = addressDrafts.map((draft, draftIndex) => draftIndex === index ? { ...draft, address: value } : draft);
+    setAddressDrafts(next);
+    void applyAddressDrafts(next);
+  };
+
+  const toggleCardTarget = async (index: number) => {
+    const target = config.tcpTargets[index];
+    if (target === undefined) return;
+    await onChange({ ...config, cardTargetId: config.cardTargetId === target.id ? undefined : target.id });
+  };
+
+  const removeAddressHistory = async (index: number, address: string) => {
+    const historyKey = addressLabels[index];
+    if (historyKey === undefined) return;
+    try {
+      await onChange({ ...config, forwardingAddressHistory: removeForwardingAddressHistory(config.forwardingAddressHistory, historyKey, address) });
+    } catch (error) {
+      notifyError(error, "历史地址删除失败");
+    }
   };
 
   const addressHistoryForIndex = (index: number) => {
@@ -320,16 +375,24 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     return <label className="encryption-directory-field">{label}<div className="input-with-button"><div className="encryption-input-shell" data-encryption-kind={kind}><input className="encryption-directory-input" disabled={encryptionRunning} value={directory} placeholder="粘贴 file:/// URL 或本地目录路径" onChange={(event) => setDirectory(event.target.value)} onBlur={() => void saveEncryptionDirectory(kind, directory)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveEncryptionDirectory(kind, directory); } }} /><button type="button" className="address-history-toggle encryption-history-toggle" aria-label={kind === "input" ? "显示加密前目录历史" : "显示加密后目录历史"} aria-expanded={openEncryptionHistoryKind === kind} disabled={encryptionRunning || history.length === 0} onClick={() => setOpenEncryptionHistoryKind((current) => current === kind ? undefined : kind)}><span className="address-history-chevron encryption-history-chevron" aria-hidden="true" /></button>{openEncryptionHistoryKind === kind && <div className="address-history-menu encryption-history-menu" role="listbox" aria-label={kind === "input" ? "加密前目录历史" : "加密后目录历史"}>{history.map((directory) => <button type="button" role="option" aria-selected={directory === (kind === "input" ? encryptionInputDir : encryptionOutputDir)} className="address-history-option encryption-history-option" disabled={encryptionRunning} key={directory} onMouseDown={(event) => event.preventDefault()} onClick={() => selectEncryptionHistory(kind, directory)}>{directory}</button>)}</div>}</div><button type="button" disabled={encryptionRunning} onClick={() => void chooseEncryptionDirectory(kind)}>{chooseLabel}</button></div></label>;
   };
 
-  if (page === "addresses") return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">/reqxml</p><h2>转发地址</h2></div></div>{addressDrafts.map((draft, index) => <div className="address-editor" key={draft.id}><label className="address-field"><span>{addressLabels[index] ?? `地址${index + 1}`} 地址</span><div className="address-input-shell"><input className="address-input" value={draft.address} placeholder={forwardingAddressPlaceholder(index)} onChange={(event) => updateAddress(index, event.target.value)} onBlur={() => void saveAddressDrafts()} /><button type="button" className="address-history-toggle" aria-label="显示历史地址" aria-expanded={openHistoryIndex === index} disabled={addressHistoryForIndex(index).length === 0} onClick={() => setOpenHistoryIndex((current) => current === index ? undefined : index)}><span className="address-history-chevron" aria-hidden="true" /></button>{openHistoryIndex === index && <div className="address-history-menu" role="listbox" aria-label="历史地址">{addressHistoryForIndex(index).map((address) => <button type="button" role="option" aria-selected={draft.address === address} className="address-history-option" key={address} onMouseDown={(event) => event.preventDefault()} onClick={() => selectAddressHistory(index, address)}>{address}</button>)}</div>}</div></label><label className="address-enabled"><input type="checkbox" checked={draft.enabled} onChange={(event) => setAddressDrafts((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, enabled: event.target.checked } : item))} />启用</label></div>)}</section>;
+  if (page === "addresses") return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">/reqxml</p><h2>转发地址</h2></div></div>{addressDrafts.map((draft, index) => { const pinnedTarget = config.tcpTargets[index]; const pinned = pinnedTarget !== undefined && config.cardTargetId === pinnedTarget.id; return <div className="address-editor" key={draft.id}><Button className={`address-card-pin${pinned ? " pinned" : ""}`} type="text" size="small" aria-label={pinned ? "取消在卡片展示" : "在卡片展示"} aria-pressed={pinned} icon={pinned ? <PushpinFilled /> : <PushpinOutlined />} onClick={() => void toggleCardTarget(index)} /><label className="address-field"><span>{addressLabels[index] ?? `地址${index + 1}`} 地址</span><div className="address-input-shell"><AutoComplete className="address-input" value={draft.address} placeholder={forwardingAddressPlaceholder(index)} options={addressHistoryForIndex(index).map((address) => ({ value: address, label: <span className="address-history-choice"><span className="address-history-choice-text">{address}</span><Button type="text" size="small" danger aria-label={`删除历史地址 ${address}`} onClick={(event) => { event.stopPropagation(); void removeAddressHistory(index, address); }}>×</Button></span> }))} onChange={(value) => changeAddress(index, value)} /></div></label><div className="address-actions"><Button type="primary" onClick={() => void saveAddressDrafts(addressDrafts)}>保存</Button></div></div>; })}</section>;
   if (page === "request") return <RequestPage config={config} onChange={onChange} onSendRequest={onSendRequest} />;
   if (page === "string") return <StringToolPage config={config} />;
   if (page === "local") return <section className="panel config-textarea-panel">
-    <p className="muted config-textarea-hint">可直接输入本地变量，按“键 = 值”逐行填写，离开输入框后自动保存。</p>
-    <textarea className="config-textarea local-values-input" aria-label="本地变量输入" value={localText} onChange={(event) => setLocalText(event.target.value)} onBlur={() => void saveLocalValues()} placeholder="localKey = value\nAnotherKey = another value" rows={18} />
+    <p className="muted config-textarea-hint">三段缓存均可按“键 = 值”逐行编辑，修改后自动保存。</p>
+    <p className="eyebrow">h5</p>
+    <h2>H5 写入缓存</h2>
+    <textarea className="config-textarea h5-values-input" aria-label="H5 写入缓存" value={h5Text} onChange={(event) => { setH5Text(event.target.value); void saveH5Values(event.target.value); }} onFocus={() => setH5Editing(true)} onBlur={() => setH5Editing(false)} placeholder="PLAY_STATUS.TXT = 1" rows={8} />
+    <p className="eyebrow">login</p>
+    <h2>登录缓存（登录后捕获）</h2>
+    <textarea className="config-textarea login-section-input" aria-label="登录缓存（登录后捕获）" value={loginText} onChange={(event) => { setLoginText(event.target.value); void saveLoginSectionValues(event.target.value); }} onFocus={() => setLoginEditing(true)} onBlur={() => setLoginEditing(false)} placeholder="Token = xxx" rows={8} />
+    <p className="eyebrow">local</p>
+    <h2>本地缓存（客户端读取）</h2>
+    <textarea className="config-textarea local-values-input" aria-label="本地变量输入" value={localText} onChange={(event) => { setLocalText(event.target.value); void saveLocalValues(event.target.value); }} onFocus={() => setLocalEditing(true)} onBlur={() => setLocalEditing(false)} placeholder="localKey = value\nAnotherKey = another value" rows={6} />
   </section>;
   if (page === "values") return <section className="panel config-textarea-panel">
     <p className="muted config-textarea-hint">当前代理已缓存 {Object.keys(loginCache).length} 项，登录请求成功后会自动更新。</p>
-    <textarea className="config-textarea login-cache-input" aria-label="登录缓存" value={cacheText} onChange={(event) => setCacheText(event.target.value)} onBlur={() => void saveLoginCache()} placeholder="Token = xxx\nSessionNo = 123" rows={14} />
+    <textarea className="config-textarea login-cache-input" aria-label="登录缓存" value={cacheText} onChange={(event) => setCacheText(event.target.value)} onFocus={() => setCacheEditing(true)} onBlur={() => void saveLoginCache().then((saved) => { if (saved) setCacheEditing(false); })} placeholder="Token = xxx\nSessionNo = 123" rows={14} />
   </section>;
   if (page === "cache") return <section className="panel"><p className="eyebrow">资源管理</p><h2>缓存</h2><dl className="settings-list"><div><dt>根目录</dt><dd>{config.cache.rootDir || "默认应用缓存"}</dd></div><div><dt>下载目标</dt><dd>{config.cache.downloadTarget || "未配置"}</dd></div><div><dt>解密 .d 资源</dt><dd>{config.cache.decryptEnabled ? "已启用" : "已停用"}</dd></div></dl></section>;
   if (page === "encryption") return <section className="panel encryption-panel"><div className="encryption-directory-list">{renderEncryptionDirectoryField("input", "加密前文件夹目录", "选择加密前目录", encryptionInputDir, setEncryptionInputDir)}{renderEncryptionDirectoryField("output", "加密后文件夹目录", "选择加密后目录", encryptionOutputDir, setEncryptionOutputDir)}<div className="encryption-progress" aria-live="polite"><div className="encryption-progress-heading"><span>加密进度</span><strong>{encryptionProgressPercent}%</strong></div><div className="encryption-progress-bar" role="progressbar" aria-label="加密进度" aria-valuemin={0} aria-valuemax={encryptionProgress.total} aria-valuenow={encryptionProgress.current}><span style={{ width: `${encryptionProgressPercent}%` }} /></div><div className="encryption-progress-meta"><span>总文件数：{encryptionProgress.total}</span><span>已加密文件：{encryptionProgress.processedFiles}</span></div></div></div><div className="button-row encryption-actions"><button className="primary" disabled={encryptionRunning || !encryptionInputDir || !encryptionOutputDir} onClick={() => void startEncryption("full")}>开始加密</button><button className="encryption-incremental-button" disabled={encryptionRunning || !encryptionInputDir || !encryptionOutputDir} onClick={() => void startEncryption("incremental")}>增量加密</button></div>{encryptionLogs.length > 0 && <pre className="encryption-log">{encryptionLogs.join("\n")}</pre>}</section>;

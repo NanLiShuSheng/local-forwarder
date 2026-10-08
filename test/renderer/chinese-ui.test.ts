@@ -78,7 +78,7 @@ test("renderer keeps the local variable input after saving without a duplicate s
   const source = await readFile("src/renderer/components/ConfigPages.tsx", "utf8");
   assert.match(source, /本地变量输入/);
   assert.match(source, /onBlur/);
-  assert.match(source, /parseLocalCacheText\(localText\)/);
+  assert.match(source, /parseLocalCacheText\(text\)/);
   assert.match(source, /onSaveSharedValues\(parsed\)/);
   assert.match(source, /formatLocalCacheText\(sharedValues\)/);
   assert.doesNotMatch(source, /setLocalText\(""\)/);
@@ -138,9 +138,8 @@ test("renderer simplifies configuration page headings and enlarges text areas", 
   assert.doesNotMatch(pageSource, /<p className="eyebrow">配置<\/p><h2>设置<\/h2>/);
   assert.match(pageSource, /className="config-textarea local-values-input"/);
   assert.match(pageSource, /className="config-textarea login-cache-input"/);
-  assert.match(pageSource, /rows=\{18\}/);
+  assert.doesNotMatch(styleSource, /\.local-values-input[^\n]*min-height/);
   assert.match(pageSource, /rows=\{14\}/);
-  assert.match(styleSource, /\.local-values-input[^\{]*\{[^}]*min-height:\s*420px/);
   assert.match(styleSource, /\.login-cache-input[^\{]*\{[^}]*min-height:\s*340px/);
   assert.match(styleSource, /\.config-textarea-panel \{ display: flex; flex-direction: column; \}/);
   assert.match(styleSource, /\.config-textarea-hint \{ margin: 0 0 12px; line-height: 1\.55; \}/);

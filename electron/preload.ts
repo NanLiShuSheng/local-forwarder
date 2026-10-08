@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferencesPatch, EncryptionProgress, ForwarderApi, UpdateState } from "../src/shared/contracts";
+import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferencesPatch, EncryptionProgress, ForwarderApi, StoredValues, UpdateState, ValuesSnapshot } from "../src/shared/contracts";
 
 const IPC_CHANNELS = {
   getConfig: "config:get",
@@ -34,6 +34,10 @@ const IPC_CHANNELS = {
   status: "runtime:status",
   logs: "runtime:logs",
   clearLogs: "runtime:logs:clear",
+  openExternal: "app:open-external",
+  valuesChanged: "values:changed",
+  saveStoredValues: "values:stored:save",
+  applyForwardingTargets: "runtime:apply-targets",
 } as const;
 
 const api: ForwarderApi = {
@@ -53,6 +57,8 @@ const api: ForwarderApi = {
   saveSharedValues: (values) => ipcRenderer.invoke(IPC_CHANNELS.saveSharedValues, values),
   getLoginCache: () => ipcRenderer.invoke(IPC_CHANNELS.getLoginCache),
   saveLoginCache: (values) => ipcRenderer.invoke(IPC_CHANNELS.saveLoginCache, values),
+  saveStoredValues: (values: StoredValues) => ipcRenderer.invoke(IPC_CHANNELS.saveStoredValues, values),
+  applyForwardingTargets: (targets: AppConfig["tcpTargets"]) => ipcRenderer.invoke(IPC_CHANNELS.applyForwardingTargets, targets),
   listProxyInstances: () => ipcRenderer.invoke(IPC_CHANNELS.listProxyInstances),
   selectProxyInstance: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.selectProxyInstance, id),
   createProxyInstance: () => ipcRenderer.invoke(IPC_CHANNELS.createProxyInstance),
@@ -77,6 +83,12 @@ const api: ForwarderApi = {
   status: () => ipcRenderer.invoke(IPC_CHANNELS.status),
   logs: () => ipcRenderer.invoke(IPC_CHANNELS.logs),
   clearLogs: () => ipcRenderer.invoke(IPC_CHANNELS.clearLogs),
+  openExternal: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.openExternal, url),
+  onValuesChanged: (listener: (values: ValuesSnapshot) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, values: ValuesSnapshot) => listener(values);
+    ipcRenderer.on(IPC_CHANNELS.valuesChanged, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.valuesChanged, handler);
+  },
 };
 
 contextBridge.exposeInMainWorld("forwarder", api);

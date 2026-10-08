@@ -6,7 +6,7 @@ import path from "node:path";
 import net from "node:net";
 import { createDefaultConfig } from "../../../src/core/config/model";
 import { ForwardingService } from "../../../src/core/runtime/forwarding-service";
-import type { LogEntry } from "../../../src/shared/contracts";
+import type { AppConfig, LogEntry } from "../../../src/shared/contracts";
 
 async function freePort(): Promise<number> {
   const server = net.createServer();
@@ -30,6 +30,205 @@ test("service starts, reports status, and stops all listeners", async () => {
     await service.stop();
     assert.equal(service.status().state, "stopped");
     await service.stop();
+  } finally {
+    await service.stop();
+  }
+});
+
+test("saves forwarding address changes while running and applies them to the live proxy", async () => {
+  const config = createDefaultConfig();
+  config.server.port = await freePort();
+  config.cache.rootDir = await mkdtemp(path.join(os.tmpdir(), "forwarder-service-"));
+  let applied: { tcpTargets?: unknown } | undefined;
+  const service = new ForwardingService({
+    config,
+    httpFactory: () => ({
+      start: async () => ({ host: "127.0.0.1", port: config.server.port }),
+      stop: async () => undefined,
+      getStats: () => ({ requestCount: 0, successCount: 0, totalDurationMs: 0, tcpConnections: 0 }),
+      getValues: () => ({ localValues: {}, mapValues: {}, fileValues: {} }),
+      updateOptions: (patch: { tcpTargets?: unknown }) => { applied = patch; },
+    }) as never,
+  });
+  try {
+    await service.start();
+    const next = service.getConfig();
+    next.tcpTargets = [{ id: "jy", name: "jy", host: "10.0.0.1", port: 9000 }];
+    next.cardTargetId = "jy";
+    await service.saveConfig(next);
+    assert.deepEqual(applied, { tcpTargets: [{ id: "jy", name: "jy", host: "10.0.0.1", port: 9000 }] });
+    assert.equal(service.getConfig().tcpTargets[0]?.host, "10.0.0.1");
+  } finally {
+    await service.stop();
+  }
+});
+
+test("saves project directory changes while running and applies them to the live proxy", async () => {
+  const config = createDefaultConfig();
+  config.server.port = await freePort();
+  config.cache.rootDir = await mkdtemp(path.join(os.tmpdir(), "forwarder-service-"));
+  let applied: { tcpTargets?: unknown; projectPath?: string } | undefined;
+  const service = new ForwardingService({
+    config,
+    httpFactory: () => ({
+      start: async () => ({ host: "127.0.0.1", port: config.server.port }),
+      stop: async () => undefined,
+      getStats: () => ({ requestCount: 0, successCount: 0, totalDurationMs: 0, tcpConnections: 0 }),
+      getValues: () => ({ localValues: {}, mapValues: {}, fileValues: {} }),
+      updateOptions: (patch: { tcpTargets?: unknown; projectPath?: string }) => { applied = patch; },
+    }) as never,
+  });
+  try {
+    await service.start();
+    const next = service.getConfig();
+    next.projectPath = "/tmp/project-a";
+    await service.saveConfig(next);
+    assert.equal(applied?.projectPath, "/tmp/project-a");
+    assert.equal(service.getConfig().projectPath, "/tmp/project-a");
+  } finally {
+    await service.stop();
+  }
+});
+
+test("applyTcpTargets updates the live proxy without persisting", async () => {
+  const config = createDefaultConfig();
+  config.server.port = await freePort();
+  config.cache.rootDir = await mkdtemp(path.join(os.tmpdir(), "forwarder-service-"));
+  const saved: AppConfig[] = [];
+  let applied: { tcpTargets?: unknown } | undefined;
+  const service = new ForwardingService({
+    config,
+    configStore: { save: async (next: AppConfig) => { saved.push(JSON.parse(JSON.stringify(next)) as AppConfig); } },
+    httpFactory: () => ({
+      start: async () => ({ host: "127.0.0.1", port: config.server.port }),
+      stop: async () => undefined,
+      getStats: () => ({ requestCount: 0, successCount: 0, totalDurationMs: 0, tcpConnections: 0 }),
+      getValues: () => ({ localValues: {}, mapValues: {}, fileValues: {} }),
+      updateOptions: (patch: { tcpTargets?: unknown }) => { applied = patch; },
+    }) as never,
+  });
+  try {
+    await service.start();
+    service.applyTcpTargets([{ id: "jy", name: "jy", host: "10.0.0.2", port: 9001 }]);
+    assert.deepEqual(applied, { tcpTargets: [{ id: "jy", name: "jy", host: "10.0.0.2", port: 9001 }] });
+    assert.equal(saved.length, 0);
+  } finally {
+    await service.stop();
+  }
+});
+
+test("still rejects non-hot config changes while running", async () => {
+  const config = createDefaultConfig();
+  config.server.port = await freePort();
+  config.cache.rootDir = await mkdtemp(path.join(os.tmpdir(), "forwarder-service-"));
+  const service = new ForwardingService({
+    config,
+    httpFactory: () => ({
+      start: async () => ({ host: "127.0.0.1", port: config.server.port }),
+      stop: async () => undefined,
+      getStats: () => ({ requestCount: 0, successCount: 0, totalDurationMs: 0, tcpConnections: 0 }),
+      getValues: () => ({ localValues: {}, mapValues: {}, fileValues: {} }),
+    }) as never,
+  });
+  try {
+    await service.start();
+    const next = service.getConfig();
+    next.server.port = next.server.port + 1;
+    await assert.rejects(service.saveConfig(next), /stop the service/);
+  } finally {
+    await service.stop();
+  }
+});
+
+test("persists map and file values when the proxy reports a store write", async () => {
+  const config = createDefaultConfig();
+  config.server.port = await freePort();
+  config.cache.rootDir = await mkdtemp(path.join(os.tmpdir(), "forwarder-service-"));
+  const saved: AppConfig[] = [];
+  let valuesWritten: (() => void) | undefined;
+  let notified = 0;
+  const service = new ForwardingService({
+    config,
+    configStore: { save: async (next: AppConfig) => { saved.push(JSON.parse(JSON.stringify(next)) as AppConfig); } },
+    onValuesWritten: () => { notified += 1; },
+    httpFactory: (options) => {
+      valuesWritten = options.onValuesWritten;
+      return {
+        start: async () => ({ host: "127.0.0.1", port: config.server.port }),
+        stop: async () => undefined,
+        getStats: () => ({ requestCount: 0, successCount: 0, totalDurationMs: 0, tcpConnections: 0 }),
+        getValues: () => ({ localValues: {}, mapValues: { FOO: "bar" }, fileValues: { "FIXTURE.TXT": "file-data" } }),
+      } as never;
+    },
+  });
+  try {
+    await service.start();
+    assert.ok(valuesWritten);
+    valuesWritten();
+    await service.stop();
+    const last = saved.at(-1);
+    assert.equal(last?.mapValues.FOO, "bar");
+    assert.deepEqual(last?.legacy?.files, { "FIXTURE.TXT": "file-data" });
+    assert.equal(notified, 1);
+  } finally {
+    await service.stop();
+  }
+});
+
+test("persists runtime values when the service stops", async () => {
+  const config = createDefaultConfig();
+  config.server.port = await freePort();
+  config.cache.rootDir = await mkdtemp(path.join(os.tmpdir(), "forwarder-service-"));
+  const saved: AppConfig[] = [];
+  const service = new ForwardingService({
+    config,
+    configStore: { save: async (next: AppConfig) => { saved.push(JSON.parse(JSON.stringify(next)) as AppConfig); } },
+    httpFactory: () => ({
+      start: async () => ({ host: "127.0.0.1", port: config.server.port }),
+      stop: async () => undefined,
+      getStats: () => ({ requestCount: 0, successCount: 0, totalDurationMs: 0, tcpConnections: 0 }),
+      getValues: () => ({ localValues: { TOKEN: "live-token" }, mapValues: {}, fileValues: {} }),
+    }) as never,
+  });
+  try {
+    await service.start();
+    assert.equal(saved.length, 0);
+    await service.stop();
+    assert.equal(saved.at(-1)?.localValues.TOKEN, "live-token");
+  } finally {
+    await service.stop();
+  }
+});
+
+test("setStoredValues updates the live proxy stores and persists them", async () => {
+  const config = createDefaultConfig();
+  config.server.port = await freePort();
+  config.cache.rootDir = await mkdtemp(path.join(os.tmpdir(), "forwarder-service-"));
+  const saved: AppConfig[] = [];
+  const live = { localValues: {} as Record<string, string>, mapValues: { OLD: "0" } as Record<string, string>, fileValues: {} as Record<string, string> };
+  const service = new ForwardingService({
+    config,
+    configStore: { save: async (next: AppConfig) => { saved.push(JSON.parse(JSON.stringify(next)) as AppConfig); } },
+    httpFactory: () => ({
+      start: async () => ({ host: "127.0.0.1", port: config.server.port }),
+      stop: async () => undefined,
+      getStats: () => ({ requestCount: 0, successCount: 0, totalDurationMs: 0, tcpConnections: 0 }),
+      getValues: () => live,
+      updateOptions: (patch: { mapValues?: Record<string, string>; fileValues?: Record<string, string> }) => {
+        if (patch.mapValues !== undefined) live.mapValues = patch.mapValues;
+        if (patch.fileValues !== undefined) live.fileValues = patch.fileValues;
+      },
+    }) as never,
+  });
+  try {
+    await service.start();
+    service.setStoredValues({ NEW: "1" }, { "F.TXT": "data" });
+    assert.deepEqual(live.mapValues, { NEW: "1" });
+    assert.deepEqual(live.fileValues, { "F.TXT": "data" });
+    await service.stop();
+    const last = saved.at(-1);
+    assert.deepEqual(last?.mapValues, { NEW: "1" });
+    assert.deepEqual(last?.legacy?.files, { "F.TXT": "data" });
   } finally {
     await service.stop();
   }

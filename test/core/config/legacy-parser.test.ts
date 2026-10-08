@@ -153,9 +153,9 @@ test("converts a reqxml target string array into tcp targets", () => {
     }
   }`);
 
-  assert.deepEqual(config.tcpTargets.map(({ host, port, protocol, id, name, enabled }) => ({ host, port, protocol, id, name, enabled })), [
-    { host: "one.example.test", port: 8001, protocol: "http", id: "tcp-1", name: "/reqxml", enabled: true },
-    { host: "two.example.test", port: 8443, protocol: "https", id: "tcp-2", name: "/reqxml", enabled: true },
+  assert.deepEqual(config.tcpTargets.map(({ host, port, protocol, id, name }) => ({ host, port, protocol, id, name })), [
+    { host: "one.example.test", port: 8001, protocol: "http", id: "hq", name: "hq" },
+    { host: "two.example.test", port: 8443, protocol: "https", id: "jy", name: "jy" },
   ]);
 });
 
@@ -262,10 +262,9 @@ test("rejects invalid types in canonical HTTP rules and TCP targets", () => {
     () => parseLegacyConfigJs(`module.exports = { TCPTARGETS: [${JSON.stringify({ ...tcpBase, name: 1 })}] }`, "config.js"),
     /tcpTargets\[0\]\.name/,
   );
-  assert.throws(
-    () => parseLegacyConfigJs(`module.exports = { TCPTARGETS: [${JSON.stringify({ ...tcpBase, enabled: "false" })}] }`, "config.js"),
-    /tcpTargets\[0\]\.enabled/,
-  );
+  const withLegacyEnabled = parseLegacyConfigJs(`module.exports = { TCPTARGETS: [${JSON.stringify({ ...tcpBase, enabled: "false" })}] }`, "config.js");
+  assert.equal("enabled" in withLegacyEnabled.tcpTargets[0], false);
+  assert.equal(withLegacyEnabled.legacy.extra["tcpTargets[0].enabled"], "false");
 });
 
 test("imports legacy HTTP rule metadata and supports target/url-only entries", () => {

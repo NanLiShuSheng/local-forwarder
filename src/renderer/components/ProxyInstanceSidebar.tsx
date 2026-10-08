@@ -75,10 +75,10 @@ export function ProxyInstanceSidebar({ instances, onSelect, onCreate, onDelete, 
     <div className="proxy-instance-sidebar-list">
       {instances.length === 0 && <p className="proxy-instance-sidebar-empty">暂无代理实例</p>}
       {instances.map((instance) => <div key={instance.id} className={`proxy-instance-sidebar-card ${instance.selected ? "selected" : ""}`} role="group" aria-label={instance.name} onContextMenu={(event) => openContextMenu(event, instance)}>
-        <button className="proxy-instance-sidebar-card-main" type="button" aria-pressed={instance.selected} onClick={() => selectCard(instance)} onDoubleClick={() => void onToggle(instance)}>
+        <div className="proxy-instance-sidebar-card-main" role="button" tabIndex={0} aria-pressed={instance.selected} onClick={() => selectCard(instance)} onDoubleClick={() => void onToggle(instance)} onKeyDown={(event) => { if (event.currentTarget === event.target && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); selectCard(instance); } }}>
           <span className="proxy-instance-sidebar-title"><span className={`status-dot ${instance.status.state}`} /><span className="proxy-instance-sidebar-name">{instance.name}</span><span className={`proxy-instance-sidebar-status ${instance.status.state}`}>{statusText(instance)}</span><code>:{instance.port}</code></span>
-          <span className="proxy-instance-sidebar-target"><code>{instance.target}</code></span>
-        </button>
+          <span className="proxy-instance-sidebar-target"><code>{instance.cardTarget ?? instance.target}</code></span>
+        </div>
       </div>)}
     </div>
     {contextMenu && <div className="proxy-instance-context-menu" role="menu" style={{ left: contextMenu.x, top: contextMenu.y }} onPointerDown={(event) => event.stopPropagation()}>

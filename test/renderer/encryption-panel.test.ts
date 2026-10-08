@@ -84,7 +84,7 @@ test("history shell boundaries and running state keep menus safe", async () => {
   assert.match(component, /if \(target instanceof Element && target\.closest\("\.address-input-shell"\) !== null\) \{\s*setOpenEncryptionHistoryKind\(undefined\);\s*return;\s*\}/);
   assert.match(component, /className="encryption-input-shell" data-encryption-kind=\{kind\}/);
   assert.match(component, /const encryptionShell = target instanceof Element \? target\.closest\("\.encryption-input-shell"\) : null;/);
-  assert.match(component, /if \(encryptionShell !== null\) \{\s*setOpenHistoryIndex\(undefined\);\s*const encryptionKind = encryptionShell\.getAttribute\("data-encryption-kind"\);\s*if \(encryptionKind !== openEncryptionHistoryKind\) \{\s*setOpenEncryptionHistoryKind\(undefined\);\s*\}\s*return;\s*\}/);
+  assert.match(component, /if \(encryptionShell !== null\) \{\s*const encryptionKind = encryptionShell\.getAttribute\("data-encryption-kind"\);\s*if \(encryptionKind !== openEncryptionHistoryKind\) \{\s*setOpenEncryptionHistoryKind\(undefined\);\s*\}\s*return;\s*\}/);
   assert.match(component, /setEncryptionRunning\(true\);\s*setOpenEncryptionHistoryKind\(undefined\);/);
   assert.match(component, /className="address-history-option encryption-history-option"[^>]*disabled=\{encryptionRunning\}/);
 });

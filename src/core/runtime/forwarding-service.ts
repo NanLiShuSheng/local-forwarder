@@ -13,12 +13,14 @@ interface HttpRuntime extends TcpBridgeLike {
   stop(): Promise<void>;
   getStats(): HttpProxyStats;
   getValues(): { localValues: Record<string, string>; mapValues: Record<string, string>; fileValues: Record<string, string> };
+  updateOptions?(patch: { tcpTargets?: AppConfig["tcpTargets"]; mapValues?: Record<string, string>; fileValues?: Record<string, string>; projectPath?: string }): void;
 }
 
 export interface ForwardingServiceOptions {
   config: AppConfig;
   configStore?: { save(config: AppConfig): Promise<void> };
   onLoginValuesChanged?: (values: Record<string, string>) => void;
+  onValuesWritten?: () => void;
   httpFactory?: (options: HttpProxyOptions) => HttpRuntime;
   tcpFactory?: (options: ConstructorParameters<typeof TcpBridgePool>[0]) => TcpBridgeLike & { close(): Promise<void>; getConnectionCount?: () => number };
   cacheFactory?: (options: { rootDir: string }) => Pick<FileCache, "close" | "getOrDownload" | "remove">;
@@ -33,6 +35,7 @@ export class ForwardingService {
   private config: AppConfig;
   private readonly configStore?: { save(config: AppConfig): Promise<void> };
   private readonly onLoginValuesChanged?: (values: Record<string, string>) => void;
+  private readonly onValuesWritten?: () => void;
   private readonly httpFactory: (options: HttpProxyOptions) => HttpRuntime;
   private readonly tcpFactory: NonNullable<ForwardingServiceOptions["tcpFactory"]>;
   private readonly cacheFactory: NonNullable<ForwardingServiceOptions["cacheFactory"]>;
@@ -51,6 +54,7 @@ export class ForwardingService {
     this.config = cloneConfig(options.config);
     this.configStore = options.configStore;
     this.onLoginValuesChanged = options.onLoginValuesChanged;
+    this.onValuesWritten = options.onValuesWritten;
     this.httpFactory = options.httpFactory ?? ((httpOptions) => new HttpProxy(httpOptions) as unknown as HttpRuntime);
     this.tcpFactory = options.tcpFactory ?? ((tcpOptions) => new TcpBridgePool(tcpOptions));
     this.cacheFactory = options.cacheFactory ?? ((cacheOptions) => new FileCache(cacheOptions));
@@ -96,6 +100,10 @@ export class ForwardingService {
         cacheCodec: this.config.cache.decryptEnabled ? createTztCodec() : undefined,
         onLog: (entry) => this.appendLogEntry(entry),
         onLoginValuesChanged: (values) => this.onLoginValuesChanged?.(values),
+        onValuesWritten: () => {
+          void this.persistRuntimeValues();
+          this.onValuesWritten?.();
+        },
       });
       created.push(async () => { await this.http?.stop(); this.http = undefined; });
       this.address = await this.startHttpWithRecovery(this.http);
@@ -129,6 +137,7 @@ export class ForwardingService {
   private async stopInternal(): Promise<RuntimeStatus> {
     if (this.state === "stopped") return this.status();
     this.state = "stopping";
+    await this.persistRuntimeValues();
     await this.http?.stop().catch(() => undefined);
     this.http = undefined;
     await this.tcp?.close().catch(() => undefined);
@@ -169,8 +178,21 @@ export class ForwardingService {
 
   public async saveConfig(config: AppConfig): Promise<void> {
     if (!isValidAppConfig(config)) throw new Error(`Invalid configuration: ${getAppConfigValidationError(config) ?? "unknown field"}`);
-    if (this.state === "running") throw new Error("stop the service before changing configuration");
-    this.config = cloneConfig(config);
+    const next = cloneConfig(config);
+    if (this.state === "running") {
+      // A running proxy owns these values; never let a stale renderer snapshot clobber them.
+      const live = this.http?.getValues();
+      if (live !== undefined) {
+        next.localValues = live.localValues;
+        next.mapValues = live.mapValues;
+        if (next.legacy !== undefined) next.legacy.files = live.fileValues;
+      }
+      if (!isHotSwappableConfigChange(this.config, next)) throw new Error("stop the service before changing configuration");
+      const patch: { tcpTargets: AppConfig["tcpTargets"]; projectPath?: string } = { tcpTargets: next.tcpTargets };
+      if (next.projectPath !== this.config.projectPath) patch.projectPath = next.projectPath;
+      this.http?.updateOptions?.(patch);
+    }
+    this.config = next;
     await this.configStore?.save(this.config);
   }
 
@@ -180,6 +202,17 @@ export class ForwardingService {
     const merged = { ...current, ...values };
     if (activeValues !== undefined) Object.assign(activeValues, values);
     this.persistLocalValues(merged);
+  }
+
+  public applyTcpTargets(targets: AppConfig["tcpTargets"]): void {
+    this.http?.updateOptions?.({ tcpTargets: targets });
+  }
+
+  public setStoredValues(mapValues: Record<string, string>, fileValues: Record<string, string>): void {
+    this.http?.updateOptions?.({ mapValues, fileValues });
+    this.config.mapValues = { ...mapValues };
+    if (this.config.legacy !== undefined) this.config.legacy.files = { ...fileValues };
+    void this.persistRuntimeValues();
   }
 
   public setRuntimeValues(values: Record<string, string>): void {
@@ -212,14 +245,36 @@ export class ForwardingService {
 
   private persistLocalValues(values: Record<string, string>): void {
     this.config.localValues = { ...values };
-    if (this.configStore === undefined) return;
+    void this.persistRuntimeValues();
+  }
+
+  private persistRuntimeValues(): Promise<void> {
+    const live = this.http?.getValues();
+    if (live !== undefined) {
+      this.config.localValues = live.localValues;
+      this.config.mapValues = live.mapValues;
+      if (this.config.legacy !== undefined) this.config.legacy.files = live.fileValues;
+    }
+    if (this.configStore === undefined) return this.configSaveQueue;
     const snapshot = cloneConfig(this.config);
     this.configSaveQueue = this.configSaveQueue
       .then(() => this.configStore?.save(snapshot))
       .catch((error) => this.appendLog("error", error instanceof Error ? error.message : "login cache save failed"));
+    return this.configSaveQueue;
   }
 }
 
 function isAddressInUse(error: unknown): boolean {
   return (error as { code?: string }).code === "EADDRINUSE";
+}
+
+const hotSwappableIgnoredKeys = ["tcpTargets", "forwardingAddressHistory", "launchPath", "cardTargetId", "localValues", "mapValues", "legacy", "projectPath"];
+
+function isHotSwappableConfigChange(current: AppConfig, next: AppConfig): boolean {
+  const strip = (config: AppConfig) => {
+    const clone = { ...config } as Record<string, unknown>;
+    for (const key of hotSwappableIgnoredKeys) delete clone[key];
+    return JSON.stringify(clone);
+  };
+  return strip(current) === strip(next);
 }
