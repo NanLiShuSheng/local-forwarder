@@ -134,3 +134,28 @@ test("versioned log reader only applies the newest overlapping request", async (
 
   assert.deepEqual(applied, [["new"]]);
 });
+
+test("versioned log reader skips applying unchanged snapshots", async () => {
+  const module = await import("../../src/renderer/App") as unknown as {
+    createVersionedLogReader?: unknown;
+  };
+  assert.equal(typeof module.createVersionedLogReader, "function");
+  const createVersionedLogReader = module.createVersionedLogReader as (
+    readLogs: () => Promise<unknown[]>,
+    applyLogs: (logs: unknown[]) => void,
+  ) => { read: () => Promise<void>; invalidate: () => void };
+  const snapshot = [{ timestamp: "2026-10-09T00:00:00.000Z", level: "info", message: "first" }];
+  const applied: unknown[][] = [];
+  const reader = createVersionedLogReader(async () => snapshot, (logs) => applied.push(logs));
+
+  await reader.read();
+  await reader.read();
+  assert.equal(applied.length, 1);
+
+  reader.invalidate();
+  await reader.read();
+  assert.equal(applied.length, 2);
+
+  await reader.read();
+  assert.equal(applied.length, 2);
+});

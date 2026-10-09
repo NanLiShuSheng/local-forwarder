@@ -560,6 +560,47 @@ test("rejects reqsse when the selected target uses HTTP transport", async () => 
   }
 });
 
+test("summarizes SSE log entries instead of capturing the full stream", async () => {
+  const logs: LogEntry[] = [];
+  const bridge = {
+    request: async () => ({}),
+    requestStream: (_target: { host: string; port: number }, _query: Record<string, string>, onFrame: (frame: Record<string, unknown>) => boolean) => {
+      let resolveDone!: () => void;
+      const done = new Promise<void>((resolve) => { resolveDone = resolve; });
+      queueMicrotask(() => {
+        onFrame({ GRID0: "stream-payload\r\n" });
+        onFrame({ GRID0: "0" });
+        resolveDone();
+      });
+      return { done, cancel: () => resolveDone() };
+    },
+  };
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    rules: [],
+    tcpTargets: [{ id: "hq", name: "hq", host: "hq-target", port: 9000}],
+    tcpBridge: bridge,
+    timeoutMs: 500,
+    onLog: (entry) => logs.push(entry),
+  });
+
+  try {
+    const address = await proxy.start();
+    const response = await fetch(`http://127.0.0.1:${address.port}/reqsse?Action=52100`, { headers: { "sec-fetch-dest": "empty" } });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /stream-payload/);
+    // 等待请求处理 finally 写入日志
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const entry = logs.find((log) => log.requestPath === "/reqsse");
+    assert.ok(entry !== undefined);
+    assert.match(entry.responseData ?? "", /^\[SSE 流式响应，共 \d+ 字节\]$/);
+    assert.doesNotMatch(entry.responseData ?? "", /stream-payload/);
+  } finally {
+    await proxy.stop();
+  }
+});
+
 test("handles local values, maps, files, and TCP reqxml without leaving data in the renderer", async () => {
   const bridge = { request: async (_target: unknown, query: Record<string, string>) => ({ Action: query.Action ?? "", ERRORNO: "0" }) };
   const logs: LogEntry[] = [];

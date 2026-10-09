@@ -5,6 +5,10 @@ files:
   - dist/**
   - dist-electron/**
   - package.json
+  # electron-builder 产物也输出在 dist/ 下，必须排除以避免递归嵌套进 asar
+  - "!dist/mac*/**"
+  - "!dist/win*/**"
+  - "!dist/*.{exe,dmg,zip,blockmap,yml,yaml}"
 extraResources:
   - from: resources/protocol
     to: protocol

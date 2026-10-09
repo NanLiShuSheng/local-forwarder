@@ -117,6 +117,8 @@ function requestParamsFor(request: IncomingMessage, body: Buffer): string {
 function responseDataFor(response: ServerResponse, capture: ResponseCapture): string {
   if (capture.totalBytes === 0) return "";
   const contentType = String(response.getHeader("content-type") ?? "").toLowerCase();
+  // SSE 流式响应只记录摘要，避免长流把日志条目撑爆导致界面卡顿
+  if (/text\/event-stream/i.test(contentType)) return `[SSE 流式响应，共 ${capture.totalBytes} 字节]`;
   if (contentType.length > 0 && !/(text|json|javascript|xml|x-www-form-urlencoded)/i.test(contentType)) return `[二进制响应，共 ${capture.totalBytes} 字节]`;
   return truncateLogDetail(Buffer.concat(capture.chunks).toString("utf8"), capture.totalBytes);
 }
@@ -383,13 +385,14 @@ export class HttpProxy {
     this.stats.requestCount += 1;
     let requestBody: Buffer<ArrayBufferLike> = Buffer.alloc(0);
     let statusCode = 500;
+    let sseStreamed = false;
     try {
       const body = await readBody(request);
       requestBody = body;
       const url = new URL(request.url ?? "/", "http://local-forwarder.invalid");
       const actionResponse = legacyActionResponse(request.url ?? "/", request.headers.host);
       if (request.headers["tztforward"] === "forward" || url.pathname === "/reqsse") {
-        await this.handleSse(request.url ?? "/reqsse", body, response, request.headers);
+        sseStreamed = await this.handleSse(request.url ?? "/reqsse", body, response, request.headers);
         statusCode = response.statusCode;
       } else if (actionResponse !== undefined) {
         if (actionResponse.location !== undefined) {
@@ -447,16 +450,18 @@ export class HttpProxy {
       const durationMs = Date.now() - started;
       this.stats.totalDurationMs += durationMs;
       if (requestType !== undefined) {
-        this.options.onLog?.({ timestamp: new Date().toISOString(), level: statusCode >= 500 ? "error" : "info", message: `${request.method ?? "GET"} ${request.url ?? "/"}`, direction: "inbound", protocol: "http", statusCode, durationMs, requestType, requestPath, requestParams: requestParamsFor(request, requestBody), responseData: responseDataFor(response, responseCapture) });
+        // SSE 长流只记录摘要日志，避免单条日志携带巨大响应体拖垮界面
+        const responseData = sseStreamed ? `[SSE 流式响应，共 ${responseCapture.totalBytes} 字节]` : responseDataFor(response, responseCapture);
+        this.options.onLog?.({ timestamp: new Date().toISOString(), level: statusCode >= 500 ? "error" : "info", message: `${request.method ?? "GET"} ${request.url ?? "/"}`, direction: "inbound", protocol: "http", statusCode, durationMs, requestType, requestPath, requestParams: requestParamsFor(request, requestBody), responseData });
       }
     }
   }
 
-  private async handleSse(route: string, body: Buffer, response: ServerResponse, headers: IncomingHttpHeaders): Promise<void> {
+  private async handleSse(route: string, body: Buffer, response: ServerResponse, headers: IncomingHttpHeaders): Promise<boolean> {
     const bridge = this.options.tcpBridge;
     if (bridge?.requestStream === undefined) {
       writeJson(response, { error: "TCP bridge is unavailable" }, 502);
-      return;
+      return false;
     }
     const substituted = substituteVariables(new URLSearchParams(parseParams(route, body)).toString(), this.localValues);
     const params = Object.fromEntries(new URLSearchParams(substituted).entries());
@@ -464,11 +469,11 @@ export class HttpProxy {
     const target = targets[Number(uppercaseParams(params).REQLINKTYPE ?? 0)] ?? targets[0];
     if (target === undefined) {
       writeJson(response, { error: "TCP target is unavailable" }, 502);
-      return;
+      return false;
     }
     if (target.transport === "http") {
       writeJson(response, { error: "SSE streaming requires a TCP target" }, 502);
-      return;
+      return false;
     }
     const binary = headers["tztcontenttype"] === "application/octet-stream";
     let headersSent = false;
@@ -500,6 +505,7 @@ export class HttpProxy {
       if (!headersSent) writeJson(response, { error: error instanceof Error ? error.message : "TCP stream failed" }, /timeout/i.test(String(error)) ? 504 : 502);
       else if (!response.writableEnded) response.end();
     }
+    return headersSent;
   }
 
   private async handleTcp(route: string, body: Buffer, response: ServerResponse, login = false, method = "GET", headers: IncomingHttpHeaders = {}): Promise<void> {

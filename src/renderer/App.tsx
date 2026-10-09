@@ -34,13 +34,22 @@ const pages: Array<{ id: Page; label: string; icon: SidebarNavIconName }> = [{ i
 
 export function createVersionedLogReader(readLogs: () => Promise<LogEntry[]>, applyLogs: (logs: LogEntry[]) => void) {
   let version = 0;
+  let lastSignature = "";
+  const signatureFor = (logs: LogEntry[]) => {
+    const last = logs[logs.length - 1];
+    return `${logs.length}:${last?.timestamp ?? ""}:${last?.message ?? ""}`;
+  };
   return {
     read: async () => {
       const requestVersion = ++version;
       const logs = await readLogs();
-      if (requestVersion === version) applyLogs(logs);
+      if (requestVersion !== version) return;
+      const signature = signatureFor(logs);
+      if (signature === lastSignature) return;
+      lastSignature = signature;
+      applyLogs(logs);
     },
-    invalidate: () => { version += 1; },
+    invalidate: () => { version += 1; lastSignature = ""; },
   };
 }
 
