@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import { encryptDirectory } from "../src/core/encryption/encryptor";
 import { readEncryptionPreferences, saveEncryptionPreferences } from "../src/core/encryption/preferences";
@@ -65,6 +66,15 @@ function registerIpcHandler(
   handler: IpcHandler,
 ): void {
   ipcMain.handle(channel, createTrustedIpcHandler(policy, handler));
+}
+
+async function getExistingDirectoryPath(value: string | undefined): Promise<string | undefined> {
+  if (!value) return undefined;
+  try {
+    return (await stat(value)).isDirectory() ? value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function registerIpcHandlers(policy: RendererSecurityPolicy): void {
@@ -149,20 +159,28 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.selectProjectDirectory, async () => {
-    const selected = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+    const defaultPath = await getExistingDirectoryPath(manager.getConfig().projectPath);
+    const selected = await dialog.showOpenDialog({
+      ...(defaultPath ? { defaultPath } : {}),
+      properties: ["openDirectory"],
+    });
     if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, canceled: true };
     return { ok: true, path: selected.filePaths[0] };
   });
   registerIpcHandler(policy, IPC_CHANNELS.selectEncryptionDirectory, async (_event, kind) => {
     if (kind !== "input" && kind !== "output") return { ok: false, error: "目录类型无效" };
+    const preferencesPath = getEncryptionPreferencesPath(app.getPath("userData"));
+    const preferences = await readEncryptionPreferences(preferencesPath).catch(() => undefined);
+    const defaultPath = kind === "input" ? preferences?.inputDir : preferences?.outputDir;
     const selected = await dialog.showOpenDialog({
+      ...(defaultPath ? { defaultPath } : {}),
       properties: ["openDirectory", "createDirectory"],
       title: kind === "input" ? "选择加密前文件夹目录" : "选择加密后文件夹目录",
     });
     if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, canceled: true };
     try {
       const preferences = await saveEncryptionPreferences(
-        getEncryptionPreferencesPath(app.getPath("userData")),
+        preferencesPath,
         kind === "input" ? { inputDir: selected.filePaths[0] } : { outputDir: selected.filePaths[0] },
       );
       return { ok: true, path: selected.filePaths[0], preferences };
@@ -347,6 +365,7 @@ function createWindow(policy: RendererSecurityPolicy): void {
   const window = new BrowserWindow({
     width: 1200,
     height: 760,
+    minWidth: 960,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
