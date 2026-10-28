@@ -229,12 +229,21 @@ async fn delete_proxy_instance(state: State<'_, Arc<AppState>>, id: String) -> R
 }
 
 #[tauri::command]
-fn select_project_directory(app: AppHandle) -> Value {
-    let picked = app.dialog().file().blocking_pick_folder();
-    match picked.and_then(|path| path.as_path().map(|path| path.to_string_lossy().into_owned())) {
-        Some(path) => json!({ "ok": true, "path": path }),
-        None => json!({ "ok": false, "canceled": true }),
+async fn select_project_directory(app: AppHandle) -> Result<Value, String> {
+    let picked = pick_folder(&app).await;
+    match picked {
+        Some(path) => Ok(json!({ "ok": true, "path": path })),
+        None => Ok(json!({ "ok": false, "canceled": true })),
     }
+}
+
+/// 回调式目录选择：blocking_pick_folder 在主线程会死锁
+async fn pick_folder(app: &AppHandle) -> Option<String> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |file_path| {
+        let _ = tx.send(file_path);
+    });
+    rx.await.ok().and_then(|file_path| file_path.and_then(|path| path.as_path().map(|path| path.to_string_lossy().into_owned())))
 }
 
 #[tauri::command]
@@ -242,8 +251,7 @@ async fn select_encryption_directory(state: State<'_, Arc<AppState>>, app: AppHa
     if kind != "input" && kind != "output" {
         return Ok(err_value("目录类型无效"));
     }
-    let picked = app.dialog().file().blocking_pick_folder();
-    let Some(path) = picked.and_then(|path| path.as_path().map(|path| path.to_string_lossy().into_owned())) else {
+    let Some(path) = pick_folder(&app).await else {
         return Ok(json!({ "ok": false, "canceled": true }));
     };
     let patch = if kind == "input" {
