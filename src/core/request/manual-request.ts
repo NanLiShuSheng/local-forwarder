@@ -61,6 +61,7 @@ function formatTztValue(value: unknown): string {
 export function formatTztResponse(response: Record<string, unknown>): string {
   const lines: string[] = [];
   for (const [key, value] of Object.entries(response)) {
+    if (key === "zzkeyByte" || key === "zzbytes") continue;
     const displayKey = key === "Grid0" ? "Grid" : key === "IntactToServer" ? "Intacttoserver" : key;
     if (key === "Grid0" && Array.isArray(value)) {
       const gridLines = value.map((entry) => formatTztValue(entry));
