@@ -344,6 +344,12 @@ fn executable(path: &Path) -> bool {
     path.metadata().map(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0).unwrap_or(false)
 }
 
+/// 供 legacy 配置求值等模块复用 bundled node16
+pub(crate) fn node16_binary_path() -> Result<PathBuf> {
+    let dir = protocol_directory()?;
+    node16_binary(&dir)
+}
+
 #[cfg(not(unix))]
 fn executable(path: &Path) -> bool {
     path.is_file()

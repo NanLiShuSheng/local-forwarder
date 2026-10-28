@@ -309,3 +309,34 @@ pub struct ValuesSnapshot {
     #[serde(rename = "fileValues")]
     pub file_values: HashMap<String, String>,
 }
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct UpdateInfoSnapshot {
+    pub version: String,
+    #[serde(rename = "releaseDate")]
+    pub release_date: Option<String>,
+    #[serde(rename = "releaseNotes")]
+    pub release_notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct UpdateProgressSnapshot {
+    pub percent: f64,
+    pub transferred: u64,
+    pub total: u64,
+    #[serde(rename = "bytesPerSecond")]
+    pub bytes_per_second: u64,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct UpdateState {
+    pub state: String,
+    #[serde(rename = "currentVersion")]
+    pub current_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update: Option<UpdateInfoSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<UpdateProgressSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}

@@ -4,21 +4,25 @@ use crate::encrypt_prefs::{read_encryption_preferences, save_encryption_preferen
 use crate::encryptor::{encrypt_directory, EncryptDirectoryOptions};
 use crate::manual_request::{extract_manual_login_values, send_manual_request, ManualRequestOptions};
 use crate::service_manager::{ForwardingServiceManager, ManagerEvent};
+use crate::updater::{TauriUpdateBackend, UpdateService};
 use crate::validation::{get_manual_request_config_validation_error, is_valid_app_config, is_valid_tcp_target_list};
 use crate::workspace_store::ProxyWorkspaceStore;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
+use tokio::sync::mpsc;
 
 pub struct AppState {
     manager: Arc<ForwardingServiceManager>,
     user_data: PathBuf,
     encoder_path: PathBuf,
     version: String,
+    updater: Arc<UpdateService>,
 }
 
 /// 与 Electron 版共享同一数据目录，老用户配置无缝迁移
@@ -77,23 +81,35 @@ fn get_app_version(state: State<'_, Arc<AppState>>) -> String {
 }
 
 #[tauri::command]
-fn get_update_state(state: State<'_, Arc<AppState>>) -> Value {
-    json!({ "state": "idle", "currentVersion": state.version })
+async fn get_update_state(state: State<'_, Arc<AppState>>) -> Result<Value, String> {
+    Ok(json!(state.updater.get_state().await))
 }
 
 #[tauri::command]
-fn check_for_updates() -> Value {
-    json!({ "ok": true, "skipped": true })
+async fn check_for_updates(state: State<'_, Arc<AppState>>) -> Result<Value, String> {
+    if !state.updater.is_active() {
+        return Ok(json!({ "ok": true, "skipped": true }));
+    }
+    let result = state.updater.check().await;
+    Ok(json!({ "ok": result.ok, "error": result.error }))
 }
 
 #[tauri::command]
-fn download_update() -> Value {
-    json!({ "ok": true, "skipped": true })
+async fn download_update(state: State<'_, Arc<AppState>>) -> Result<Value, String> {
+    if !state.updater.is_active() {
+        return Ok(json!({ "ok": true, "skipped": true }));
+    }
+    let result = state.updater.download().await;
+    Ok(json!({ "ok": result.ok, "error": result.error }))
 }
 
 #[tauri::command]
-fn install_update() -> Value {
-    json!({ "ok": true, "skipped": true })
+async fn install_update(state: State<'_, Arc<AppState>>) -> Result<Value, String> {
+    if !state.updater.is_active() {
+        return Ok(json!({ "ok": true, "skipped": true }));
+    }
+    let result = state.updater.install().await;
+    Ok(json!({ "ok": result.ok, "error": result.error }))
 }
 
 #[tauri::command]
@@ -272,7 +288,7 @@ async fn encrypt_directory_cmd(state: State<'_, Arc<AppState>>, app: AppHandle, 
     let on_progress = move |progress| {
         let _ = handle.emit("encryption:progress", progress);
     };
-    match encrypt_directory(EncryptDirectoryOptions {
+    let outcome = encrypt_directory(EncryptDirectoryOptions {
         input_dir: std::path::Path::new(&input_dir),
         output_dir: std::path::Path::new(&output_dir),
         encoder_path: &state.encoder_path,
@@ -282,9 +298,13 @@ async fn encrypt_directory_cmd(state: State<'_, Arc<AppState>>, app: AppHandle, 
         temp_root: None,
         on_progress: Some(&on_progress),
     })
-    .await
-    {
-        Ok(result) => Ok(json!({ "ok": true, "result": result })),
+    .await;
+    match outcome {
+        Ok(result) => {
+            let mut envelope = serde_json::to_value(result).map_err(|error| error.to_string())?;
+            envelope.as_object_mut().expect("result object").insert("ok".to_string(), Value::Bool(true));
+            Ok(envelope)
+        }
         Err(error) => Ok(err_value(error.0)),
     }
 }
@@ -365,7 +385,14 @@ async fn open_external(app: AppHandle, url: String) -> Result<Value, String> {
     }
 }
 
-async fn setup_state() -> Result<AppState, String> {
+struct Bootstrap {
+    manager: Arc<ForwardingServiceManager>,
+    user_data: PathBuf,
+    encoder_path: PathBuf,
+    version: String,
+}
+
+async fn setup_state() -> Result<Bootstrap, String> {
     let user_data = legacy_data_dir()?;
     let config_store = Arc::new(ConfigStore::new(user_data.join("config.json")));
     let workspace_store = Arc::new(ProxyWorkspaceStore::new(user_data.join("proxy-instances.json")));
@@ -391,7 +418,7 @@ async fn setup_state() -> Result<AppState, String> {
         .await
         .map_err(|error| error.0)?;
     let manager = ForwardingServiceManager::new(workspace, workspace_store, Some(user_data.join("cache").to_string_lossy().into_owned()));
-    Ok(AppState {
+    Ok(Bootstrap {
         manager,
         encoder_path: encoder_path()?,
         user_data,
@@ -420,6 +447,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             get_config,
             get_app_version,
@@ -456,9 +484,36 @@ pub fn run() {
             open_external,
         ])
         .setup(|app| {
-            let state = tauri::async_runtime::block_on(setup_state()).map_err(Box::<dyn std::error::Error>::from)?;
-            let manager = state.manager.clone();
-            app.manage(Arc::new(state));
+            let bootstrap = tauri::async_runtime::block_on(setup_state()).map_err(Box::<dyn std::error::Error>::from)?;
+            let manager = bootstrap.manager.clone();
+            let (publish_tx, mut publish_rx) = mpsc::unbounded_channel::<crate::config::UpdateState>();
+            let manager_for_stop = manager.clone();
+            let updater = UpdateService::new(
+                bootstrap.version.clone(),
+                true,
+                Arc::new(TauriUpdateBackend::new(app.handle().clone())),
+                Arc::new(move || {
+                    let manager = manager_for_stop.clone();
+                    Box::pin(async move {
+                        manager.stop_all().await;
+                        let instances = manager.list().await;
+                        if instances.iter().all(|summary| summary.status.state == "stopped") {
+                            Ok(())
+                        } else {
+                            Err("代理未完全停止".to_string())
+                        }
+                    }) as Pin<Box<dyn std::future::Future<Output = Result<(), String>> + Send>>
+                }),
+                publish_tx,
+            );
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                while let Some(state) = publish_rx.recv().await {
+                    let _ = handle.emit("update:state", state);
+                }
+            });
+            updater.start_background_check();
+            app.manage(Arc::new(AppState { manager: bootstrap.manager.clone(), user_data: bootstrap.user_data, encoder_path: bootstrap.encoder_path, version: bootstrap.version, updater }));
             spawn_values_bridge(app.handle(), manager);
             Ok(())
         })

@@ -22,12 +22,19 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg"],
+    "targets": ["app", "dmg"],
+    "createUpdaterArtifacts": true,
     "resources": {
       "../src-tauri/staged-protocol": "protocol"
     },
     "macOS": {
       "minimumSystemVersion": "11.0"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ5OUQ3MjcyNjg5MzUwM0UKUldRK1VKTm9jbktkU1E0bWVMWlp6RS9qSU44OVZQQyt5NHQ0bEorT1JqV2h0ZjFRR1AvbW1BNTkK",
+      "endpoints": ["https://github.com/NanLiShuSheng/local-forwarder/releases/latest/download/latest.json"]
     }
   }
 }

@@ -5,6 +5,7 @@ pub mod encrypt_prefs;
 pub mod encryptor;
 pub mod file_cache;
 pub mod http_proxy;
+pub mod legacy;
 pub mod local_cache;
 pub mod manual_request;
 pub mod port_recovery;
@@ -12,6 +13,7 @@ pub mod routing;
 pub mod service_manager;
 pub mod shell;
 pub mod tcp_bridge;
+pub mod updater;
 pub mod validation;
 pub mod workspace_store;
 

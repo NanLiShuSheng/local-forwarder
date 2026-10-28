@@ -4,43 +4,27 @@
   "description": "A local HTTP, HTTPS, and TZT forwarding service",
   "author": "Local Forwarder",
   "private": true,
-  "main": "dist-electron/main.js",
   "scripts": {
-    "dev": "concurrently -k \"vite --config vite.config.ts\" \"npm run build:electron && wait-on http://localhost:5173 && electron .\"",
+    "dev": "tauri dev",
     "dev:renderer": "vite --config vite.config.ts",
-    "build:electron": "tsc -p tsconfig.node.json && node scripts/flatten-electron.mjs",
-    "build": "npm run build:electron && tsc -p tsconfig.json --noEmit && vite build",
-    "test": "npm run build && node scripts/run-tests.mjs",
-    "package:x64": "npm run build && electron-builder --mac dir --x64 --publish never && node scripts/create-dmg.mjs && npm run verify:package",
-    "package:win:x64": "npm run build && electron-builder --win nsis --x64 --publish never && npm run verify:win",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "package:mac": "tauri build",
     "verify:release:tag": "node scripts/verify-release-tag.mjs",
-    "verify:release:win": "node scripts/verify-release-assets.mjs win",
-    "verify:release:mac": "node scripts/verify-release-assets.mjs mac",
-    "package:release:win:x64": "npm run build && electron-builder --win nsis --x64 --publish never && npm run verify:win && npm run verify:release:win",
-    "package:release:mac:x64": "npm run build && electron-builder --mac dir zip --x64 --publish never && node scripts/create-dmg.mjs && npm run verify:package && npm run verify:release:mac",
-    "verify:package": "node scripts/verify-dmg.mjs",
-    "verify:win": "node scripts/verify-win.mjs",
-    "smoke": "node scripts/smoke-electron.mjs"
+    "verify:release:mac": "node scripts/verify-release-assets.mjs mac"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.12.4",
     "antd": "^6.6.5",
-    "electron-updater": "^6.8.9",
     "react": "latest",
     "react-dom": "latest"
   },
   "devDependencies": {
-    "@electron/notarize": "^3.1.1",
     "@tauri-apps/cli": "^2.12.4",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
-    "concurrently": "latest",
-    "electron": "latest",
-    "electron-builder": "latest",
-    "tsx": "latest",
     "typescript": "latest",
-    "vite": "latest",
-    "wait-on": "latest"
+    "vite": "latest"
   }
 }
