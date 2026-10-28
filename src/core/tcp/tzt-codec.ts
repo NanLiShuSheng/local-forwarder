@@ -1,5 +1,6 @@
-import { execFileSync } from "node:child_process";
-import { accessSync, constants, existsSync } from "node:fs";
+import { spawn, type ChildProcess } from "node:child_process";
+import { accessSync, constants, existsSync, readSync, writeSync } from "node:fs";
+import { type Socket } from "node:net";
 import os from "node:os";
 import path from "node:path";
 
@@ -29,9 +30,11 @@ interface LegacyResponse {
 const MAGIC = 0x07b7;
 const HEADER_SIZE = 6;
 const MAX_FRAME_SIZE = 64 * 1024 * 1024;
-const FIXED_FRAME = "b707250000006400000000020000003132009617e8f7adba12dc8067265b85505ab73a8b8040e9ccde05f0";
+const MAX_HELPER_RESPONSE_SIZE = 10 * 1024 * 1024; // matches the former execFileSync maxBuffer
+const EAGAIN_WAIT_FLAG = new Int32Array(new SharedArrayBuffer(4));
+const FIXED_FRAME = "b7072500000064000300000200000031320006416374696f6e0300000031303003666f6f03000000626172";
 const FIXED_FILE_RC4 = "7ad9f940a0c3d07a8f";
-const FIXED_X_RC4 = "c03aeaeaaaa119a7f4";
+const FIXED_X_RC4 = "32da9e2ceaea1a6e75";
 
 type LegacyRuntime = {
   invoke(request: LegacyRequest): LegacyResponse;
@@ -89,26 +92,91 @@ function node16Binary(): string {
 function createLegacyRuntime(): LegacyRuntime {
   const helper = path.join(protocolDirectory(), "tzt-node16-helper.js");
   const node = node16Binary();
+  let current: { child: ChildProcess; input: number; output: number; dead: boolean } | undefined;
+  let stderrTail = "";
+
+  const spawnHelper = () => {
+    const child = spawn(node, [helper, "--serve"], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    const proc = { child, input: helperFd(child.stdin), output: helperFd(child.stdout), dead: false };
+    child.unref();
+    (child.stdin as Socket).unref();
+    (child.stdout as Socket).unref();
+    (child.stderr as Socket).unref();
+    (child.stderr as Socket).on("data", (chunk: Buffer) => {
+      stderrTail = (stderrTail + chunk.toString("utf8")).slice(-4096);
+    });
+    const killOnExit = () => {
+      child.kill();
+    };
+    child.on("error", () => {
+      proc.dead = true;
+    });
+    child.on("exit", () => {
+      proc.dead = true;
+      process.removeListener("exit", killOnExit);
+    });
+    process.once("exit", killOnExit);
+    return proc;
+  };
+
   return {
     invoke(request) {
-      let output: string;
+      if (current === undefined || current.dead) current = spawnHelper();
+      const proc = current;
+      let parsed: LegacyResponse & { error?: string };
       try {
-        output = execFileSync(node, [helper], {
-          input: JSON.stringify(request),
-          encoding: "utf8",
-          maxBuffer: 10 * 1024 * 1024,
-          windowsHide: true,
-        });
+        const payload = Buffer.from(JSON.stringify(request), "utf8");
+        const header = Buffer.alloc(4);
+        header.writeUInt32LE(payload.length, 0);
+        writeAll(proc.input, header);
+        writeAll(proc.input, payload);
+        const responseLength = readExact(proc.output, 4).readUInt32LE(0);
+        if (responseLength > MAX_HELPER_RESPONSE_SIZE) throw new Error(`legacy protocol helper response is too large: ${responseLength} bytes`);
+        parsed = JSON.parse(readExact(proc.output, responseLength).toString("utf8")) as LegacyResponse & { error?: string };
       } catch (error) {
-        throw new Error("TZT codec runtime incompatible: legacy protocol helper failed to execute", { cause: error });
+        proc.dead = true;
+        const detail = stderrTail.trim();
+        throw new Error(`TZT codec runtime incompatible: legacy protocol helper failed${detail === "" ? "" : `: ${detail.slice(-500)}`}`, { cause: error });
       }
-      try {
-        return JSON.parse(output) as LegacyResponse;
-      } catch (error) {
-        throw new Error("TZT codec runtime incompatible: legacy protocol helper returned invalid JSON", { cause: error });
-      }
+      if (typeof parsed.error === "string") throw new Error(`TZT codec runtime incompatible: legacy protocol helper reported an error: ${parsed.error}`);
+      return parsed;
     },
   };
+}
+
+function helperFd(stream: unknown): number {
+  const fd = (stream as { _handle?: { fd?: unknown } } | null)?._handle?.fd;
+  if (typeof fd !== "number") throw new Error("TZT codec runtime incompatible: stdio pipe file descriptor is unavailable");
+  return fd;
+}
+
+// Node marks child stdio pipes non-blocking, so synchronous pipe I/O must retry on EAGAIN.
+function writeAll(fd: number, buffer: Buffer): void {
+  let offset = 0;
+  while (offset < buffer.length) {
+    try {
+      offset += writeSync(fd, buffer, offset, buffer.length - offset);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EAGAIN") throw error;
+      Atomics.wait(EAGAIN_WAIT_FLAG, 0, 0, 1);
+    }
+  }
+}
+
+function readExact(fd: number, length: number): Buffer {
+  const buffer = Buffer.alloc(length);
+  let offset = 0;
+  while (offset < length) {
+    try {
+      const read = readSync(fd, buffer, offset, length - offset, null);
+      if (read === 0) throw new Error("legacy protocol helper closed its output stream");
+      offset += read;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EAGAIN") throw error;
+      Atomics.wait(EAGAIN_WAIT_FLAG, 0, 0, 1);
+    }
+  }
+  return buffer;
 }
 
 function legacyRuntime(): LegacyRuntime {
