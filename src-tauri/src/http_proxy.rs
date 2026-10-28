@@ -1,5 +1,5 @@
 use crate::codec::{TztCodec, TztQuery, TztResponse};
-use crate::config::{Accounts, CacheConfig, ForwardRule, TcpTargetConfig};
+use crate::config::{Accounts, CacheConfig, ForwardRule, LogEntry, TcpTargetConfig, ValuesSnapshot};
 use crate::file_cache::{decode_cached_resource, rewrite_legacy_navigation_script, CacheError, FileCache};
 use crate::routing::{match_rule, parse_target, substitute_request_url, substitute_variables, ParsedTarget};
 use crate::tcp_bridge::{TcpBridgePool, TcpTarget};
@@ -14,12 +14,35 @@ use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Duration;
 use tokio::sync::{mpsc, Mutex};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 const MAX_BODY_SIZE: usize = 16 * 1024 * 1024;
+const MAX_LOG_DETAIL_SIZE: usize = 256 * 1024;
+
+#[derive(Debug)]
+pub enum ProxyEvent {
+    LoginValuesCaptured(HashMap<String, String>),
+    LocalValuesChanged(HashMap<String, String>),
+    ValuesWritten,
+}
+
+#[derive(Default)]
+pub struct HttpProxyStats {
+    pub request_count: u64,
+    pub success_count: u64,
+    pub total_duration_ms: u64,
+}
+
+pub struct HttpProxyPatch {
+    pub tcp_targets: Option<Vec<TcpTargetConfig>>,
+    pub project_path: Option<Option<String>>,
+    pub map_values: Option<HashMap<String, String>>,
+    pub file_values: Option<HashMap<String, String>>,
+}
 
 pub struct HttpProxyOptions {
     pub bind_host: String,
@@ -36,97 +59,231 @@ pub struct HttpProxyOptions {
     pub local_values: HashMap<String, String>,
     pub map_values: HashMap<String, String>,
     pub file_values: HashMap<String, String>,
+    pub log_tx: Option<mpsc::UnboundedSender<LogEntry>>,
+    pub event_tx: Option<mpsc::UnboundedSender<ProxyEvent>>,
 }
 
 pub struct HttpProxyState {
-    project_path: Option<String>,
+    project_path: RwLock<Option<String>>,
     rules: Vec<ForwardRule>,
     accounts: Accounts,
-    tcp_targets: Vec<TcpTargetConfig>,
+    tcp_targets: RwLock<Vec<TcpTargetConfig>>,
     bridge: Arc<TcpBridgePool>,
     cache: Option<Arc<FileCache>>,
     cache_config: Option<CacheConfig>,
     cache_codec: Option<Arc<Mutex<TztCodec>>>,
     client: reqwest::Client,
+    log_tx: Option<mpsc::UnboundedSender<LogEntry>>,
+    event_tx: Option<mpsc::UnboundedSender<ProxyEvent>>,
+    stats: HttpProxyStatsInner,
     local_values: RwLock<HashMap<String, String>>,
     map_values: RwLock<HashMap<String, String>>,
     file_values: RwLock<HashMap<String, String>>,
+}
+
+#[derive(Default)]
+struct HttpProxyStatsInner {
+    request_count: AtomicU64,
+    success_count: AtomicU64,
+    total_duration_ms: AtomicU64,
+}
+
+impl HttpProxyState {
+    pub fn get_values(&self) -> ValuesSnapshot {
+        ValuesSnapshot {
+            local_values: self.local_values.read().expect("local values poisoned").clone(),
+            map_values: self.map_values.read().expect("map values poisoned").clone(),
+            file_values: self.file_values.read().expect("file values poisoned").clone(),
+        }
+    }
+
+    pub fn update_options(&self, patch: HttpProxyPatch) {
+        if let Some(targets) = patch.tcp_targets {
+            *self.tcp_targets.write().expect("tcp targets poisoned") = targets;
+        }
+        if let Some(project_path) = patch.project_path {
+            *self.project_path.write().expect("project path poisoned") = project_path;
+        }
+        if let Some(map_values) = patch.map_values {
+            *self.map_values.write().expect("map values poisoned") = map_values;
+        }
+        if let Some(file_values) = patch.file_values {
+            *self.file_values.write().expect("file values poisoned") = file_values;
+        }
+    }
+
+    pub fn stats(&self) -> HttpProxyStats {
+        HttpProxyStats {
+            request_count: self.stats.request_count.load(AtomicOrdering::Relaxed),
+            success_count: self.stats.success_count.load(AtomicOrdering::Relaxed),
+            total_duration_ms: self.stats.total_duration_ms.load(AtomicOrdering::Relaxed),
+        }
+    }
+
+    pub fn set_local_values(&self, values: HashMap<String, String>) {
+        *self.local_values.write().expect("local values poisoned") = values;
+    }
 }
 
 pub struct RunningHttpProxy {
     pub host: String,
     pub port: u16,
     task: tokio::task::JoinHandle<()>,
+    state: Arc<HttpProxyState>,
 }
 
 impl RunningHttpProxy {
     pub fn stop(self) {
         self.task.abort();
     }
+
+    pub fn state(&self) -> &Arc<HttpProxyState> {
+        &self.state
+    }
+
+    pub fn tcp_connections(&self) -> usize {
+        self.state.bridge.connection_count()
+    }
 }
 
-pub async fn start_http_proxy(options: HttpProxyOptions) -> Result<RunningHttpProxy, String> {
+#[derive(Debug)]
+pub struct ProxyStartError {
+    pub addr_in_use: bool,
+    pub message: String,
+}
+
+impl std::fmt::Display for ProxyStartError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for ProxyStartError {}
+
+impl ProxyStartError {
+    fn other(message: impl Into<String>) -> Self {
+        Self { addr_in_use: false, message: message.into() }
+    }
+}
+
+pub async fn start_http_proxy(options: HttpProxyOptions) -> Result<RunningHttpProxy, ProxyStartError> {
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .redirect(reqwest::redirect::Policy::none())
         .timeout(options.timeout)
         .build()
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| ProxyStartError::other(error.to_string()))?;
     let state = Arc::new(HttpProxyState {
-        project_path: options.project_path,
+        project_path: RwLock::new(options.project_path),
         rules: options.rules,
         accounts: options.accounts,
-        tcp_targets: options.tcp_targets,
+        tcp_targets: RwLock::new(options.tcp_targets),
         bridge: options.bridge,
         cache: options.cache,
         cache_config: options.cache_config,
         cache_codec: options.cache_codec,
         client,
+        log_tx: options.log_tx,
+        event_tx: options.event_tx,
+        stats: HttpProxyStatsInner::default(),
         local_values: RwLock::new(options.local_values),
         map_values: RwLock::new(options.map_values),
         file_values: RwLock::new(options.file_values),
     });
-    let router = Router::new().fallback(handle).with_state(state);
-    let listener = tokio::net::TcpListener::bind((options.bind_host.as_str(), options.port)).await.map_err(|error| error.to_string())?;
-    let address = listener.local_addr().map_err(|error| error.to_string())?;
+    let router = Router::new().fallback(handle).with_state(state.clone());
+    let listener = tokio::net::TcpListener::bind((options.bind_host.as_str(), options.port)).await.map_err(|error| ProxyStartError {
+        addr_in_use: error.kind() == std::io::ErrorKind::AddrInUse,
+        message: error.to_string(),
+    })?;
+    let address = listener.local_addr().map_err(|error| ProxyStartError::other(error.to_string()))?;
     let task = tokio::spawn(async move {
         let _ = axum::serve(listener, router.into_make_service()).await;
     });
-    Ok(RunningHttpProxy { host: address.ip().to_string(), port: address.port(), task })
+    Ok(RunningHttpProxy { host: address.ip().to_string(), port: address.port(), task, state })
+}
+
+#[derive(Clone)]
+struct RequestLogContext {
+    started: std::time::Instant,
+    method: String,
+    url: String,
+    request_type: String,
+    request_path: String,
+    request_params: String,
 }
 
 async fn handle(State(state): State<Arc<HttpProxyState>>, request: Request) -> Response {
+    let started = std::time::Instant::now();
     let method = request.method().clone();
     let headers = request.headers().clone();
+    let request_type = request_type_for(&headers);
     let request_url = request.uri().path_and_query().map(|pq| pq.as_str().to_string()).unwrap_or_else(|| "/".to_string());
     let host_header = headers.get("host").and_then(|value| value.to_str().ok()).map(str::to_string);
     let body = match axum::body::to_bytes(request.into_body(), MAX_BODY_SIZE).await {
         Ok(body) => body,
         Err(_) => return error_json("request body exceeds 16 MiB", StatusCode::PAYLOAD_TOO_LARGE),
     };
-    let parsed = local_url(&request_url);
+    let log_ctx = request_type.map(|kind| {
+        let request_params = if body.is_empty() {
+            format!("{method} {request_url}")
+        } else {
+            let text = format!("{method} {request_url}\n\n{}", String::from_utf8_lossy(&body));
+            truncate_log_detail(&text, text.len())
+        };
+        RequestLogContext { started, method: method.to_string(), url: request_url.clone(), request_type: kind, request_path: local_url(&request_url).path().to_string(), request_params }
+    });
+    let response = dispatch(&state, &method, &request_url, host_header.as_deref(), &headers, &body, log_ctx.clone()).await;
+    let status = response.status();
+    state.stats.request_count.fetch_add(1, AtomicOrdering::Relaxed);
+    if (200..500).contains(&status.as_u16()) {
+        state.stats.success_count.fetch_add(1, AtomicOrdering::Relaxed);
+    }
+    state.stats.total_duration_ms.fetch_add(started.elapsed().as_millis() as u64, AtomicOrdering::Relaxed);
+    if let Some(ctx) = log_ctx {
+        let is_sse = response
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.to_lowercase().contains("text/event-stream"));
+        // SSE 长流的结束日志由驱动任务在流结束时发送（含字节数），此处跳过
+        if !is_sse {
+            let (parts, response_body) = response.into_parts();
+            let data = axum::body::to_bytes(response_body, MAX_BODY_SIZE).await.unwrap_or_default();
+            emit_request_log(&state, &ctx, parts.status, response_data_for(&parts.headers, &data));
+            return Response::from_parts(parts, Body::from(data));
+        }
+    }
+    response
+}
+
+async fn dispatch(state: &Arc<HttpProxyState>, method: &Method, request_url: &str, host_header: Option<&str>, headers: &HeaderMap, body: &Bytes, log_ctx: Option<RequestLogContext>) -> Response {
+    let parsed = local_url(request_url);
     let tztforward = headers.get("tztforward").and_then(|value| value.to_str().ok()) == Some("forward");
     if tztforward || parsed.path() == "/reqsse" {
-        return handle_sse(&state, &request_url, &body, &headers).await;
+        return handle_sse(state, request_url, body, headers, log_ctx).await;
     }
-    if let Some(action) = legacy_action_response(&request_url, host_header.as_deref()) {
+    if let Some(action) = legacy_action_response(request_url, host_header) {
         return action.into_response();
     }
     match parsed.path() {
         "/reqlocal" => {
-            let params = parse_params(&request_url, &body);
+            let params = parse_params(request_url, body);
             let values = state.local_values.read().expect("local values poisoned");
             let output: Map<String, Value> = params.keys().map(|key| (key.to_uppercase(), Value::String(lookup_value(&values, key)))).collect();
             return json_response(Value::Object(output), StatusCode::OK);
         }
         "/reqsavemap" | "/reqreadmap" => {
-            let params = uppercase_params(&parse_params(&request_url, &body));
+            let params = uppercase_params(&parse_params(request_url, body));
             if parsed.path() == "/reqsavemap" {
                 let mut values = state.map_values.write().expect("map values poisoned");
                 for (key, value) in &params {
                     if let Some(text) = value.as_str() {
                         values.insert(key.clone(), text.to_string());
                     }
+                }
+                drop(values);
+                if let Some(tx) = state.event_tx.as_ref() {
+                    let _ = tx.send(ProxyEvent::ValuesWritten);
                 }
                 return json_response(json!({ "ERRORNO": "0" }), StatusCode::OK);
             }
@@ -141,21 +298,24 @@ async fn handle(State(state): State<Arc<HttpProxyState>>, request: Request) -> R
             }
             let key = filename.to_uppercase();
             if parsed.path() == "/reqsavefile" {
-                state.file_values.write().expect("file values poisoned").insert(key, String::from_utf8_lossy(&body).into_owned());
+                state.file_values.write().expect("file values poisoned").insert(key, String::from_utf8_lossy(body).into_owned());
+                if let Some(tx) = state.event_tx.as_ref() {
+                    let _ = tx.send(ProxyEvent::ValuesWritten);
+                }
                 return json_response(json!({ "ERRORNO": "0" }), StatusCode::OK);
             }
             let value = state.file_values.read().expect("file values poisoned").get(&key).cloned().unwrap_or_default();
             return bytes_response(StatusCode::OK, value.into_bytes(), Some("application/octet-stream"));
         }
-        "/reqxml" | "/login" => return handle_tcp(&state, &request_url, &body, parsed.path() == "/login", method, &headers).await,
+        "/reqxml" | "/login" => return handle_tcp(state, request_url, body, parsed.path() == "/login", method.clone(), headers).await,
         _ => {}
     }
-    match serve_project_file(&state, parsed.path()).await {
+    match serve_project_file(state, parsed.path()).await {
         Ok(Some(response)) => return response,
         Ok(None) => {}
         Err(error) => return error_json(&error, StatusCode::INTERNAL_SERVER_ERROR),
     }
-    forward(&state, &method, &request_url, &headers, body).await
+    forward(state, method, request_url, headers, body.clone()).await
 }
 
 fn local_url(request_url: &str) -> url::Url {
@@ -234,7 +394,54 @@ fn lookup_value(values: &HashMap<String, String>, key: &str) -> String {
     values.iter().find(|(candidate, _)| candidate.to_uppercase() == wanted).map(|(_, value)| value.clone()).unwrap_or_default()
 }
 
-fn js_string(value: &Value) -> String {
+fn request_type_for(headers: &HeaderMap) -> Option<String> {
+    let fetch_dest = headers.get("sec-fetch-dest").and_then(|value| value.to_str().ok()).map(str::to_lowercase).unwrap_or_default();
+    let requested_with = headers.get("x-requested-with").and_then(|value| value.to_str().ok()).map(str::to_lowercase).unwrap_or_default();
+    if requested_with == "xmlhttprequest" {
+        return Some("xhr".to_string());
+    }
+    if fetch_dest == "empty" {
+        return Some("fetch".to_string());
+    }
+    None
+}
+
+fn truncate_log_detail(value: &str, total_bytes: usize) -> String {
+    if total_bytes <= MAX_LOG_DETAIL_SIZE {
+        return value.to_string();
+    }
+    format!("{value}\n…（内容过长，已截取前 {MAX_LOG_DETAIL_SIZE} 字节）")
+}
+
+fn response_data_for(headers: &HeaderMap, data: &[u8]) -> String {
+    if data.is_empty() {
+        return String::new();
+    }
+    let content_type = headers.get("content-type").and_then(|value| value.to_str().ok()).unwrap_or("").to_lowercase();
+    if content_type.contains("text/event-stream") {
+        return format!("[SSE 流式响应，共 {} 字节]", data.len());
+    }
+    if !content_type.is_empty() && !(content_type.contains("text") || content_type.contains("json") || content_type.contains("javascript") || content_type.contains("xml") || content_type.contains("x-www-form-urlencoded")) {
+        return format!("[二进制响应，共 {} 字节]", data.len());
+    }
+    truncate_log_detail(&String::from_utf8_lossy(data), data.len())
+}
+
+fn emit_request_log(state: &HttpProxyState, ctx: &RequestLogContext, status: StatusCode, response_data: String) {
+    let Some(tx) = state.log_tx.as_ref() else { return };
+    let mut entry = LogEntry::new(if status.as_u16() >= 500 { "error" } else { "info" }, format!("{} {}", ctx.method, ctx.url));
+    entry.direction = Some("inbound".to_string());
+    entry.protocol = Some("http".to_string());
+    entry.status_code = Some(status.as_u16());
+    entry.duration_ms = Some(ctx.started.elapsed().as_millis() as u64);
+    entry.request_type = Some(ctx.request_type.clone());
+    entry.request_path = Some(ctx.request_path.clone());
+    entry.request_params = Some(ctx.request_params.clone());
+    entry.response_data = Some(response_data);
+    let _ = tx.send(entry);
+}
+
+pub(crate) fn js_string(value: &Value) -> String {
     match value {
         Value::String(text) => text.clone(),
         Value::Number(number) => {
@@ -259,12 +466,29 @@ fn capture_local_values(state: &HttpProxyState, record: &Map<String, Value>) {
         .collect();
     let action = normalized.iter().find(|(key, _)| key == "ACTION").map(|(_, value)| value.clone());
     let mut values = state.local_values.write().expect("local values poisoned");
+    let mut captured: HashMap<String, String> = HashMap::new();
+    let mut changed = false;
     if action.as_deref() == Some("100") {
         for (key, entry) in normalized {
-            values.insert(key, entry);
+            if values.get(&key) != Some(&entry) {
+                values.insert(key.clone(), entry.clone());
+                changed = true;
+            }
+            captured.insert(key, entry);
         }
     } else if let Some((_, token)) = normalized.iter().find(|(key, _)| key == "TOKEN") {
-        values.insert("TOKEN".to_string(), token.clone());
+        if values.get("TOKEN") != Some(token) {
+            values.insert("TOKEN".to_string(), token.clone());
+            changed = true;
+        }
+        captured.insert("TOKEN".to_string(), token.clone());
+    }
+    drop(values);
+    if changed {
+        if let Some(tx) = state.event_tx.as_ref() {
+            let _ = tx.send(ProxyEvent::LoginValuesCaptured(captured));
+            let _ = tx.send(ProxyEvent::LocalValuesChanged(state.local_values.read().expect("local values poisoned").clone()));
+        }
     }
 }
 
@@ -371,13 +595,14 @@ fn legacy_action_response(request_url: &str, host_header: Option<&str>) -> Optio
     None
 }
 
-fn target_for<'a>(state: &'a HttpProxyState, params: &TztQuery) -> Option<&'a TcpTargetConfig> {
+fn target_for(state: &HttpProxyState, params: &TztQuery) -> Option<TcpTargetConfig> {
     let index = uppercase_params(params)
         .get("REQLINKTYPE")
         .and_then(Value::as_str)
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(0);
-    state.tcp_targets.get(index).or_else(|| state.tcp_targets.first())
+    let targets = state.tcp_targets.read().expect("tcp targets poisoned");
+    targets.get(index).or_else(|| targets.first()).cloned()
 }
 
 fn is_timeout(message: &str) -> bool {
@@ -403,9 +628,9 @@ async fn handle_tcp(state: &Arc<HttpProxyState>, route: &str, body: &[u8], login
         return error_json("TCP target is unavailable", StatusCode::BAD_GATEWAY);
     };
     if target.transport.as_deref() == Some("http") {
-        return forward_reqxml_over_http(state, target, route, &params, &method, headers, login).await;
+        return forward_reqxml_over_http(state, &target, route, &params, &method, headers, login).await;
     }
-    match state.bridge.request(&TcpTarget { host: target.host.clone(), port: target.port }, &params).await {
+    match state.bridge.request(&TcpTarget { host: target.host, port: target.port }, &params).await {
         Ok(response) => {
             let normalized = uppercase_params(&response);
             capture_local_values(state, &normalized);
@@ -415,7 +640,7 @@ async fn handle_tcp(state: &Arc<HttpProxyState>, route: &str, body: &[u8], login
     }
 }
 
-async fn handle_sse(state: &Arc<HttpProxyState>, route: &str, body: &[u8], headers: &HeaderMap) -> Response {
+async fn handle_sse(state: &Arc<HttpProxyState>, route: &str, body: &[u8], headers: &HeaderMap, log_ctx: Option<RequestLogContext>) -> Response {
     let params = substituted_params(state, &parse_params(route, body));
     let Some(target) = target_for(state, &params) else {
         return error_json("TCP target is unavailable", StatusCode::BAD_GATEWAY);
@@ -424,7 +649,7 @@ async fn handle_sse(state: &Arc<HttpProxyState>, route: &str, body: &[u8], heade
         return error_json("SSE streaming requires a TCP target", StatusCode::BAD_GATEWAY);
     }
     let binary = headers.get("tztcontenttype").and_then(|value| value.to_str().ok()) == Some("application/octet-stream");
-    let mut stream = match state.bridge.request_stream(&TcpTarget { host: target.host.clone(), port: target.port }, &params).await {
+    let mut stream = match state.bridge.request_stream(&TcpTarget { host: target.host, port: target.port }, &params).await {
         Ok(stream) => stream,
         Err(error) => return error_json(&error.0, if is_timeout(&error.0) { StatusCode::GATEWAY_TIMEOUT } else { StatusCode::BAD_GATEWAY }),
     };
@@ -446,25 +671,33 @@ async fn handle_sse(state: &Arc<HttpProxyState>, route: &str, body: &[u8], heade
     let (tx, rx) = mpsc::unbounded_channel::<std::result::Result<Bytes, Infallible>>();
     let state_for_stream = state.clone();
     tokio::spawn(async move {
-        let Some((payload, terminal)) = first else { return };
-        if tx.send(Ok(Bytes::from(payload))).is_err() || terminal {
-            return;
-        }
-        while let Some(item) = stream.next().await {
-            match item {
-                Ok(frame) => {
-                    capture_local_values(&state_for_stream, &frame);
-                    let (payload, terminal) = sse_frame_payload(&frame, binary);
-                    if payload.is_empty() && !terminal {
-                        continue;
-                    }
-                    if tx.send(Ok(Bytes::from(payload))).is_err() || terminal {
-                        return;
-                    }
-                }
-                // 响应头已发出，流中错误只能截断（对齐 TS：headersSent 后 end）
-                Err(_) => return,
+        let mut sent_bytes = 0usize;
+        'run: {
+            let Some((payload, terminal)) = first else { break 'run };
+            sent_bytes += payload.len();
+            if tx.send(Ok(Bytes::from(payload))).is_err() || terminal {
+                break 'run;
             }
+            while let Some(item) = stream.next().await {
+                match item {
+                    Ok(frame) => {
+                        capture_local_values(&state_for_stream, &frame);
+                        let (payload, terminal) = sse_frame_payload(&frame, binary);
+                        if payload.is_empty() && !terminal {
+                            continue;
+                        }
+                        sent_bytes += payload.len();
+                        if tx.send(Ok(Bytes::from(payload))).is_err() || terminal {
+                            break 'run;
+                        }
+                    }
+                    // 响应头已发出，流中错误只能截断（对齐 TS：headersSent 后 end）
+                    Err(_) => break 'run,
+                }
+            }
+        }
+        if let Some(ctx) = log_ctx {
+            emit_request_log(&state_for_stream, &ctx, StatusCode::OK, format!("[SSE 流式响应，共 {sent_bytes} 字节]"));
         }
     });
     let mut response = Response::new(Body::from_stream(UnboundedReceiverStream::new(rx)));
@@ -529,10 +762,11 @@ fn zz_bytes(value: &Value) -> Option<Vec<u8>> {
 }
 
 async fn serve_project_file(state: &Arc<HttpProxyState>, request_path: &str) -> Result<Option<Response>, String> {
-    let Some(root) = state.project_path.as_ref() else {
+    let root = state.project_path.read().expect("project path poisoned").clone();
+    let Some(root) = root else {
         return Ok(None);
     };
-    let (absolute, relative) = join_project_path(root, request_path)?;
+    let (absolute, relative) = join_project_path(&root, request_path)?;
     let mut actual = absolute;
     if !tokio::fs::metadata(&actual).await.map(|meta| meta.is_file()).unwrap_or(false) {
         let encoded = PathBuf::from(format!("{}.d", actual.display()));

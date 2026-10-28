@@ -142,6 +142,8 @@ async fn start_proxy(tcp_targets: Vec<TcpTargetConfig>, rules: Vec<ForwardRule>,
         local_values,
         map_values: HashMap::new(),
         file_values: HashMap::new(),
+        log_tx: None,
+        event_tx: None,
     })
     .await
     .unwrap();
@@ -196,6 +198,8 @@ async fn login_merges_account_fields_and_forces_reqlinktype() {
         local_values: HashMap::new(),
         map_values: HashMap::new(),
         file_values: HashMap::new(),
+        log_tx: None,
+        event_tx: None,
     })
     .await
     .unwrap();
@@ -349,6 +353,8 @@ async fn cache_downloads_once_and_then_serves_from_cache() {
         local_values: HashMap::new(),
         map_values: HashMap::new(),
         file_values: HashMap::new(),
+        log_tx: None,
+        event_tx: None,
     })
     .await
     .unwrap();

@@ -275,11 +275,17 @@ fn fixed_frame(runtime: &mut LegacyRuntime) -> Result<Vec<u8>> {
     decode_base64_data(&response)
 }
 
-fn protocol_directory() -> Result<PathBuf> {
+pub(crate) fn protocol_directory() -> Result<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(dir) = std::env::var("TZT_PROTOCOL_DIR") {
         if !dir.is_empty() {
             candidates.push(dir.into());
+        }
+    }
+    // 打包后：Contents/MacOS/<exe> → Contents/Resources/protocol
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(resources) = exe.parent().and_then(|macos| macos.parent()).map(|contents| contents.join("Resources").join("protocol")) {
+            candidates.push(resources);
         }
     }
     candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("resources").join("protocol"));

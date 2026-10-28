@@ -4,14 +4,32 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+async-trait = "0.1"
 axum = "0.8"
 base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 flate2 = "1"
 percent-encoding = "2"
 regex = "1"
-reqwest = { version = "0.12", default-features = false, features = ["deflate", "gzip", "json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["deflate", "gzip", "json", "rustls-tls", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+sha2 = "0.10"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tempfile = "3"
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
 tokio-stream = "0.1"
 url = "2"
+uuid = { version = "1", features = ["v4"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[[bin]]
+name = "local-forwarder"
+path = "src/main.rs"
+
+[profile.release]
+strip = "symbols"
