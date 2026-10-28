@@ -201,6 +201,10 @@ async fn manager_starts_and_stops_a_real_service() {
     assert_eq!(status.state, "running");
     let running = manager.status(None).await.unwrap();
     assert_eq!(running.state, "running");
+    // 请求页地址/参数改动（request/stringTool）不影响运行中的代理，应当允许热更新
+    let mut ui_config = manager.get_config(None).await.unwrap();
+    ui_config.request.as_mut().expect("default request").host = "127.0.0.2".to_string();
+    manager.save_config(ui_config).await.unwrap();
     let status = manager.stop(None).await.unwrap();
     assert_eq!(status.state, "stopped");
 }

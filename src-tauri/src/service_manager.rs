@@ -300,7 +300,8 @@ impl ForwardingService {
     }
 }
 
-const HOT_SWAPPABLE_IGNORED_KEYS: [&str; 8] = ["tcpTargets", "forwardingAddressHistory", "launchPath", "cardTargetId", "localValues", "mapValues", "legacy", "projectPath"];
+// request/stringTool 只影响 UI 工具（手动请求/字符串工具），不影响运行中的代理
+const HOT_SWAPPABLE_IGNORED_KEYS: [&str; 10] = ["tcpTargets", "forwardingAddressHistory", "launchPath", "cardTargetId", "localValues", "mapValues", "legacy", "projectPath", "request", "stringTool"];
 
 fn is_hot_swappable_config_change(current: &AppConfig, next: &AppConfig) -> bool {
     let strip = |config: &AppConfig| {
