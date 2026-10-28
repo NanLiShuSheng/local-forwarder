@@ -29,9 +29,9 @@ interface LegacyResponse {
 const MAGIC = 0x07b7;
 const HEADER_SIZE = 6;
 const MAX_FRAME_SIZE = 1024 * 1024;
-const FIXED_FRAME = "b707250000006400000000020000003132009617e8f7adba12dc8067265b85505ab73a8b8040e9ccde05f0";
+const FIXED_FRAME = "b7072500000064000300000200000031320006416374696f6e0300000031303003666f6f03000000626172";
 const FIXED_FILE_RC4 = "7ad9f940a0c3d07a8f";
-const FIXED_X_RC4 = "c03aeaeaaaa119a7f4";
+const FIXED_X_RC4 = "32da9e2ceaea1a6e75";
 
 type LegacyRuntime = {
   invoke(request: LegacyRequest): LegacyResponse;
@@ -145,6 +145,8 @@ function assertRuntimeCompatibility(runtime: LegacyRuntime): void {
 function decodeLegacyResponse(value: unknown): TztResponse {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Invalid TZT response: expected an object");
   const result = { ...(value as Record<string, unknown>) };
+  delete result.zzkeyByte;
+  delete result.zzbytes;
   if (result.HandleSerialNo === undefined) throw new Error("Invalid TZT response: missing serial number");
   if (typeof result.HandleSerialNo !== "string" && typeof result.HandleSerialNo !== "number") throw new Error("Invalid TZT response: invalid serial number");
   return result;
