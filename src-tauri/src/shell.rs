@@ -483,6 +483,15 @@ pub fn run() {
             clear_logs,
             open_external,
         ])
+        .on_window_event(|window, event| {
+            // macOS 驻留行为：关窗=隐藏，App 留在 Dock；退出走 Cmd+Q
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .setup(|app| {
             let bootstrap = tauri::async_runtime::block_on(setup_state()).map_err(Box::<dyn std::error::Error>::from)?;
             let manager = bootstrap.manager.clone();
@@ -520,22 +529,23 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building the Tauri application")
         .run(|app_handle, event| match event {
-            tauri::RunEvent::ExitRequested { code, api, .. } => {
-                if code.is_none() {
-                    // 关窗不退 App（对齐 Electron 的 macOS 行为）；真正的退出走 Exit
-                    api.prevent_exit();
-                }
-            }
             tauri::RunEvent::Exit => {
                 let state = app_handle.state::<Arc<AppState>>();
                 let manager = state.manager.clone();
                 tauri::async_runtime::block_on(async move { manager.stop_all().await });
             }
-            tauri::RunEvent::Reopen { .. } if app_handle.webview_windows().is_empty() => {
-                let _ = tauri::WebviewWindowBuilder::new(app_handle, "main", tauri::WebviewUrl::App("index.html".into()))
-                    .title("Local Forwarder")
-                    .inner_size(1200.0, 760.0)
-                    .build();
+            tauri::RunEvent::Reopen { .. } => match app_handle.get_webview_window("main") {
+                Some(window) => {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+                None => {
+                    let _ = tauri::WebviewWindowBuilder::new(app_handle, "main", tauri::WebviewUrl::App("index.html".into()))
+                        .title("Local Forwarder")
+                        .inner_size(1200.0, 760.0)
+                        .build();
+                }
             }
             _ => {}
         });

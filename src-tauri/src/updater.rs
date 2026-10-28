@@ -247,7 +247,7 @@ impl UpdateService {
             return;
         }
         let service = self.clone();
-        tokio::spawn(async move {
+        tauri::async_runtime::spawn(async move {
             tokio::time::sleep(BACKGROUND_CHECK_DELAY).await;
             let inner = service.inner.lock().await;
             let disposed = inner.disposed;
