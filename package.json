@@ -10,6 +10,7 @@
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml",
     "package:mac": "tauri build",
+    "package:release:mac": "tauri build && node scripts/generate-update-manifest.mjs && node scripts/verify-release-assets.mjs mac",
     "verify:release:tag": "node scripts/verify-release-tag.mjs",
     "verify:release:mac": "node scripts/verify-release-assets.mjs mac"
   },
