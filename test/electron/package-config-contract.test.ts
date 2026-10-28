@@ -21,11 +21,16 @@ test("Electron Builder exposes a cross-platform Windows NSIS target", async () =
   assert.match(builderConfig, /^\s+-\s+dist\/\*\*\s*$/m);
   assert.match(builderConfig, /^\s+-\s+dist-electron\/\*\*\s*$/m);
   assert.match(builderConfig, /^\s+-\s+package\.json\s*$/m);
-  assert.match(builderConfig, /^extraResources:\s*$/m);
+  assert.doesNotMatch(builderConfig, /^extraResources:\s*$/m);
+  assert.match(builderConfig, /^ {2}extraResources:\s*$/m);
   assert.match(builderConfig, /^\s+-\s+from:\s+resources\/protocol\s*$/m);
   assert.match(builderConfig, /^\s+to:\s+protocol\s*$/m);
   assert.match(builderConfig, /^\s+filter:\s*$/m);
   assert.match(builderConfig, /^\s+-\s+"\*\*\/\*"\s*$/m);
+  assert.match(builderConfig, /^\s+-\s+"!node\/win-x64\/\*\*"\s*$/m);
+  assert.match(builderConfig, /^\s+-\s+"!encode\/h5encode-win-x86\.exe"\s*$/m);
+  assert.match(builderConfig, /^\s+-\s+"!node\/darwin-arm64\/\*\*"\s*$/m);
+  assert.match(builderConfig, /^\s+-\s+"!encode\/h5encode-mac-amd64"\s*$/m);
   assert.match(builderConfig, /win:\s*\n(?:\s+.*\n)*?\s+target:\s*\n\s+-\s+nsis/m);
   assert.match(builderConfig, /mac:\s*\n(?:\s+.*\n)*?\s+target:\s*\n(?:\s+-\s+(?:dmg|zip)\s*\n){2}/m);
   assert.match(builderConfig, /mac:\s*\n(?:\s+.*\n)*?\s+-\s+dmg/m);

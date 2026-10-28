@@ -9,11 +9,6 @@ files:
   - "!dist/mac*/**"
   - "!dist/win*/**"
   - "!dist/*.{exe,dmg,zip,blockmap,yml,yaml}"
-extraResources:
-  - from: resources/protocol
-    to: protocol
-    filter:
-      - "**/*"
 publish:
   provider: github
   owner: NanLiShuSheng
@@ -21,12 +16,26 @@ publish:
   releaseType: release
 afterSign: scripts/notarize.mjs
 mac:
+  extraResources:
+    - from: resources/protocol
+      to: protocol
+      filter:
+        - "**/*"
+        - "!node/win-x64/**"
+        - "!encode/h5encode-win-x86.exe"
   target:
     - dmg
     - zip
   hardenedRuntime: true
   gatekeeperAssess: false
 win:
+  extraResources:
+    - from: resources/protocol
+      to: protocol
+      filter:
+        - "**/*"
+        - "!node/darwin-arm64/**"
+        - "!encode/h5encode-mac-amd64"
   target:
     - nsis
   icon: resources/icon.ico
