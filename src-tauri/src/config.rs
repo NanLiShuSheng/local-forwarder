@@ -119,6 +119,8 @@ pub struct AppConfig {
     pub forwarding_address_history: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub legacy: Option<LegacyData>,
+    #[serde(rename = "requestHistory", skip_serializing_if = "Option::is_none")]
+    pub request_history: Option<Vec<String>>,
 }
 
 pub fn create_default_config() -> AppConfig {
@@ -147,6 +149,7 @@ pub fn create_default_config() -> AppConfig {
             replace_text: String::new(),
         }),
         forwarding_address_history: Some(serde_json::json!({ "hq": [], "jy": [], "zx": [] })),
+        request_history: None,
         legacy: Some(LegacyData::default()),
     }
 }

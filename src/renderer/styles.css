@@ -409,9 +409,13 @@ h2 { font-size: 1.35rem; }
 @keyframes toast-enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
 @media (max-width: 620px) { .toast-viewport { right: 12px; bottom: 12px; width: calc(100vw - 24px); } }
 .request-panel { max-width: 1100px; }
-.request-endpoint { display: grid; grid-template-columns: minmax(0, 1fr) 180px auto; gap: 12px; align-items: end; margin-bottom: 18px; }
+.request-endpoint { display: grid; grid-template-columns: minmax(0, 1.3fr) 200px minmax(0, 1fr); gap: 12px; align-items: end; margin-bottom: 18px; }
 .request-endpoint label { display: grid; gap: 8px; color: var(--text-label); font-size: 0.8rem; }
 .request-endpoint input { border: 1px solid var(--border-input); border-radius: 8px; padding: 9px 10px; color: var(--text-primary); background: var(--input-background); outline: none; }
+.request-address-controls { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.request-address-controls .ant-select { flex: 1; min-width: 0; }
+.request-address-controls .ant-select .ant-select-selector { border: 1px solid var(--border-input) !important; border-radius: 8px !important; background: var(--input-background) !important; min-height: 40px !important; padding: 4px 10px !important; }
+.request-address-controls .ant-select-input input { color: var(--text-primary) !important; }
 .request-url { display: flex; align-items: center; gap: 7px; min-height: 40px; border: 1px solid var(--border-field); border-radius: 8px; padding: 0 12px; color: var(--text-success); background: var(--code-surface-background); font: 0.78rem ui-monospace, SFMono-Regular, Menlo, monospace; }
 .request-url span { color: var(--text-subtle); }
 .request-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }

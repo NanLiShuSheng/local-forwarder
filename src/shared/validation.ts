@@ -86,7 +86,7 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
     "mapValues",
     "accounts",
     "cache",
-  ], ["legacy", "projectPath", "localText", "launchPath", "cardTargetId", "request", "stringTool", "forwardingAddressHistory"])) return "root";
+  ], ["legacy", "projectPath", "localText", "launchPath", "cardTargetId", "request", "stringTool", "forwardingAddressHistory", "requestHistory"])) return "root";
 
   const server = value.server;
   if (!isRecord(server)) return "server";
@@ -146,6 +146,13 @@ export function getAppConfigValidationError(value: unknown): string | undefined 
           if (typeof address !== "string" || address.trim().length === 0) return `forwardingAddressHistory.${key}[${index}]`;
         }
       }
+    }
+  }
+
+  if (value.requestHistory !== undefined) {
+    if (!Array.isArray(value.requestHistory) || value.requestHistory.length > 10) return "requestHistory";
+    for (const [index, address] of value.requestHistory.entries()) {
+      if (typeof address !== "string" || address.trim().length === 0) return `requestHistory[${index}]`;
     }
   }
 

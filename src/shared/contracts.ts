@@ -58,6 +58,7 @@ export interface AppConfig {
     transport?: "tcp" | "http";
   }>;
   forwardingAddressHistory?: ForwardingAddressHistory | string[];
+  requestHistory?: string[];
   localText?: string;
   launchPath?: string;
   cardTargetId?: string;

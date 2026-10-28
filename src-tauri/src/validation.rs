@@ -92,7 +92,7 @@ pub fn get_app_config_validation_error(value: &Value) -> Option<String> {
     if !has_only_keys(
         object,
         &["server", "httpRules", "tcpTargets", "localValues", "mapValues", "accounts", "cache"],
-        &["legacy", "projectPath", "localText", "launchPath", "cardTargetId", "request", "stringTool", "forwardingAddressHistory"],
+        &["legacy", "projectPath", "localText", "launchPath", "cardTargetId", "request", "stringTool", "forwardingAddressHistory", "requestHistory"],
     ) {
         return Some("root".to_string());
     }
@@ -222,6 +222,18 @@ pub fn get_app_config_validation_error(value: &Value) -> Option<String> {
             }
         } else {
             return Some("forwardingAddressHistory".to_string());
+        }
+    }
+
+    if let Some(history) = object.get("requestHistory") {
+        let Some(list) = history.as_array() else { return Some("requestHistory".to_string()) };
+        if list.len() > 10 {
+            return Some("requestHistory".to_string());
+        }
+        for (index, address) in list.iter().enumerate() {
+            if !address.as_str().is_some_and(|text| !text.trim().is_empty()) {
+                return Some(format!("requestHistory[{index}]"));
+            }
         }
     }
 

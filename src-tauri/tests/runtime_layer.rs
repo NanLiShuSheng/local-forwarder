@@ -27,6 +27,9 @@ fn validation_pinpoints_bad_fields() {
     let mut value = serde_json::to_value(create_default_config()).unwrap();
     value["tcpTargets"][0]["basePath"] = json!("relative");
     assert_eq!(forwarder_core::validation::get_app_config_validation_error(&value).as_deref(), Some("tcpTargets[0].basePath"));
+    let mut value = serde_json::to_value(create_default_config()).unwrap();
+    value["requestHistory"] = json!(["127.0.0.1:8080", ""]);
+    assert_eq!(forwarder_core::validation::get_app_config_validation_error(&value).as_deref(), Some("requestHistory[1]"));
 }
 
 #[tokio::test]
