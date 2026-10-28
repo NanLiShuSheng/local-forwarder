@@ -74,6 +74,15 @@ test("codec survives a helper-reported request error", () => {
   assert.equal(codec.rc4(Buffer.from("Plaintext"), "file").toString("hex"), "7ad9f940a0c3d07a8f");
 });
 
+test("codec decodes frames whose helper JSON exceeds the old 10 MiB buffer", () => {
+  const codec = createTztCodec();
+  const frame = codec.encode({ Action: "100", BIG: "x".repeat(1_500_000) }, 12);
+
+  const { zzkeyByte, zzbytes, ...fields } = codec.decode(frame);
+  assert.ok(zzkeyByte !== undefined && zzbytes !== undefined);
+  assert.equal(fields.BIG, "x".repeat(1_500_000));
+});
+
 test("codec rejects malformed and truncated frames instead of returning bad data", () => {
   const codec = createTztCodec();
 

@@ -30,7 +30,8 @@ interface LegacyResponse {
 const MAGIC = 0x07b7;
 const HEADER_SIZE = 6;
 const MAX_FRAME_SIZE = 64 * 1024 * 1024;
-const MAX_HELPER_RESPONSE_SIZE = 10 * 1024 * 1024; // matches the former execFileSync maxBuffer
+// 新版 bytecode 的 zzkeyByte 元数据会把大字段响应 JSON 放大约 14 倍（1.5MB 字段实测 21MB），上限与帧上限对齐
+const MAX_HELPER_RESPONSE_SIZE = 64 * 1024 * 1024;
 const EAGAIN_WAIT_FLAG = new Int32Array(new SharedArrayBuffer(4));
 const FIXED_FRAME = "b7072500000064000300000200000031320006416374696f6e0300000031303003666f6f03000000626172";
 const FIXED_FILE_RC4 = "7ad9f940a0c3d07a8f";
