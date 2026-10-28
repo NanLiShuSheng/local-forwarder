@@ -421,8 +421,14 @@ export class HttpProxy {
       params = Object.fromEntries(new URLSearchParams(substituted).entries());
     }
     const targets = (this.options.tcpTargets ?? []).filter((target) => target.enabled);
-    const index = Number((uppercaseParams(params).REQLINKTYPE ?? 1));
-    const target = targets[index] ?? targets[0];
+    const rawLinkType = uppercaseParams(params).REQLINKTYPE?.trim();
+    const index = rawLinkType === undefined || rawLinkType === "" ? undefined : Number(rawLinkType);
+    const tradeTarget = targets.find((candidate) => candidate.id.toLowerCase() === "jy" || candidate.name.toLowerCase() === "jy")
+      ?? targets[1]
+      ?? targets[0];
+    const target = index !== undefined && Number.isInteger(index) && index >= 0
+      ? targets[index] ?? tradeTarget
+      : tradeTarget;
     if (target === undefined) return writeJson(response, { error: "TCP target is unavailable" }, 502);
     if (target.transport === "http") {
       await this.forwardReqxmlOverHttp(target, route, params, response, method, headers, login);

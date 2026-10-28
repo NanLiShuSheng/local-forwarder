@@ -46,17 +46,13 @@ test("GitHub update URLs match the uploaded Windows installer asset name", async
   assert.match(verifyScript, /Local-Forwarder-Setup-\$\{packageJson\.version\}\.exe/);
 });
 
-test("GitHub update URLs match the uploaded macOS ZIP and DMG asset names", async () => {
+test("macOS package asset names match their builder configuration", async () => {
   const builderConfig = await readFile("electron-builder.yml", "utf8");
-  const releaseWorkflow = await readFile(".github/workflows/release.yml", "utf8");
   const releaseAssets = await readFile("scripts/verify-release-assets.mjs", "utf8");
   const createDmg = await readFile("scripts/create-dmg.mjs", "utf8");
   const verifyDmg = await readFile("scripts/verify-dmg.mjs", "utf8");
 
   assert.match(builderConfig, /artifactName:\s*Local-Forwarder-\$\{version\}-\$\{arch\}-mac\.\$\{ext\}/);
-  assert.match(releaseWorkflow, /release\/Local-Forwarder-\*-mac\.dmg/);
-  assert.match(releaseWorkflow, /dist\/Local-Forwarder-\*-mac\.zip/);
-  assert.match(releaseWorkflow, /dist\/Local-Forwarder-\*-mac\.zip\.blockmap/);
   assert.match(releaseAssets, /"Local-Forwarder-" \+ version \+ dmgArchitectureSuffix \+ "-mac\.dmg"/);
   assert.match(releaseAssets, /"Local-Forwarder-" \+ version \+ zipArchitectureSuffix \+ "-mac\.zip"/);
   assert.match(createDmg, /"Local-Forwarder-" \+ packageJson\.version \+ architectureSuffix \+ "-mac\.dmg"/);

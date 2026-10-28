@@ -107,7 +107,7 @@
 ### GitHub Releases 自动更新（2026-09-22）
 
 - 主进程通过 `electron-updater` 提供手动检查、下载进度和安装前停止代理；renderer 使用持久更新卡片，普通错误继续使用短时 Toast。
-- Release Tag 必须与 `package.json.version` 匹配，Windows NSIS 与 macOS DMG/ZIP 资产会在发布前校验版本、更新元数据和 `sha512`。
-- `.github/workflows/release.yml` 仅对 `v*` Tag 构建 Windows x64 和 Intel macOS x64，两个构建 job 成功后由 publish job 创建 GitHub Release。
-- macOS Actions 需要配置 `MACOS_CERTIFICATE_BASE64`、`MACOS_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；本地构建跳过签名环境检查和公证。
-- 已完成 renderer、发布脚本和 workflow 契约测试；真实 Windows runner、Apple Developer ID 签名/公证以及两版本自动更新验收需在对应外部环境执行。
+- Release Tag 必须与 `package.json.version` 匹配；Windows NSIS 安装器、`.blockmap` 和 `latest.yml` 会在发布前校验版本、更新元数据和 `sha512`。
+- `.github/workflows/release.yml` 仅对 `v*` Tag 构建 Windows x64，发布任务只依赖 Windows job 并创建 GitHub Release。
+- GitHub 自动更新目前只面向 Windows；macOS 打包脚本保留用于本地构建，不参与 Release。Windows 代码签名不是自动更新前置条件，可单独配置以减少 SmartScreen 提示。
+- 更新服务和发布脚本契约已覆盖；真实 Windows runner、NSIS 安装及两版本自动更新验收需在 Windows 环境执行。

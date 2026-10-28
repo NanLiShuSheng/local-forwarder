@@ -1,7 +1,7 @@
 # GitHub Releases 自动更新交接文档
 
-日期：2026-09-28
-状态：v0.1.1 本地候选准备中；GitHub Release 尚未推送
+日期：2026-10-26
+状态：自动更新发布范围限定为 Windows x64；GitHub Release 尚未发布
 
 ## 目标
 
@@ -9,23 +9,20 @@
 
 GitHub 仓库已确认：`NanLiShuSheng/local-forwarder`，公开仓库，默认分支 `main`。
 
-## 最新状态（2026-09-28）
+## 最新状态（2026-10-26）
 
-- 当前工作树：分支 `local-forwarder` 上的 `4fe8f1d` 已包含 v0.1.1 发布改动，`package.json` 版本为 `0.1.1`；工作区只剩 `src/renderer/styles.css` 的既有修改。`origin` 已配置为 `https://github.com/NanLiShuSheng/local-forwarder.git`，但分支尚未推送，也没有本地 `v0.1.1` Tag。GitHub 的 `main` 指向 `0a2242d`，远端 `v0.1.0` Tag 指向 `b502073`；当前分支包含该发布提交及其后的 `8d19ef6`、`65420d2`。本地同名 `v0.1.0` Tag 却指向 `65420d2`，与 GitHub 已发布 Tag 不同。不要推送本地 `v0.1.0` Tag，也不要使用 `git push --tags`。
-- 更新安装保护问题已修复：`install()` 在停止代理前、后都检查当前状态仍为 `downloaded`；`test/electron/update-service.test.ts` 有对应回归覆盖。
-- Windows 候选包位于 [`release/v0.1.1-candidate`](../../../release/v0.1.1-candidate)：本轮重新核对安装器相对 `latest.yml` 的 SHA-512 和文件大小，并通过 Release 资产校验。
-- macOS x64 候选包本轮通过 Release 资产校验；ZIP 的 SHA-512 和文件大小与 `latest-mac.yml` 一致，DMG 也通过只包含 x86_64 主程序的架构校验。本地 ARM64 runtime 下载因 GitHub 连接超时无法完成；此前使用临时 x64 runtime 生成的 arm64 ZIP 已确认架构错误，未放入候选目录。项目配置没有该临时覆盖，GitHub Actions 会按 arm64 目标下载 runtime 并执行 DMG 验证。
-- Release workflow 将 macOS 资产先放入 `macos-release-assets/` 再上传，保证下载到 publish job 后的 DMG、ZIP、`.blockmap` 和 `latest-mac.yml` 都处于同一层。
-- 本地 macOS 包未签名/公证。正式 Release 需要在 GitHub 仓库配置 `MACOS_CERTIFICATE_BASE64`、`MACOS_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`。
-- 此前全量验证为 426 项通过、1 项跳过、0 项失败；本轮未重新运行测试。此次新增的发布资产哈希和 Tag 检查已单独通过。
-- `src/renderer/styles.css` 有既有未提交修改，继续保留；暂存发布改动时应显式选择文件。正式资产由 GitHub Actions 从最终 Tag 重建，候选目录只用于本地预检。
+- 自动更新发布只支持 Windows x64。Release workflow 只构建 NSIS 安装器，并上传 `.exe`、`.blockmap` 和 `latest.yml`；macOS 本地打包配置保留，不参与自动更新发布。
+- `package.json` 当前版本为 `0.1.1`。GitHub 远端目前只有 `v0.1.0` Tag，Release 列表为空；客户端暂时没有更新元数据可查。要升级 `0.1.1` 安装包，下一次发布版本必须高于 `0.1.1`，例如 `0.1.2`。
+- 最新 Windows CI 在 `npm test` 步骤失败：[Actions run](https://github.com/NanLiShuSheng/local-forwarder/actions/runs/40280186156)。公开 API 不允许读取详细日志，需要仓库管理员在 Actions 页面查看失败用例。
+- Windows Release 不需要 Apple 签名/公证 Secrets。Windows 代码签名可选，主要用于减少 SmartScreen 提示。
+- 自动更新服务和界面已经接入；尚未通过两版 Windows 安装包完成真实升级验收。
 
 ## 仍需完成
 
-1. 推送 `local-forwarder` 分支，并将分支现有提交和发布改动审阅、合入 `main`；不要推送本地 `v0.1.0` Tag。
-2. 在 GitHub Actions Secrets 配置上面列出的 macOS 签名/公证变量。
-3. 在已合入 `main` 的发布提交上创建并单独推送 `v0.1.1` Tag；Release workflow 会在 GitHub runner 上构建并验证 x64/arm64 资产。
-4. 发布后用 `0.1.0` 安装包验证升级到 `0.1.1`。
+1. 查看并修复 Windows CI 的测试失败，确保 Release 工作流中的 `npm test` 通过。
+2. 准备高于 `0.1.1` 的版本号，更新 `package.json` 和 `package-lock.json`，并创建版本匹配的 `v` Tag。
+3. 确认 GitHub Release 含 NSIS 安装器、对应 `.blockmap` 和 `latest.yml`。
+4. 从 Windows NSIS 安装版检查、下载并升级到新版本，完成端到端验收。
 
 ## 历史记录（截至 2026-09-21）
 
@@ -94,24 +91,15 @@ GitHub 仓库已确认：`NanLiShuSheng/local-forwarder`，公开仓库，默认
 6. 任务 7：运行全量验证、平台打包和两版本升级验收。
 7. 任务 8：最终安全检查、代码审查和发布交接。
 
-## 关键发布约定
+## Windows 发布约定
 
-- 当前版本基线：`0.1.0`。
-- Release Tag 必须匹配 package 版本，例如 `v0.1.1`。
+- 当前版本为 `0.1.1`；下一次更新必须使用更高版本，例如 `0.1.2`。
+- Release Tag 必须与 `package.json.version` 匹配，例如 `0.1.2` 对应 `v0.1.2`。
 - 客户端不内置 GitHub Token。
-- macOS 自动更新需要 GitHub Actions Secrets：
-
-```text
-MACOS_CERTIFICATE_BASE64
-MACOS_CERTIFICATE_PASSWORD
-APPLE_ID
-APPLE_APP_SPECIFIC_PASSWORD
-APPLE_TEAM_ID
-```
-
-- 普通构建不能发布；只有匹配版本 Tag 的 Release workflow 才能上传安装包和 `latest.yml`/`latest-mac.yml`。
-- 不要执行 `git reset --hard`、`git checkout --` 或清理未跟踪文件。工作树中有大量用户既有修改，必须保留。
+- Windows Release 上传 NSIS 安装器、`.blockmap` 和 `latest.yml`；Windows 代码签名可选。
+- 普通构建不能发布；只有匹配版本 Tag 的 Release workflow 才会创建 GitHub Release。
+- 不要执行 `git reset --hard`、`git checkout --` 或清理未跟踪文件；保留工作树中的用户修改。
 
 ## 工作树注意事项
 
-当前分支为 `local-forwarder`，发布实现已提交到 `4fe8f1d`，`origin` 已配置但分支尚未推送。本地 `v0.1.0` Tag 与 GitHub 已发布 Tag 指向不同提交，禁止推送本地 `v0.1.0` Tag。保留 `src/renderer/styles.css` 的既有修改，不要批量暂存或回退工作区。
+当前分支为 `local-forwarder`。工作开始前，分支与 `origin/local-forwarder` 均指向 `3931902`。本地 `v0.1.0` Tag 与远端 Tag 指向不同提交，不要推送本地 `v0.1.0` Tag，也不要使用 `git push --tags`。

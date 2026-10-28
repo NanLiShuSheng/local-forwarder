@@ -180,8 +180,18 @@ button { cursor: pointer; }
 .proxy-instance-sidebar-list::-webkit-scrollbar-thumb { border-radius: 99px; background: var(--scrollbar-thumb); }
 .proxy-instance-sidebar-card { position: relative; width: 100%; min-width: 0; border: 1px solid var(--border-card); border-radius: 10px; color: var(--text-bright); background: var(--surface-background); }
 .proxy-instance-sidebar-card:hover, .proxy-instance-sidebar-card.selected { border-color: var(--border-selected); background: var(--surface-selected-background); }
+.proxy-instance-sidebar-card.dragging { opacity: .48; }
+.proxy-instance-sidebar-card.drop-before::before, .proxy-instance-sidebar-card.drop-after::after { position: absolute; z-index: 2; right: 8px; left: 8px; height: 2px; border-radius: 2px; background: var(--success); content: ""; pointer-events: none; }
+.proxy-instance-sidebar-card.drop-before::before { top: 1px; }
+.proxy-instance-sidebar-card.drop-after::after { bottom: 1px; }
 .proxy-instance-sidebar-card-main { display: block; width: 100%; border: 0; border-radius: 9px; padding: 10px 34px 10px 11px; color: inherit; background: transparent; text-align: left; }
 .proxy-instance-sidebar-card-main:focus-visible { outline: 2px solid var(--border-selected); outline-offset: -2px; }
+.proxy-instance-sidebar-reorder-handle { position: absolute; top: 50%; right: 7px; z-index: 1; display: grid; width: 22px; height: 30px; transform: translateY(-50%); place-items: center; border: 0; border-radius: 5px; padding: 0; color: var(--text-muted); background: transparent; cursor: grab; opacity: .5; }
+.proxy-instance-sidebar-card:hover .proxy-instance-sidebar-reorder-handle, .proxy-instance-sidebar-reorder-handle:focus-visible { color: var(--text-secondary); opacity: 1; }
+.proxy-instance-sidebar-reorder-handle:active { cursor: grabbing; }
+.proxy-instance-sidebar-reorder-handle:disabled { cursor: not-allowed; opacity: .25; }
+.proxy-instance-sidebar-reorder-handle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.proxy-instance-sidebar-reorder-icon { width: 12px; height: 18px; fill: currentColor; }
 .proxy-instance-context-menu { position: fixed; z-index: 20; display: grid; min-width: 156px; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 9px; padding: 5px; background: var(--surface-background); box-shadow: 0 14px 32px var(--shadow-strong); }
 .proxy-instance-context-menu button { width: 100%; border: 0; border-radius: 6px; padding: 8px 10px; color: var(--text-button); background: transparent; font-size: 0.76rem; text-align: left; }
 .proxy-instance-context-menu button:hover:not(:disabled), .proxy-instance-context-menu button:focus-visible { color: var(--text-success); background: var(--selection-background); outline: none; }
