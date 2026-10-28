@@ -1,0 +1,33 @@
+{
+  "productName": "Local Forwarder",
+  "version": "0.1.0",
+  "identifier": "com.localforwarder.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev:renderer",
+    "beforeBuildCommand": "node scripts/prepare-tauri-resources.mjs && npm run build"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Local Forwarder",
+        "width": 1200,
+        "height": 760,
+        "resizable": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg"],
+    "resources": {
+      "../src-tauri/staged-protocol": "protocol"
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}

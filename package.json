@@ -7,6 +7,7 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"vite --config vite.config.ts\" \"npm run build:electron && wait-on http://localhost:5173 && electron .\"",
+    "dev:renderer": "vite --config vite.config.ts",
     "build:electron": "tsc -p tsconfig.node.json && node scripts/flatten-electron.mjs",
     "build": "npm run build:electron && tsc -p tsconfig.json --noEmit && vite build",
     "test": "npm run build && node scripts/run-tests.mjs",
@@ -22,6 +23,7 @@
     "smoke": "node scripts/smoke-electron.mjs"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.12.4",
     "antd": "^6.6.5",
     "electron-updater": "^6.8.9",
     "react": "latest",
@@ -29,6 +31,7 @@
   },
   "devDependencies": {
     "@electron/notarize": "^3.1.1",
+    "@tauri-apps/cli": "^2.12.4",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
