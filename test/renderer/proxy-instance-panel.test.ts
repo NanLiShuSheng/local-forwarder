@@ -22,7 +22,7 @@ test("overview renders proxy instance management actions", async () => {
   assert.match(runtime, /代理状态/);
 });
 
-test("overview exposes project directory and editable local server settings", async () => {
+test("overview exposes project directory and editable proxy settings", async () => {
   const panel = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");
   assert.match(panel, /项目目录/);
   assert.match(panel, /选择项目目录/);
@@ -51,13 +51,15 @@ test("overview places the proxy name and status above the project directory", as
 
 test("overview disables editable data while the proxy is running", async () => {
   const panel = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");
-  assert.match(panel, /<input(?=[^>]*aria-label="编辑代理名称")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
-  assert.match(panel, /<input(?=[^>]*aria-label="项目目录")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
-  assert.match(panel, /<button(?=[^>]*disabled=\{running \|\| busy\})[^>]*>选择项目目录<\/button>/);
-  assert.match(panel, /<input(?=[^>]*aria-label="监听主机")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
-  assert.match(panel, /<input(?=[^>]*aria-label="监听端口")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
-  assert.match(panel, /<input(?=[^>]*aria-label="超时时间")(?=[^>]*disabled=\{running \|\| busy\})[^>]*>/);
-  assert.match(panel, /className=\{`proxy-instance-sidebar-action \$\{running \? "stop" : "start"\}`\}/);
+  assert.match(panel, /const overviewLocked = running \|\| busy;/);
+  assert.match(panel, /if \(notifyOverviewLocked\(\)\) return; set/);
+  assert.match(panel, /<input(?=[^>]*aria-label="编辑代理名称")(?=[^>]*readOnly=\{overviewLocked\})(?=[^>]*aria-readonly=\{overviewLocked\})(?=[^>]*aria-disabled=\{overviewLocked\})[^>]*>/);
+  assert.match(panel, /<input(?=[^>]*aria-label="项目目录")(?=[^>]*readOnly=\{overviewLocked\})(?=[^>]*aria-readonly=\{overviewLocked\})(?=[^>]*aria-disabled=\{overviewLocked\})[^>]*>/);
+  assert.match(panel, /<button(?=[^>]*aria-disabled=\{overviewLocked\})[^>]*>选择项目目录<\/button>/);
+  assert.match(panel, /<input(?=[^>]*aria-label="监听主机")(?=[^>]*readOnly=\{overviewLocked\})(?=[^>]*aria-readonly=\{overviewLocked\})(?=[^>]*aria-disabled=\{overviewLocked\})[^>]*>/);
+  assert.match(panel, /<input(?=[^>]*aria-label="监听端口")(?=[^>]*readOnly=\{overviewLocked\})(?=[^>]*aria-readonly=\{overviewLocked\})(?=[^>]*aria-disabled=\{overviewLocked\})[^>]*>/);
+  assert.match(panel, /<input(?=[^>]*aria-label="超时时间")(?=[^>]*readOnly=\{overviewLocked\})(?=[^>]*aria-readonly=\{overviewLocked\})(?=[^>]*aria-disabled=\{overviewLocked\})[^>]*>/);
+  assert.match(panel, /className=\{`proxy-instance-sidebar-action \$\{running \? "stop" : "start"\}`\} type="button" disabled=\{busy\}/);
 });
 
 test("settings tab and legacy config actions are removed from the renderer", async () => {

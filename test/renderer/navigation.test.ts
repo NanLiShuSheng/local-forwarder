@@ -15,7 +15,7 @@ test("sidebar navigation puts the primary pages first in the requested order", a
   assert.ok(pagesMatch);
   const labels = [...pagesMatch[1].matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
 
-  assert.deepEqual(labels, ["概览", "请求", "加密", "JSON 可视化", "日志", "字符串", "本地变量", "登录缓存", "外观"]);
+  assert.deepEqual(labels, ["概览", "请求", "加密", "JSON 可视化", "日志", "字符串", "本地变量", "本地缓存", "登录缓存", "外观"]);
 });
 
 test("sidebar navigation removes the visible feature heading without changing its accessible name", async () => {
@@ -24,7 +24,7 @@ test("sidebar navigation removes the visible feature heading without changing it
 
   assert.match(source, /<nav className="sidebar-nav" aria-label="功能导航">/);
   assert.doesNotMatch(source, /<span className="sidebar-nav-label">功能<\/span>/);
-  assert.match(styles, /\.sidebar-nav::before/);
+  assert.doesNotMatch(styles, /\.sidebar-nav-label/);
 });
 
 test("sidebar navigation gives every tab an icon without changing its label", async () => {
@@ -35,6 +35,7 @@ test("sidebar navigation gives every tab an icon without changing its label", as
   assert.match(source, /icon: "request"/);
   assert.match(source, /icon: "string"/);
   assert.match(source, /icon: "local"/);
+  assert.match(source, /icon: "cache"/);
   assert.match(source, /icon: "values"/);
   assert.match(source, /icon: "encryption"/);
   assert.match(source, /icon: "logs"/);

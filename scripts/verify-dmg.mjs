@@ -18,6 +18,7 @@ const defaultDmgPath = path.join(
 );
 const dmgPath = path.resolve(explicitDmgPath ?? defaultDmgPath);
 const mountPoint = mkdtempSync(path.join(os.tmpdir(), "local-forwarder-dmg-"));
+let attachedDisk;
 
 function fail(message) {
   console.error(`DMG verification failed: ${message}`);
@@ -47,24 +48,41 @@ try {
   }
 
   run("hdiutil", ["verify", dmgPath]);
-  run("hdiutil", ["attach", "-nobrowse", "-readonly", "-mountpoint", mountPoint, dmgPath]);
+  const attachOutput = run("hdiutil", ["attach", "-nobrowse", "-readonly", "-mountpoint", mountPoint, dmgPath]);
+  const attachedDisks = [...attachOutput.matchAll(/\/dev\/(disk\d+)(?:s\d+)?\s/g)];
+  attachedDisk = attachedDisks[attachedDisks.length - 1]?.[1];
 
   const appPath = path.join(mountPoint, `${packageJson.productName ?? "Local Forwarder"}.app`);
   const executablePath = path.join(appPath, "Contents", "MacOS", packageJson.productName ?? "Local Forwarder");
   const encoderPath = path.join(appPath, "Contents", "Resources", "protocol", "encode", "h5encode-mac-amd64");
+  const nodeArchitecture = architecture === "arm64" ? "macos-arm64" : "macos-x64";
+  const otherNodeArchitecture = architecture === "arm64" ? "macos-x64" : "macos-arm64";
+  const nodePath = path.join(appPath, "Contents", "Resources", "protocol", "node", nodeArchitecture, "node");
+  const otherNodePath = path.join(appPath, "Contents", "Resources", "protocol", "node", otherNodeArchitecture, "node");
+  const windowsNodePath = path.join(appPath, "Contents", "Resources", "protocol", "node", "win-x64");
+  const nodeLicensePath = path.join(appPath, "Contents", "Resources", "protocol", "node", nodeArchitecture, "LICENSE.txt");
   const requiredPaths = [
     path.join(appPath, "Contents", "Info.plist"),
     executablePath,
     path.join(appPath, "Contents", "Resources", "app.asar"),
     path.join(appPath, "Contents", "Resources", "protocol"),
     path.join(appPath, "Contents", "Resources", "protocol", "tzt.bytecode-16.13.0"),
+    path.join(appPath, "Contents", "Resources", "protocol", "tzt-node16-helper.js"),
     encoderPath,
+    nodePath,
+    nodeLicensePath,
   ];
 
   for (const requiredPath of requiredPaths) {
     if (!existsSync(requiredPath)) {
       throw new Error(`installed app is missing ${requiredPath}`);
     }
+  }
+  if (existsSync(otherNodePath)) {
+    throw new Error(`DMG contains an unnecessary ${otherNodeArchitecture} Node.js runtime`);
+  }
+  if (existsSync(windowsNodePath)) {
+    throw new Error("DMG contains an unnecessary Windows Node.js runtime");
   }
 
   const architectures = run("lipo", ["-archs", executablePath]).trim().split(/\s+/);
@@ -75,6 +93,18 @@ try {
   const encoderArchitectures = run("lipo", ["-archs", encoderPath]).trim().split(/\s+/);
   if (!encoderArchitectures.includes("x86_64")) {
     throw new Error("DMG is missing the x86_64 encryption encoder required for Rosetta");
+  }
+  const nodeArchitectures = run("lipo", ["-archs", nodePath]).trim().split(/\s+/);
+  if (nodeArchitectures.length !== 1 || nodeArchitectures[0] !== expectedArchitecture) {
+    throw new Error("DMG Node.js 16 runtime architecture mismatch: expected only " + expectedArchitecture + ", found " + nodeArchitectures.join(", "));
+  }
+  if ((statSync(nodePath).mode & 0o111) === 0) {
+    throw new Error("DMG Node.js 16 runtime is not executable");
+  }
+  const hostArchitecture = process.arch === "x64" ? "x86_64" : process.arch;
+  if (hostArchitecture === expectedArchitecture) {
+    const nodeVersion = run(nodePath, ["--version"]).trim();
+    if (nodeVersion !== "v16.13.0") throw new Error("DMG contains an unexpected Node.js runtime version: " + nodeVersion);
   }
 
   const infoPlist = readFileSync(path.join(appPath, "Contents", "Info.plist"), "utf8");
@@ -91,9 +121,31 @@ try {
     cwd: projectRoot,
     encoding: "utf8",
   });
-  if (detach.status !== 0 && existsSync(mountPoint)) {
-    console.error(`DMG verification cleanup failed: ${(detach.stderr || detach.stdout || "").trim()}`);
+  let detachResult = detach;
+  if (detachResult.status !== 0 && attachedDisk !== undefined) {
+    for (let attempt = 0; attempt < 5 && detachResult.status !== 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      detachResult = spawnSync("hdiutil", ["detach", `/dev/${attachedDisk}`], {
+        cwd: projectRoot,
+        encoding: "utf8",
+      });
+    }
+  }
+  if (detachResult.status !== 0) {
+    const forceTarget = attachedDisk === undefined ? mountPoint : `/dev/${attachedDisk}`;
+    detachResult = spawnSync("hdiutil", ["detach", "-force", forceTarget], {
+      cwd: projectRoot,
+      encoding: "utf8",
+    });
+  }
+  if (detachResult.status !== 0 && existsSync(mountPoint)) {
+    console.error(`DMG verification cleanup failed: ${(detachResult.stderr || detachResult.stdout || "").trim()}`);
     process.exitCode = 1;
   }
-  rmSync(mountPoint, { recursive: true, force: true });
+  try {
+    rmSync(mountPoint, { recursive: true, force: true });
+  } catch (error) {
+    console.error(`DMG verification temporary directory cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 1;
+  }
 }

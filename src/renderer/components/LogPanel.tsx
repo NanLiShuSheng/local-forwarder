@@ -4,7 +4,14 @@ import { parseLogRequestParams } from "../../shared/log-details";
 import type { LogKeyValue } from "../../shared/log-details";
 import { ALL_LOG_TYPES, getLogTypeOptions, matchesLogType } from "../../shared/log-types";
 import { logLevelLabels } from "../labels";
-import { getLogTypeStorage, readLogType, writeLogType } from "../log-type-preference";
+import {
+  getLogTypeStorage,
+  persistLogRequestView,
+  readLogRequestView,
+  readLogType,
+  writeLogType,
+} from "../log-type-preference";
+import type { LogRequestView } from "../log-type-preference";
 import type { LogTypeStorage } from "../log-type-preference";
 
 export function createLogClearHandler(
@@ -97,7 +104,8 @@ export function LogPanel({
   const [level, setLevel] = useState("all");
   const logTypeStorage = useMemo(() => getLogTypeStorage(), []);
   const [logType, setLogType] = useState(() => readLogType(logTypeStorage));
-  const [requestView, setRequestView] = useState<"source" | "parsed">("source");
+  const [requestView, setRequestViewState] = useState<LogRequestView>(() => readLogRequestView(logTypeStorage));
+  const setRequestView = (nextView: LogRequestView) => persistLogRequestView(nextView, logTypeStorage, setRequestViewState);
   const [isClearing, setIsClearing] = useState(false);
   const logTypeOptions = useMemo(() => getLogTypeOptions(logs), [logs]);
   const selectedLogType = resolveLogTypeSelection(logType, logTypeOptions);

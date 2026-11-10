@@ -4,4 +4,5 @@ dist-electron/
 release/
 .superpowers/
 .worktrees/
+/hscomm32/
 .DS_Store

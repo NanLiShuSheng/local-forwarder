@@ -5,6 +5,7 @@ import packageJson from "../package.json" with { type: "json" };
 
 const projectRoot = process.cwd();
 const architecture = process.argv[2] ?? "x64";
+const requestedOutputPath = process.argv[3];
 if (architecture !== "x64" && architecture !== "arm64") {
   throw new Error("macOS package architecture must be x64 or arm64");
 }
@@ -17,14 +18,16 @@ const appPath = path.join(
   (packageJson.productName ?? "Local Forwarder") + ".app",
 );
 const releaseDir = path.join(projectRoot, "release");
-const outputPath = path.join(releaseDir, "Local-Forwarder-" + packageJson.version + architectureSuffix + "-mac.dmg");
+const outputPath = requestedOutputPath === undefined
+  ? path.join(releaseDir, "Local-Forwarder-" + packageJson.version + architectureSuffix + "-mac.dmg")
+  : path.resolve(projectRoot, requestedOutputPath);
 
 if (!existsSync(appPath)) {
   console.error(`Cannot create DMG: missing packaged app at ${appPath}`);
   process.exit(1);
 }
 
-mkdirSync(releaseDir, { recursive: true });
+mkdirSync(path.dirname(outputPath), { recursive: true });
 const result = spawnSync(
   "hdiutil",
   ["create", "-volname", packageJson.productName ?? "Local Forwarder", "-srcfolder", appPath, "-ov", "-format", "UDZO", outputPath],

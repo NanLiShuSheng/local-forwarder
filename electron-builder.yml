@@ -16,6 +16,7 @@ publish:
   repo: local-forwarder
   releaseType: release
 afterSign: scripts/notarize.mjs
+afterPack: scripts/trim-protocol-node-runtimes.mjs
 mac:
   target:
     - dmg
@@ -28,4 +29,6 @@ win:
     - nsis
   icon: resources/icon.ico
 nsis:
+  oneClick: true
+  perMachine: false
   artifactName: Local-Forwarder-Setup-${version}.${ext}

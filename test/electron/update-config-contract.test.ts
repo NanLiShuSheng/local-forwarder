@@ -9,6 +9,7 @@ test("GitHub updater configuration targets the public release repository", async
     scripts: Record<string, string>;
   };
   const builder = await readFile("electron-builder.yml", "utf8");
+  const workflow = await readFile(".github/workflows/release.yml", "utf8");
 
   assert.equal(typeof packageJson.dependencies?.["electron-updater"], "string");
   assert.equal(typeof packageJson.devDependencies?.["@electron/notarize"], "string");
@@ -16,10 +17,14 @@ test("GitHub updater configuration targets the public release repository", async
   assert.match(builder, /owner:\s*NanLiShuSheng/);
   assert.match(builder, /repo:\s*local-forwarder/);
   assert.match(builder, /releaseType:\s*release/);
+  assert.match(builder, /oneClick:\s*true/);
+  assert.match(builder, /perMachine:\s*false/);
   assert.match(builder, /-\s+zip/);
   assert.match(builder, /afterSign:\s*scripts\/notarize\.mjs/);
   assert.match(builder, /hardenedRuntime:\s*true/);
   assert.match(builder, /gatekeeperAssess:\s*false/);
   assert.match(packageJson.scripts["package:release:win:x64"] ?? "", /--publish never/);
   assert.match(packageJson.scripts["package:release:mac:x64"] ?? "", /--publish never/);
+  assert.match(workflow, /WIN_CSC_LINK:\s*\$\{\{\s*secrets\.WIN_CSC_LINK\s*\}\}/);
+  assert.match(workflow, /WIN_CSC_KEY_PASSWORD:\s*\$\{\{\s*secrets\.WIN_CSC_KEY_PASSWORD\s*\}\}/);
 });

@@ -15,15 +15,22 @@ interface ProxyInstancePanelProps {
 }
 
 export function ProxyInstancePanel({ instances, status, config, onChange, onChooseProjectDirectory, onRename, onStart, onStop }: ProxyInstancePanelProps) {
-  const { notifyError } = useToast();
+  const { notify, notifyError } = useToast();
   const selected = instances.find((instance) => instance.selected) ?? instances[0];
   const busy = status.state === "starting" || status.state === "stopping";
   const running = status.state === "running";
+  const overviewLocked = running || busy;
   const [nameDraft, setNameDraft] = useState(selected?.name ?? "");
   const [projectPathDraft, setProjectPathDraft] = useState(config.projectPath ?? "");
   const [bindHostDraft, setBindHostDraft] = useState(config.server.bindHost);
   const [portDraft, setPortDraft] = useState(String(config.server.port));
   const [timeoutDraft, setTimeoutDraft] = useState(String(config.server.timeoutMs));
+
+  const notifyOverviewLocked = () => {
+    if (!overviewLocked) return false;
+    notify({ kind: "warning", title: "请先停止代理", message: "代理运行期间不能修改概况配置" });
+    return true;
+  };
 
   useEffect(() => {
     setNameDraft(selected?.name ?? "");
@@ -35,6 +42,10 @@ export function ProxyInstancePanel({ instances, status, config, onChange, onChoo
 
   const commitName = async () => {
     if (!selected) return;
+    if (overviewLocked) {
+      setNameDraft(selected.name);
+      return;
+    }
     const draft = nameDraft.trim();
     if (draft === "") {
       setNameDraft(selected.name);
@@ -46,6 +57,10 @@ export function ProxyInstancePanel({ instances, status, config, onChange, onChoo
   };
 
   const saveProjectDirectory = async () => {
+    if (overviewLocked) {
+      setProjectPathDraft(config.projectPath ?? "");
+      return;
+    }
     try {
       const projectPath = parseDirectoryInput(projectPathDraft);
       const saved = await onChange({ ...config, projectPath });
@@ -61,6 +76,12 @@ export function ProxyInstancePanel({ instances, status, config, onChange, onChoo
   };
 
   const saveServerPatch = async (patch: Partial<AppConfig["server"]>) => {
+    if (overviewLocked) {
+      setBindHostDraft(config.server.bindHost);
+      setPortDraft(String(config.server.port));
+      setTimeoutDraft(String(config.server.timeoutMs));
+      return;
+    }
     const saved = await onChange({ ...config, server: { ...config.server, ...patch } });
     if (saved) return;
     setBindHostDraft(config.server.bindHost);
@@ -72,19 +93,19 @@ export function ProxyInstancePanel({ instances, status, config, onChange, onChoo
     {selected ? <>
       <div className="proxy-instance-overview-heading">
         <span className={`status-pill ${status.state}`}><span className="status-dot" />{status.state === "running" ? "运行中" : status.state === "error" ? "异常" : "已停止"}</span>
-        <div className="proxy-instance-overview-title"><input className="proxy-instance-overview-name-input" aria-label="编辑代理名称" value={nameDraft} onChange={function (event) { setNameDraft(event.target.value); }} onBlur={function () { void commitName(); }} onKeyDown={function (event) { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } else if (event.key === "Escape") { setNameDraft(selected.name); event.currentTarget.blur(); } }} disabled={running || busy} /></div>
+        <div className="proxy-instance-overview-title"><input className="proxy-instance-overview-name-input" aria-label="编辑代理名称" value={nameDraft} onChange={function (event) { if (notifyOverviewLocked()) return; setNameDraft(event.target.value); }} onFocus={notifyOverviewLocked} onClick={notifyOverviewLocked} onBlur={function () { void commitName(); }} onKeyDown={function (event) { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } else if (event.key === "Escape") { setNameDraft(selected.name); event.currentTarget.blur(); } }} readOnly={overviewLocked} aria-readonly={overviewLocked} aria-disabled={overviewLocked} /></div>
         <div className="proxy-instance-actions"><button className={`proxy-instance-sidebar-action ${running ? "stop" : "start"}`} type="button" disabled={busy} onClick={() => { if (status.state === "running") void onStop(); else void onStart(); }}>{status.state === "running" ? "停止代理" : "启动代理"}</button></div>
       </div>
       <div className="proxy-instance-project-card">
         <div className="proxy-instance-project-field input-with-button">
-          <input aria-label="项目目录" value={projectPathDraft} placeholder="请选择项目目录" onChange={function (event) { setProjectPathDraft(event.target.value); }} onBlur={function () { void saveProjectDirectory(); }} onKeyDown={function (event) { if (event.key === "Enter") { event.preventDefault(); void saveProjectDirectory(); } }} disabled={running || busy} />
-          <button type="button" onClick={function () { void onChooseProjectDirectory(); }} disabled={running || busy}>选择项目目录</button>
+          <input aria-label="项目目录" value={projectPathDraft} placeholder="请选择项目目录" onChange={function (event) { if (notifyOverviewLocked()) return; setProjectPathDraft(event.target.value); }} onFocus={notifyOverviewLocked} onClick={notifyOverviewLocked} onBlur={function () { void saveProjectDirectory(); }} onKeyDown={function (event) { if (event.key === "Enter") { event.preventDefault(); void saveProjectDirectory(); } }} readOnly={overviewLocked} aria-readonly={overviewLocked} aria-disabled={overviewLocked} />
+          <button type="button" aria-disabled={overviewLocked} title={overviewLocked ? "请先停止代理后再修改" : undefined} onClick={function () { if (notifyOverviewLocked()) return; void onChooseProjectDirectory(); }}>选择项目目录</button>
         </div>
       </div>
       <div className="proxy-instance-overview-fields">
-        <label className="proxy-instance-overview-field"><span>监听主机 <small>HOST</small></span><input className="overview-config-input" aria-label="监听主机" value={bindHostDraft} onChange={function (event) { setBindHostDraft(event.target.value); }} onBlur={function () { void saveServerPatch({ bindHost: bindHostDraft }); }} disabled={running || busy} /><small className="overview-config-hint good">本机访问地址</small></label>
-        <label className="proxy-instance-overview-field"><span>监听端口 <small>PORT</small></span><input className="overview-config-input" aria-label="监听端口" type="number" value={portDraft} onChange={function (event) { setPortDraft(event.target.value); }} onBlur={function () { void saveServerPatch({ port: Number(portDraft) }); }} disabled={running || busy} /><small className="overview-config-hint">范围 1 - 65535</small></label>
-        <label className="proxy-instance-overview-field"><span>超时时间（毫秒） <small>MS</small></span><input className="overview-config-input" aria-label="超时时间" type="number" value={timeoutDraft} onChange={function (event) { setTimeoutDraft(event.target.value); }} onBlur={function () { void saveServerPatch({ timeoutMs: Number(timeoutDraft) }); }} disabled={running || busy} /><small className="overview-config-hint">请求等待上限</small></label>
+        <label className="proxy-instance-overview-field"><span>监听主机 <small>HOST</small></span><input className="overview-config-input" aria-label="监听主机" value={bindHostDraft} onChange={function (event) { if (notifyOverviewLocked()) return; setBindHostDraft(event.target.value); }} onFocus={notifyOverviewLocked} onClick={notifyOverviewLocked} onBlur={function () { void saveServerPatch({ bindHost: bindHostDraft }); }} readOnly={overviewLocked} aria-readonly={overviewLocked} aria-disabled={overviewLocked} /><small className="overview-config-hint good">本机访问地址</small></label>
+        <label className="proxy-instance-overview-field"><span>监听端口 <small>PORT</small></span><input className="overview-config-input" aria-label="监听端口" type="number" value={portDraft} onChange={function (event) { if (notifyOverviewLocked()) return; setPortDraft(event.target.value); }} onFocus={notifyOverviewLocked} onClick={notifyOverviewLocked} onBlur={function () { void saveServerPatch({ port: Number(portDraft) }); }} readOnly={overviewLocked} aria-readonly={overviewLocked} aria-disabled={overviewLocked} /><small className="overview-config-hint">范围 1 - 65535</small></label>
+        <label className="proxy-instance-overview-field"><span>超时时间（毫秒） <small>MS</small></span><input className="overview-config-input" aria-label="超时时间" type="number" value={timeoutDraft} onChange={function (event) { if (notifyOverviewLocked()) return; setTimeoutDraft(event.target.value); }} onFocus={notifyOverviewLocked} onClick={notifyOverviewLocked} onBlur={function () { void saveServerPatch({ timeoutMs: Number(timeoutDraft) }); }} readOnly={overviewLocked} aria-readonly={overviewLocked} aria-disabled={overviewLocked} /><small className="overview-config-hint">请求等待上限</small></label>
       </div>
     </> : <p className="empty">暂无代理实例</p>}
   </section>;

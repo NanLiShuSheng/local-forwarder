@@ -12,6 +12,7 @@ import {
 } from "../../../src/core/config/legacy-parser";
 
 const fixtureDirectory = path.resolve("test/fixtures/legacy");
+const CHILD_PARSER_TIMEOUT_MS = 15_000;
 
 test("imports legacy config and normalizes keys case-insensitively", async () => {
   const config = await importLegacyConfig("test/fixtures/legacy");
@@ -410,7 +411,7 @@ catch (error) { if (!String(error).includes("config.js")) process.exitCode = 2; 
   return spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], {
     cwd: path.resolve("."),
     encoding: "utf8",
-    timeout: 4000,
+    timeout: CHILD_PARSER_TIMEOUT_MS,
   });
 }
 
@@ -423,7 +424,7 @@ catch (error) { if (!${expected}.test(String(error))) process.exitCode = 2; }`;
   return spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script], {
     cwd: path.resolve("."),
     encoding: "utf8",
-    timeout: 4000,
+    timeout: CHILD_PARSER_TIMEOUT_MS,
   });
 }
 

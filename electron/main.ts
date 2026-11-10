@@ -29,6 +29,8 @@ const IPC_CHANNELS = {
   saveSharedValues: "values:shared:save",
   getLoginCache: "values:login:get",
   saveLoginCache: "values:login:save",
+  getMapValues: "values:map:get",
+  saveMapValues: "values:map:save",
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
   getEncryptionPreferences: "encryption:get-preferences",
@@ -114,6 +116,17 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "登录缓存保存失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.getMapValues, (_event, id) => manager.getMapValues(typeof id === "string" && id.length > 0 ? id : undefined));
+  registerIpcHandler(policy, IPC_CHANNELS.saveMapValues, async (_event, values, id) => {
+    if (!isStringRecord(values)) return { ok: false, error: "本地缓存格式无效" };
+    if (id !== undefined && (typeof id !== "string" || id.length === 0)) return { ok: false, error: "代理实例参数无效" };
+    try {
+      await manager.saveMapValues(values, id);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "本地缓存保存失败" };
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.listProxyInstances, (): ProxyInstanceSummary[] => manager.list());
@@ -237,11 +250,15 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     }
     try {
       const result = await sendManualRequest({ ...payload, timeoutMs: manager.getConfig().server.timeoutMs });
+      let loginSuccess = false;
       if (result.body !== undefined) {
         const loginValues = extractManualLoginValues(payload.paramsText, result.body);
-        if (loginValues !== undefined) manager.mergeLocalValues(loginValues);
+        if (loginValues !== undefined) {
+          manager.mergeLocalValues(loginValues);
+          loginSuccess = true;
+        }
       }
-      return { ok: true, ...result };
+      return { ok: true, ...result, loginSuccess };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "请求失败" };
     }

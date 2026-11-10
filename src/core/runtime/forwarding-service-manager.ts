@@ -13,6 +13,8 @@ export interface ManagedForwardingService {
   getLogs(): LogEntry[];
   clearLogs(): void;
   mergeLocalValues(values: Record<string, string>): void;
+  getMapValues(): Record<string, string>;
+  setMapValues(values: Record<string, string>): void;
   setRuntimeValues?(values: Record<string, string>): void;
 }
 
@@ -132,7 +134,8 @@ export class ForwardingServiceManager {
 
   public async saveConfig(config: AppConfig): Promise<void> {
     const instance = this.currentInstance();
-    await this.requireService().saveConfig({ ...config, localValues: this.runtimeValues(instance) });
+    const service = this.requireService();
+    await service.saveConfig({ ...config, localValues: this.runtimeValues(instance), mapValues: service.getMapValues() });
   }
 
   public async start(id = this.workspace.selectedInstanceId): Promise<RuntimeStatus> {
@@ -187,6 +190,17 @@ export class ForwardingServiceManager {
 
   public getLoginCache(id = this.workspace.selectedInstanceId): Record<string, string> {
     return { ...(this.requireInstance(id).loginCache ?? {}) };
+  }
+
+  public getMapValues(id = this.workspace.selectedInstanceId): Record<string, string> {
+    return { ...this.requireService(id).getMapValues() };
+  }
+
+  public async saveMapValues(values: Record<string, string>, id = this.workspace.selectedInstanceId): Promise<void> {
+    const instance = this.requireInstance(id);
+    this.requireService(id).setMapValues(values);
+    instance.config.mapValues = { ...values };
+    await this.persist();
   }
 
   public async saveLoginCache(values: Record<string, string>, id = this.workspace.selectedInstanceId): Promise<void> {

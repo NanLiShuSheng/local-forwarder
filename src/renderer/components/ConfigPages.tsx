@@ -6,7 +6,7 @@ import { RequestPage } from "./RequestPage";
 import { StringToolPage } from "./StringToolPage";
 import { useToast } from "./ToastProvider";
 
-export type Page = "runtime" | "rules" | "addresses" | "request" | "string" | "local" | "values" | "cache" | "encryption" | "logs" | "appearance" | "json";
+export type Page = "runtime" | "local-cache" | "rules" | "addresses" | "request" | "string" | "local" | "values" | "cache" | "encryption" | "logs" | "appearance" | "json";
 interface ConfigPagesProps {
   page: Page;
   config: AppConfig;

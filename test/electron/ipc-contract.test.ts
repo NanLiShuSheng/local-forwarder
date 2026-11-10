@@ -17,6 +17,8 @@ test("IPC channels expose stable runtime commands", () => {
     saveSharedValues: "values:shared:save",
     getLoginCache: "values:login:get",
     saveLoginCache: "values:login:save",
+    getMapValues: "values:map:get",
+    saveMapValues: "values:map:save",
     selectProjectDirectory: "config:select-project-directory",
     selectEncryptionDirectory: "encryption:select-directory",
     getEncryptionPreferences: "encryption:get-preferences",
@@ -53,4 +55,11 @@ test("update installation verifies that all proxy instances stopped", async () =
   assert.match(source, /updateLifecycle\.trackStart\(\(\) => manager\.start\(id\)\)/);
   assert.match(source, /updateLifecycle\.trackStart\(\(\) => manager\.startAll\(\)\)/);
   assert.match(source, /await updateLifecycle\.waitForStarts\(\)/);
+});
+
+test("manual request responses mark only successful login cache captures", async () => {
+  const source = await readFile("electron/main.ts", "utf8");
+  assert.match(source, /let loginSuccess = false/);
+  assert.match(source, /if \(loginValues !== undefined\) \{[\s\S]*?manager\.mergeLocalValues\(loginValues\);[\s\S]*?loginSuccess = true;/);
+  assert.match(source, /return \{ ok: true, \.\.\.result, loginSuccess \}/);
 });

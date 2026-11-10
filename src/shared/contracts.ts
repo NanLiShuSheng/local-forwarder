@@ -21,6 +21,7 @@ export interface ManualRequestResponse extends OperationResult {
   statusMessage?: string;
   body?: string;
   durationMs?: number;
+  loginSuccess?: boolean;
 }
 
 export type StringToolOperation = "replace" | "remove" | "uppercase" | "lowercase" | "url-encode" | "url-decode" | "json-format";
@@ -88,7 +89,7 @@ export interface LogEntry {
   ruleId?: string;
   statusCode?: number;
   durationMs?: number;
-  requestType?: "fetch" | "xhr";
+  requestType?: "fetch" | "xhr" | "http";
   requestPath?: string;
   requestParams?: string;
   responseData?: string;
@@ -214,6 +215,8 @@ export interface ForwarderApi {
   saveSharedValues(values: Record<string, string>): Promise<OperationResult>;
   getLoginCache(): Promise<Record<string, string>>;
   saveLoginCache(values: Record<string, string>): Promise<OperationResult>;
+  getMapValues(id?: string): Promise<Record<string, string>>;
+  saveMapValues(values: Record<string, string>, id?: string): Promise<OperationResult>;
   listProxyInstances(): Promise<ProxyInstanceSummary[]>;
   selectProxyInstance(id: string): Promise<OperationResult & { instanceId?: string }>;
   createProxyInstance(): Promise<OperationResult & { instance?: ProxyInstanceSummary }>;
@@ -249,6 +252,8 @@ export const IPC_CHANNELS = {
   saveSharedValues: "values:shared:save",
   getLoginCache: "values:login:get",
   saveLoginCache: "values:login:save",
+  getMapValues: "values:map:get",
+  saveMapValues: "values:map:save",
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
   getEncryptionPreferences: "encryption:get-preferences",

@@ -5,6 +5,7 @@ import test from "node:test";
 const rendererFiles = [
   "src/renderer/App.tsx",
   "src/renderer/components/ConfigPages.tsx",
+  "src/renderer/components/LocalCachePage.tsx",
   "src/renderer/components/LogPanel.tsx",
   "src/renderer/components/RuleList.tsx",
   "src/renderer/components/RuntimePanel.tsx",

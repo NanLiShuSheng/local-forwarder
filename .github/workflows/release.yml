@@ -24,6 +24,8 @@ jobs:
       - run: npm run package:release:win:x64
         env:
           GITHUB_REF_NAME: ${{ github.ref_name }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
       - run: node scripts/smoke-packaged.mjs
       - run: node scripts/smoke-win-resources.mjs
       - uses: actions/upload-artifact@v4

@@ -63,7 +63,11 @@ export function getNode16BinaryCandidates(
 ): string[] {
   const bundled = platform === "win32" && arch === "x64"
     ? [path.join(protocolDir, "node", "win-x64", "node.exe")]
-    : [];
+    : platform === "darwin" && arch === "x64"
+      ? [path.join(protocolDir, "node", "macos-x64", "node")]
+      : platform === "darwin" && arch === "arm64"
+        ? [path.join(protocolDir, "node", "macos-arm64", "node")]
+        : [];
   const external = [
     path.join(os.homedir(), ".nvm/versions/node/v16.13.0/bin/node"),
     env.NVM_BIN === undefined ? undefined : path.join(env.NVM_BIN, "node"),

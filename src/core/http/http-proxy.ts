@@ -1,9 +1,10 @@
-import { readFile, stat } from "node:fs/promises";
+import { open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import http, { type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from "node:http";
 import https from "node:https";
 import path from "node:path";
 import { inflateSync, gunzipSync } from "node:zlib";
 import type { AppConfig, ForwardRule, LogEntry } from "../../shared/contracts";
+import { hasSuccessfulLoginErrorNo } from "../../shared/local-cache";
 import { decodeCachedResource, rewriteLegacyNavigationScript, type CacheResult } from "../cache/file-cache";
 import type { TztCodec } from "../tcp/tzt-codec";
 import { matchRule, parseTarget, substituteVariables } from "../routing/rule-matcher";
@@ -20,6 +21,16 @@ export interface HttpProxyOptions {
   port: number;
   timeoutMs: number;
   projectPath?: string;
+  defaultDocument?: string;
+  httpDirectories?: string[];
+  directoryListing?: boolean;
+  allowAnyClient?: boolean;
+  allowedClientIps?: string[];
+  allowStaticCacheFallback?: boolean;
+  restrictProjectPaths?: boolean;
+  decodeStaticDResources?: boolean;
+  headStaticResponses?: boolean;
+  logAllRequests?: boolean;
   rules: ForwardRule[];
   localValues?: Record<string, string>;
   mapValues?: Record<string, string>;
@@ -33,6 +44,8 @@ export interface HttpProxyOptions {
   onLog?: (entry: LogEntry) => void;
   onLocalValuesChanged?: (values: Record<string, string>) => void;
   onLoginValuesChanged?: (values: Record<string, string>) => void;
+  onMapValuesChanged?: (values: Record<string, string>) => void;
+  onFileValuesChanged?: (values: Record<string, string>) => void;
 }
 
 export interface ResourceCacheLike {
@@ -193,6 +206,13 @@ function uppercaseRecordKeys(record: Record<string, unknown>): Record<string, un
   return output;
 }
 
+function parseGridVersion(value: string): number | undefined {
+  const match = /^[\t ]*\+?(\d+)$/.exec(value);
+  if (match?.[1] === undefined) return undefined;
+  const version = Number(match[1]);
+  return Number.isSafeInteger(version) && version >= 0 && version <= 0xffffffff ? version : undefined;
+}
+
 function lookupValue(values: Record<string, string>, key: string): string {
   const wanted = key.toUpperCase();
   for (const [candidate, value] of Object.entries(values)) if (candidate.toUpperCase() === wanted) return value;
@@ -269,13 +289,111 @@ function cacheKeyFor(requestUrl: string): string {
   return normalized.toLowerCase().endsWith(".d") ? normalized : `${normalized}.d`;
 }
 
-function joinProjectPath(rootDir: string, requestPath: string): { absolute: string; relative: string } {
-  const pathname = decodeURIComponent(new URL(requestPath, "http://local-forwarder.invalid").pathname);
-  const relative = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
-  const root = path.resolve(rootDir);
-  const absolute = path.resolve(root, relative);
-  if (absolute !== root && !absolute.startsWith(`${root}${path.sep}`)) throw new Error("project path escapes configured directory");
-  return { absolute, relative };
+function normalizeClientAddress(address: string | undefined): string | undefined {
+  if (address === undefined) return undefined;
+  let normalized = address.toLowerCase();
+  if (normalized.startsWith("[") && normalized.endsWith("]")) normalized = normalized.slice(1, -1);
+  if (!normalized.includes(":")) return normalized;
+
+  let canonical: string;
+  try {
+    canonical = new URL(`http://[${normalized}]/`).hostname.slice(1, -1).toLowerCase();
+  } catch {
+    return normalized;
+  }
+  if (!canonical.startsWith("::ffff:")) return canonical;
+
+  const mapped = canonical.slice("::ffff:".length);
+  if (mapped.includes(".")) return mapped;
+  const words = mapped.split(":");
+  if (words.length !== 2 || words.some((word) => !/^[\da-f]{1,4}$/.test(word))) return canonical;
+  const high = Number.parseInt(words[0]!, 16);
+  const low = Number.parseInt(words[1]!, 16);
+  return `${high >>> 8}.${high & 0xff}.${low >>> 8}.${low & 0xff}`;
+}
+
+function isInsideRoot(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]!);
+}
+
+async function projectPathInfo(root: string, relative: string, restrictSymlinks: boolean): Promise<{ absolute: string; details: Awaited<ReturnType<typeof stat>> } | undefined> {
+  const candidate = path.resolve(root, relative || ".");
+  if (!isInsideRoot(root, candidate)) throw new Error("project path escapes configured directory");
+  let absolute: string;
+  try {
+    absolute = await realpath(candidate);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return undefined;
+    throw error;
+  }
+  if (restrictSymlinks && !isInsideRoot(root, absolute)) throw new Error("project path escapes configured directory");
+  const details = await stat(absolute);
+  return { absolute, details };
+}
+
+function isClientAllowed(request: IncomingMessage, options: HttpProxyOptions): boolean {
+  if (options.allowAnyClient === true || options.allowedClientIps === undefined) return true;
+  const remoteAddress = normalizeClientAddress(request.socket.remoteAddress);
+  if (remoteAddress === undefined) return false;
+  return options.allowedClientIps.some((address) => normalizeClientAddress(address) === remoteAddress);
+}
+
+function isHscommTcpRoute(url: URL, requestUrl: string, body: Buffer, defaultDocument: string | undefined): boolean {
+  if (url.pathname === "/reqxml" || url.pathname === "/login") return true;
+  if (url.pathname.toLowerCase() === "/loadbalance.dll") return true;
+
+  const document = defaultDocument?.replace(/^\/+/, "").toLowerCase();
+  const isDefaultDocumentPath = document !== undefined && document.length > 0 && url.pathname.toLowerCase() === `/${document}`;
+  if (url.pathname !== "/" && !isDefaultDocumentPath) return false;
+  return uppercaseParams(parseParams(requestUrl, body)).ACTION !== undefined;
+}
+
+function isWithinHttpDirectory(pathname: string, directories: string[]): boolean {
+  const requested = pathname.toLowerCase();
+  return directories.some((directory) => {
+    const prefix = directory.endsWith("/") ? directory : `${directory}/`;
+    return prefix === "/" || requested === prefix.slice(0, -1) || requested.startsWith(prefix.toLowerCase());
+  });
+}
+
+async function caseInsensitiveProjectPathInfo(root: string, relative: string, restrictSymlinks: boolean): Promise<{ absolute: string; details: Awaited<ReturnType<typeof stat>> } | undefined> {
+  const exact = await projectPathInfo(root, relative, restrictSymlinks).catch((error: unknown) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT" || (error as NodeJS.ErrnoException).code === "ENOTDIR") return undefined;
+    throw error;
+  });
+  if (exact !== undefined) return exact;
+
+  let current = root;
+  for (const segment of relative.split("/").filter(Boolean)) {
+    if (segment === "." || segment === "..") return undefined;
+    const direct = path.join(current, segment);
+    if (await stat(direct).then(() => true, () => false)) {
+      current = direct;
+      continue;
+    }
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => undefined);
+    const match = entries?.find((entry) => entry.name.toLowerCase() === segment.toLowerCase());
+    if (match === undefined) return undefined;
+    current = path.join(current, match.name);
+  }
+  const candidate = path.resolve(current);
+  if (!isInsideRoot(root, candidate)) return undefined;
+  const absolute = await realpath(candidate).catch(() => undefined);
+  if (absolute === undefined || (restrictSymlinks && !isInsideRoot(root, absolute))) return undefined;
+  return { absolute, details: await stat(absolute) };
+}
+
+function writeHscommStaticNotFound(response: ServerResponse, pathname: string): void {
+  const body = Buffer.from(`<HTML><HEAD><TITLE>404 Not Found</TITLE></HEAD><BODY><H1>404 Not Found</H1>The requested URL ${pathname} was not found on this server.<P></BODY></HTML>\r\n`);
+  response.sendDate = false;
+  response.writeHead(404, { "content-type": "text/html", "content-length": body.length });
+  response.end(body);
 }
 
 export class HttpProxy {
@@ -334,6 +452,11 @@ export class HttpProxy {
     return { localValues: this.localValues, mapValues: this.mapValues, fileValues: this.fileValues };
   }
 
+  public setMapValues(values: Record<string, string>): void {
+    for (const key of Object.keys(this.mapValues)) delete this.mapValues[key];
+    Object.assign(this.mapValues, values);
+  }
+
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const started = Date.now();
     const requestType = requestTypeFor(request);
@@ -343,6 +466,12 @@ export class HttpProxy {
     let requestBody: Buffer<ArrayBufferLike> = Buffer.alloc(0);
     let statusCode = 500;
     try {
+      if (!isClientAllowed(request, this.options)) {
+        request.resume();
+        statusCode = 403;
+        writeJson(response, { error: "client address is not allowed" }, statusCode);
+        return;
+      }
       const body = await readBody(request);
       requestBody = body;
       const url = new URL(request.url ?? "/", "http://local-forwarder.invalid");
@@ -366,6 +495,7 @@ export class HttpProxy {
         const params = uppercaseParams(parseParams(request.url ?? "/", body));
         if (url.pathname === "/reqsavemap") {
           Object.assign(this.mapValues, params);
+          this.options.onMapValuesChanged?.({ ...this.mapValues });
           writeJson(response, { ERRORNO: "0" });
         } else {
           writeJson(response, Object.fromEntries(Object.keys(params).map((key) => [key, lookupValue(this.mapValues, key)])));
@@ -377,6 +507,7 @@ export class HttpProxy {
           writeJson(response, { error: "invalid filename" }, 400);
         } else if (url.pathname === "/reqsavefile") {
           this.fileValues[filename.toUpperCase()] = body.toString("utf8");
+          this.options.onFileValuesChanged?.({ ...this.fileValues });
           writeJson(response, { ERRORNO: "0" });
         } else {
           const value = this.fileValues[filename.toUpperCase()] ?? "";
@@ -384,10 +515,12 @@ export class HttpProxy {
           response.end(value);
         }
         statusCode = response.statusCode;
-      } else if (url.pathname === "/reqxml" || url.pathname === "/login") {
+      } else if (isHscommTcpRoute(url, request.url ?? "/", body, this.options.defaultDocument)) {
         await this.handleTcp(request.url ?? "/reqxml", body, response, url.pathname === "/login", request.method ?? "GET", request.headers);
         statusCode = response.statusCode;
-      } else if (await this.serveProjectFile(url.pathname, response)) {
+      } else if (this.options.httpDirectories !== undefined
+        ? await this.serveHscommStaticFile(request, response)
+        : await this.serveProjectFile(request, response)) {
         statusCode = response.statusCode;
       } else {
         await this.forward(request, response, body);
@@ -400,8 +533,8 @@ export class HttpProxy {
     } finally {
       const durationMs = Date.now() - started;
       this.stats.totalDurationMs += durationMs;
-      if (requestType !== undefined) {
-        this.options.onLog?.({ timestamp: new Date().toISOString(), level: statusCode >= 500 ? "error" : "info", message: `${request.method ?? "GET"} ${request.url ?? "/"}`, direction: "inbound", protocol: "http", statusCode, durationMs, requestType, requestPath, requestParams: requestParamsFor(request, requestBody), responseData: responseDataFor(response, responseCapture) });
+      if (requestType !== undefined || this.options.logAllRequests === true) {
+        this.options.onLog?.({ timestamp: new Date().toISOString(), level: statusCode >= 500 ? "error" : "info", message: `${request.method ?? "GET"} ${request.url ?? "/"}`, direction: "inbound", protocol: "http", statusCode, durationMs, requestType: requestType ?? "http", requestPath, requestParams: requestParamsFor(request, requestBody), responseData: responseDataFor(response, responseCapture) });
       }
     }
   }
@@ -413,6 +546,10 @@ export class HttpProxy {
       params = Object.fromEntries(new URLSearchParams(substituted).entries());
     }
     const normalizedParams = uppercaseParams(params);
+    if (normalizedParams.ACTION === "3010") {
+      await this.handleAjaxGrid(normalizedParams, response);
+      return;
+    }
     if (login) {
       const type = normalizedParams.TYPE ?? "ptjy";
       Object.assign(params, this.accounts[type] ?? {});
@@ -443,6 +580,54 @@ export class HttpProxy {
     } catch (error) {
       writeJson(response, { error: error instanceof Error ? error.message : "TCP request failed" }, /timeout/i.test(String(error)) ? 504 : 502);
     }
+  }
+
+  private async handleAjaxGrid(params: Record<string, string>, response: ServerResponse): Promise<void> {
+    const changed: string[] = [];
+    let root: string | undefined;
+    if (this.options.projectPath !== undefined) {
+      try {
+        root = await realpath(path.join(this.options.projectPath, "download"));
+      } catch {
+        root = undefined;
+      }
+    }
+
+    for (const line of (params.GRID ?? "").split(/\r\n|\r|\n/)) {
+      if (line.length === 0) continue;
+      const separator = line.lastIndexOf("=");
+      if (separator <= 0) continue;
+      const requestedPath = line.slice(0, separator);
+      const expectedVersion = parseGridVersion(line.slice(separator + 1));
+      let changedFile = true;
+      if (root !== undefined && expectedVersion !== undefined) {
+        try {
+          const info = await caseInsensitiveProjectPathInfo(root, requestedPath.replace(/^\/+/, ""), true);
+          if (info?.details.isFile() && info.details.size >= 4) {
+            const size = Number(info.details.size);
+            if (Number.isSafeInteger(size)) {
+              const handle = await open(info.absolute, "r");
+              try {
+                const trailer = Buffer.alloc(4);
+                const { bytesRead } = await handle.read(trailer, 0, trailer.length, size - trailer.length);
+                changedFile = bytesRead !== trailer.length || trailer.readUInt32LE(0) !== expectedVersion;
+              } finally {
+                await handle.close();
+              }
+            }
+          }
+        } catch {
+          changedFile = true;
+        }
+      }
+      if (changedFile) changed.push(`${requestedPath}|`);
+    }
+
+    const output: Record<string, unknown> = {};
+    if (changed.length > 0) output.Grid0 = changed;
+    output.ErrorNo = String(changed.length);
+    output.Action = "3010";
+    writeJson(response, uppercaseRecordKeys(output));
   }
 
   private async forwardReqxmlOverHttp(target: NonNullable<HttpProxyOptions["tcpTargets"]>[number], route: string, params: Record<string, string>, response: ServerResponse, method: string, headers: IncomingHttpHeaders, login: boolean): Promise<void> {
@@ -501,6 +686,7 @@ export class HttpProxy {
     }
     if (record === undefined) return;
     const normalized = uppercaseParams(Object.fromEntries(Object.entries(record).filter(([, entry]) => typeof entry === "string" || typeof entry === "number" || typeof entry === "boolean").map(([key, entry]) => [key, String(entry)])));
+    if (!hasSuccessfulLoginErrorNo(normalized)) return;
     let changed = false;
     let captured: Record<string, string> = {};
     if (normalized.ACTION === "100") {
@@ -519,28 +705,159 @@ export class HttpProxy {
     }
   }
 
-  private async serveProjectFile(requestPath: string, response: ServerResponse): Promise<boolean> {
+  private async serveProjectFile(request: IncomingMessage, response: ServerResponse): Promise<boolean> {
     if (!this.options.projectPath) return false;
-    const paths = joinProjectPath(this.options.projectPath, requestPath);
-    let actual = paths.absolute;
+    const method = request.method ?? "GET";
+    const requestUrl = request.url ?? "/";
+    let root: string;
     try {
-      const details = await stat(actual);
-      if (!details.isFile()) return false;
+      root = await realpath(this.options.projectPath);
     } catch {
-      const encoded = `${actual}.d`;
-      try {
-        const details = await stat(encoded);
-        if (!details.isFile()) return false;
-        actual = encoded;
-      } catch {
-        return false;
-      }
+      return false;
     }
-    let data: Buffer = Buffer.from(await readFile(actual));
-    if (actual.endsWith(".d") && this.options.cacheCodec !== undefined) data = Buffer.from(decodeCachedResource(paths.relative, data, this.options.cacheCodec, true));
-    if (!actual.endsWith(".d") || this.options.cacheCodec !== undefined) data = rewriteLegacyNavigationScript(paths.relative, data);
-    response.writeHead(200, { "content-type": contentTypeFor(paths.relative), "content-length": data.length });
-    response.end(data);
+    const pathname = decodeURIComponent(new URL(requestUrl, "http://local-forwarder.invalid").pathname);
+    const restrictProjectPaths = this.options.restrictProjectPaths === true;
+    if ((restrictProjectPaths && pathname.includes("\\")) || pathname.split("/").some((segment) => segment === "..")) {
+      if (restrictProjectPaths) {
+        writeJson(response, { error: "project path escapes configured directory" }, 403);
+        return true;
+      }
+      throw new Error("project path escapes configured directory");
+    }
+    const relative = pathname.replace(/^\/+/, "");
+    const restrictSymlinks = restrictProjectPaths;
+    const directory = await projectPathInfo(root, relative, restrictSymlinks);
+    const cacheResource = async (cachePath: string): Promise<boolean> => {
+      if (
+        this.options.allowStaticCacheFallback !== true ||
+        this.options.cache === undefined ||
+        this.options.cacheConfig?.autoDownload !== true ||
+        (method !== "GET" && method !== "HEAD")
+      ) return false;
+      await this.serveCachedResource(request, response, cachePath);
+      return true;
+    };
+    const encodedCachePath = (value: string) => `/${value.split("/").filter(Boolean).map((segment) => encodeURIComponent(segment)).join("/")}`;
+
+    const sendFile = async (sourceRelative: string): Promise<boolean> => {
+      const candidates = [sourceRelative, `${sourceRelative}.d`];
+      for (const candidate of candidates) {
+        const info = await projectPathInfo(root, candidate, restrictSymlinks);
+        if (info === undefined || !info.details.isFile()) continue;
+        let data: Buffer = Buffer.from(await readFile(info.absolute));
+        const requestedEncodedPath = relative.toLowerCase().endsWith(".d");
+        const resolvedEncodedFallback = candidate !== sourceRelative;
+        if (candidate.toLowerCase().endsWith(".d") && this.options.cacheCodec !== undefined && (this.options.decodeStaticDResources === true || requestedEncodedPath || resolvedEncodedFallback)) {
+          data = Buffer.from(decodeCachedResource(candidate, data, this.options.cacheCodec, true));
+        }
+        if (!candidate.toLowerCase().endsWith(".d") || this.options.cacheCodec !== undefined) {
+          data = rewriteLegacyNavigationScript(candidate, data);
+        }
+        const responseHeaders: Record<string, string | number> = {
+          "content-type": contentTypeFor(sourceRelative),
+          "content-length": data.length,
+        };
+        if (data.length >= 2 && data[0] === 0x1f && data[1] === 0x8b) responseHeaders["content-encoding"] = "gzip";
+        response.writeHead(200, responseHeaders);
+        if (method === "HEAD" && this.options.headStaticResponses === true) response.end();
+        else response.end(data);
+        return true;
+      }
+      return false;
+    };
+
+    if (directory?.details.isFile()) return sendFile(relative);
+    if (directory === undefined && relative !== "" && await sendFile(relative)) return true;
+
+    let directoryRelative: string | undefined;
+    if (directory?.details.isDirectory()) directoryRelative = relative;
+    else if (relative === "" && directory?.details.isDirectory()) directoryRelative = "";
+    if (directoryRelative === undefined) {
+      if (relative !== "" && await cacheResource(requestUrl)) return true;
+      return false;
+    }
+
+    const defaultDocument = this.options.defaultDocument ?? (directoryRelative === "" ? "index.html" : undefined);
+    if (defaultDocument !== undefined) {
+      const defaultRelative = path.posix.join(directoryRelative, defaultDocument);
+      if (await sendFile(defaultRelative)) return true;
+      if (await cacheResource(encodedCachePath(defaultRelative))) return true;
+    }
+    if (this.options.directoryListing !== true) return false;
+
+    const directoryInfo = await projectPathInfo(root, directoryRelative, restrictSymlinks);
+    if (directoryInfo === undefined || !directoryInfo.details.isDirectory()) return false;
+    const entries = await readdir(directoryInfo.absolute, { withFileTypes: true });
+    entries.sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+    const pathSegments = directoryRelative.split("/").filter(Boolean);
+    const baseHref = `/${pathSegments.map((segment) => encodeURIComponent(segment)).join("/")}${pathSegments.length > 0 ? "/" : ""}`;
+    const rows = entries
+      .filter((entry) => !entry.isSymbolicLink())
+      .map((entry) => {
+        const name = `${entry.name}${entry.isDirectory() ? "/" : ""}`;
+        const href = `${baseHref}${encodeURIComponent(entry.name)}${entry.isDirectory() ? "/" : ""}`;
+        return `<li><a href="${escapeHtml(href)}">${escapeHtml(name)}</a></li>`;
+      })
+      .join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Index of /${escapeHtml(pathSegments.join("/"))}</title></head><body><h1>Index of /${escapeHtml(pathSegments.join("/"))}</h1><ul>${rows}</ul></body></html>`;
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-length": Buffer.byteLength(html) });
+    if (method === "HEAD" && this.options.headStaticResponses === true) response.end();
+    else response.end(html);
+    return true;
+  }
+
+  private async serveHscommStaticFile(request: IncomingMessage, response: ServerResponse): Promise<boolean> {
+    const method = request.method ?? "GET";
+    if (method !== "GET" && method !== "HEAD") return false;
+    if (!this.options.projectPath || !this.options.httpDirectories) return false;
+    let root: string;
+    try {
+      root = await realpath(this.options.projectPath);
+    } catch {
+      return false;
+    }
+
+    let pathname: string;
+    try {
+      pathname = decodeURIComponent(new URL(request.url ?? "/", "http://local-forwarder.invalid").pathname);
+    } catch {
+      writeJson(response, { error: "invalid request path" }, 400);
+      return true;
+    }
+    if (pathname.includes("\\") || pathname.split("/").some((segment) => segment === "..")) {
+      writeJson(response, { error: "project path escapes configured directory" }, 403);
+      return true;
+    }
+
+    let relative: string;
+    if (pathname === "/") {
+      const defaultDocument = this.options.defaultDocument;
+      if (defaultDocument === undefined || !isWithinHttpDirectory(`/${defaultDocument}`, this.options.httpDirectories)) return false;
+      relative = defaultDocument;
+    } else {
+      if (!isWithinHttpDirectory(pathname, this.options.httpDirectories)) return false;
+      relative = pathname.replace(/^\/+/, "");
+    }
+    if (relative === "" || relative.endsWith("/")) {
+      writeHscommStaticNotFound(response, pathname);
+      return true;
+    }
+
+    const info = await caseInsensitiveProjectPathInfo(root, relative, true);
+    if (info === undefined || !info.details.isFile()) {
+      writeHscommStaticNotFound(response, pathname);
+      return true;
+    }
+    const data = Buffer.from(await readFile(info.absolute));
+    response.sendDate = false;
+    response.writeHead(200, {
+      "content-type": "application/binary",
+      "content-length": data.length,
+      "accept-ranges": "bytes",
+      "last-modified": info.details.mtime.toUTCString(),
+    });
+    if (method === "HEAD") response.end();
+    else response.end(data);
     return true;
   }
 
@@ -548,11 +865,18 @@ export class HttpProxy {
     const originalUrl = request.url ?? "/";
     const substitutedUrl = substituteVariables(originalUrl, this.localValues);
     const rule = matchRule(substitutedUrl, this.options.rules);
-    if (rule === undefined) return writeJson(response, { error: "No forwarding rule matched" }, 404);
+    if (rule === undefined) {
+      if (this.options.httpDirectories !== undefined) {
+        const pathname = decodeURIComponent(new URL(originalUrl, "http://local-forwarder.invalid").pathname);
+        writeHscommStaticNotFound(response, pathname);
+        return;
+      }
+      return writeJson(response, { error: "No forwarding rule matched" }, 404);
+    }
     const target = parseTarget(substituteVariables(rule.target, this.localValues));
     if (target.protocol === "tcp") return writeJson(response, { error: "TCP target requires /reqxml" }, 502);
     if (this.options.cache !== undefined && this.options.cacheConfig?.autoDownload === true && request.method === "GET" && rule.rewrite?.toLowerCase().includes(".d")) {
-      await this.serveCachedResource(request, response, rule, substitutedUrl);
+      await this.serveCachedResource(request, response, substitutedUrl);
       return;
     }
     const outgoingBody = body.length === 0
@@ -601,7 +925,7 @@ export class HttpProxy {
     });
   }
 
-  private async serveCachedResource(request: IncomingMessage, response: ServerResponse, rule: ForwardRule, requestUrl: string): Promise<void> {
+  private async serveCachedResource(request: IncomingMessage, response: ServerResponse, requestUrl: string): Promise<void> {
     const cache = this.options.cache;
     const cacheConfig = this.options.cacheConfig;
     if (cache === undefined || cacheConfig === undefined || cacheConfig.downloadTarget.length === 0) {

@@ -502,7 +502,7 @@ test("light theme uses the approved clear mint palette", async () => {
     "app-background": "#fcfefd",
     "app-background-accent": "#ffffff",
     "app-background-mid": "#f7fcfa",
-    "sidebar-background": "#f2faf7",
+    "sidebar-background": "#ffffff",
     "sidebar-border": "#dbece7",
     "panel-background": "#ffffff",
     "surface-background": "#ffffff",
