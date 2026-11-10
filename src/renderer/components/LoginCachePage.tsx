@@ -130,7 +130,7 @@ export function LoginCachePage({ instanceId, instanceName, running = false, valu
       <div className="login-cache-heading-copy">
         <p className="eyebrow">SESSION CACHE</p>
         <div className="login-cache-title-row"><h2>登录缓存</h2><span className={`login-cache-status ${statusTone}`} aria-live="polite"><i />{statusText}</span></div>
-        <p className="login-cache-description">当前代理最近一次成功登录后的字段快照。敏感值默认脱敏，仅写入 <code>ErrorNo &gt; 0</code> 的成功响应。</p>
+        <p className="login-cache-description">当前代理最近一次成功登录后的字段快照。所有字段均按明文完整展示，仅写入 <code>ErrorNo &gt; 0</code> 的成功响应。</p>
         <div className="login-cache-instance"><span>当前代理</span><strong>{currentInstance}</strong><em className={running ? "running" : "stopped"}>{running ? "运行中" : "已停止"}</em></div>
       </div>
       <div className="login-cache-heading-actions">
@@ -194,7 +194,7 @@ export function LoginCachePage({ instanceId, instanceName, running = false, valu
             <div className="login-cache-filters" aria-label="登录缓存筛选">{FILTERS.map((item) => <button type="button" key={item.id} className={filter === item.id ? "active" : ""} onClick={() => setFilter(item.id)}>{item.label}</button>)}</div>
           </div>
           <div className="login-cache-field-list" role="list" aria-label="登录缓存字段">
-            {filteredFields.map((entry) => <div role="listitem" key={entry.key} className="login-cache-field-row"><span className="login-cache-field-key">{entry.key}</span><LoginCacheCategoryBadge entry={entry} /><span className={`login-cache-field-preview ${entry.chars === 0 ? "empty" : ""}`}>{entry.preview}</span><span className="login-cache-field-size">{entry.chars}</span></div>)}
+            {filteredFields.map((entry) => <div role="listitem" key={entry.key} className="login-cache-field-row"><span className="login-cache-field-key">{entry.key}</span><LoginCacheCategoryBadge entry={entry} /><span className={`login-cache-field-preview ${entry.chars === 0 ? "empty" : ""}`} title={entry.value}>{entry.preview}</span><span className="login-cache-field-size">{entry.chars}</span></div>)}
             {filteredFields.length === 0 && <div className="login-cache-list-empty">{fields.length === 0 ? "暂无登录缓存，完成一次成功登录后会自动写入。" : "没有匹配的字段"}</div>}
           </div>
         </section>

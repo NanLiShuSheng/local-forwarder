@@ -736,7 +736,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--success); }
 .login-cache-field-row:hover { background: var(--surface-alt-background); }
 .login-cache-field-row.selected { border-color: color-mix(in srgb, var(--success) 28%, transparent); background: var(--success-soft); }
 .login-cache-field-key { overflow: hidden; color: var(--text-bright); font: 0.61rem ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
-.login-cache-field-preview { overflow: hidden; color: var(--text-muted); font: 0.56rem ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.login-cache-field-preview { min-width: 0; color: var(--text-muted); font: 0.56rem ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; white-space: pre-wrap; word-break: break-word; }
 .login-cache-field-preview.empty { color: var(--text-disabled); }
 .login-cache-field-size { color: var(--text-muted); font: 0.53rem ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
 .login-cache-field-chevron { color: var(--text-muted); font-size: 0.65rem; text-align: right; }

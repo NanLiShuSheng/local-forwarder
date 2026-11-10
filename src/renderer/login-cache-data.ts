@@ -96,16 +96,8 @@ export function isSensitiveLoginCacheKey(key: string): boolean {
   return SENSITIVE_KEYS.has(normalized) || normalized.includes("ACCOUNT") || normalized.includes("CERT") || normalized.includes("PASSWORD") || normalized.includes("SECRET") || normalized.includes("PHONE");
 }
 
-export function maskLoginCacheValue(value: string): string {
-  if (value.length === 0) return "空值";
-  if (value.length <= 6) return "••••••";
-  return `${value.slice(0, 4)}••••••${value.slice(-4)}`;
-}
-
-function previewValue(value: string, sensitive: boolean): string {
-  const visible = sensitive ? maskLoginCacheValue(value) : value.replace(/\s+/g, " ").trim();
-  if (visible.length === 0) return "空值";
-  return visible.length > 96 ? `${visible.slice(0, 96)}…` : visible;
+function displayValue(value: string): string {
+  return value.length === 0 ? "空值" : value;
 }
 
 export function describeLoginCacheField(key: string, value: string): LoginCacheField {
@@ -119,7 +111,7 @@ export function describeLoginCacheField(key: string, value: string): LoginCacheF
     sensitive,
     chars: value.length,
     lines: value.split("\n").length,
-    preview: previewValue(value, sensitive),
+    preview: displayValue(value),
     isLong: value.length >= LONG_VALUE_THRESHOLD,
   };
 }
@@ -224,8 +216,8 @@ export function loginCacheCustomerSummary(values: Record<string, string>): Login
     type: loginCacheValue(values, "USERTYPE") || "—",
     branch: loginCacheValue(values, "KBRANCH") || loginCacheValue(values, "OPENBRANCH") || "—",
     openDate: formatLoginCacheDay(loginCacheValue(values, "OPENDATE")),
-    certificate: certificate.length > 0 ? maskLoginCacheValue(certificate) : "—",
-    phone: phone.length > 0 ? maskLoginCacheValue(phone) : "—",
+    certificate: certificate || "—",
+    phone: phone || "—",
     lastLogin: formatLoginCacheDate(values),
     accounts,
     accountCount: accounts.length,

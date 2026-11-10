@@ -10,7 +10,6 @@ import {
   loginCacheCustomerSummary,
   loginCacheFields,
   loginCacheSummary,
-  maskLoginCacheValue,
   parseLoginCacheAccounts,
 } from "../../src/renderer/login-cache-data";
 
@@ -25,13 +24,22 @@ test("classifies login cache keys into readable dashboard groups", () => {
   assert.equal(categoryForLoginCacheKey("GRID"), "other");
 });
 
-test("marks credentials and personal data as sensitive", () => {
+test("marks credentials and personal data as sensitive for filtering only", () => {
   assert.equal(isSensitiveLoginCacheKey("TOKEN"), true);
   assert.equal(isSensitiveLoginCacheKey("CUSTCERT"), true);
   assert.equal(isSensitiveLoginCacheKey("ACCOUNTLIST"), true);
   assert.equal(isSensitiveLoginCacheKey("SESSIONNO"), false);
-  assert.equal(maskLoginCacheValue("YcMUQS25@170A-AB7C324cqtqCV"), "YcMU••••••tqCV");
-  assert.equal(maskLoginCacheValue("123"), "••••••");
+});
+
+test("shows login cache values as complete plaintext without masking or truncation", () => {
+  const token = "YcMUQS25@170A-AB7C324cqtqCV";
+  const longValue = "x".repeat(240);
+  const fields = loginCacheFields({ TOKEN: token, LONG: longValue, EMPTY: "" });
+  const byKey = Object.fromEntries(fields.map((entry) => [entry.key, entry]));
+  assert.equal(byKey.TOKEN.preview, token);
+  assert.equal(byKey.TOKEN.sensitive, true);
+  assert.equal(byKey.LONG.preview, longValue);
+  assert.equal(byKey.EMPTY.preview, "空值");
 });
 
 test("summarizes login cache health and category composition", () => {
@@ -96,8 +104,8 @@ test("summarizes customer details for the page, sidebar, and login success notic
   assert.equal(customer.type, "El*+e");
   assert.equal(customer.branch, "1018");
   assert.equal(customer.openDate, "2020-11-06");
-  assert.equal(customer.certificate, "8800••••••4550");
-  assert.equal(customer.phone, "1234••••••6789");
+  assert.equal(customer.certificate, "880005597770134550");
+  assert.equal(customer.phone, "123456789");
   assert.equal(customer.lastLogin, "2026-07-20 09:11:50");
   assert.equal(customer.accountCount, 2);
 });
@@ -117,7 +125,10 @@ test("renderer exposes login cache as a visual page with a raw text fallback", a
   assert.match(pageSource, /parseLocalCacheText\(text\)/);
   assert.match(pageSource, /onSave\(parsed\)/);
   assert.match(pageSource, /className="config-textarea login-cache-input"/);
+  assert.match(pageSource, /所有字段均按明文完整展示/);
+  assert.doesNotMatch(pageSource, /脱敏/);
   assert.match(dataSource, /loginCacheSummary/);
+  assert.doesNotMatch(dataSource, /maskLoginCacheValue/);
   assert.match(styles, /\.login-cache-workspace/);
   assert.match(styles, /\.login-cache-field-row/);
 });
