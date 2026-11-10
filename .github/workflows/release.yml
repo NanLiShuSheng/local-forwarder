@@ -54,6 +54,7 @@ jobs:
             release-assets/windows/*.exe \
             release-assets/windows/*.exe.blockmap \
             release-assets/windows/latest.yml \
+            --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "Local Forwarder $GITHUB_REF_NAME" \
             --generate-notes
