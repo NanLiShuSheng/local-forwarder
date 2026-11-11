@@ -18,5 +18,6 @@ test("release workflow builds and publishes Windows and macOS update assets", as
   assert.match(workflow, /package:release:mac:x64-arm64/);
   assert.match(workflow, /release-assets\/macos\/\*\.dmg/);
   assert.match(workflow, /release-assets\/macos\/mac-update\.json/);
+  assert.match(workflow, /find release-assets\/macos -mindepth 2 -type f -exec cp \{\} release-assets\/macos\/ \\;/);
   assert.match(workflow, /gh release create/);
 });

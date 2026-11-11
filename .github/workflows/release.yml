@@ -93,6 +93,7 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          find release-assets/macos -mindepth 2 -type f -exec cp {} release-assets/macos/ \;
           gh release create "$GITHUB_REF_NAME" \
             release-assets/windows/*.exe \
             release-assets/windows/*.exe.blockmap \
