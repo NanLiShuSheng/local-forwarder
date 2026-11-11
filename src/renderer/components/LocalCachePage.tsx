@@ -65,14 +65,17 @@ export function LocalCachePage({ instanceId }: { instanceId?: string }) {
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
   const valuesRef = useRef<Record<string, string>>({});
   const instanceIdRef = useRef(instanceId);
   const dirtyRef = useRef(false);
   const interactingRef = useRef(false);
   const busyRef = useRef(false);
+  const suppressAutoSaveRef = useRef(false);
   const requestVersionRef = useRef(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
+  const clearCancelRef = useRef<HTMLButtonElement>(null);
 
   const applyValues = useCallback((next: Record<string, string>) => {
     const copy = { ...next };
@@ -87,6 +90,7 @@ export function LocalCachePage({ instanceId }: { instanceId?: string }) {
     dirtyRef.current = false;
     interactingRef.current = false;
     busyRef.current = false;
+    suppressAutoSaveRef.current = false;
     valuesRef.current = {};
     setValues({});
     setSelectedKey(undefined);
@@ -103,6 +107,7 @@ export function LocalCachePage({ instanceId }: { instanceId?: string }) {
     setBusy(false);
     setDirty(false);
     setLoaded(false);
+    setConfirmingClear(false);
   }, [instanceId]);
 
   useEffect(() => {
@@ -129,6 +134,22 @@ export function LocalCachePage({ instanceId }: { instanceId?: string }) {
   useEffect(() => {
     if (editing) editRef.current?.focus();
   }, [editing]);
+
+  useEffect(() => {
+    if (confirmingClear) clearCancelRef.current?.focus();
+  }, [confirmingClear]);
+
+  useEffect(() => {
+    if (!confirmingClear) return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || busyRef.current) return;
+      suppressAutoSaveRef.current = false;
+      interactingRef.current = dirtyRef.current;
+      setConfirmingClear(false);
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [confirmingClear]);
 
   useEffect(() => {
     const handleFind = (event: KeyboardEvent) => {
@@ -341,6 +362,41 @@ export function LocalCachePage({ instanceId }: { instanceId?: string }) {
     interactingRef.current = false;
   };
 
+  const openClearDialog = () => {
+    if (busyRef.current || !loaded || stats.total === 0) return;
+    suppressAutoSaveRef.current = true;
+    interactingRef.current = true;
+    setConfirmingClear(true);
+  };
+
+  const closeClearDialog = () => {
+    if (busyRef.current) return;
+    suppressAutoSaveRef.current = false;
+    interactingRef.current = dirtyRef.current;
+    setConfirmingClear(false);
+  };
+
+  const clearAll = async () => {
+    if (busyRef.current) return;
+    const saved = await persistValues({});
+    if (!saved) return;
+    suppressAutoSaveRef.current = false;
+    setConfirmingClear(false);
+    setSelectedKey(undefined);
+    setEditing(false);
+    setDraft("");
+    setAdding(false);
+    setNewKey("");
+    setNewValue("");
+    setQuery("");
+    setFilter("all");
+    setViewMode("formatted");
+    dirtyRef.current = false;
+    interactingRef.current = false;
+    setDirty(false);
+    notify({ kind: "success", message: "本地缓存已清空" });
+  };
+
   const copySelected = async () => {
     if (selectedEntry === undefined) return;
     try {
@@ -360,6 +416,8 @@ export function LocalCachePage({ instanceId }: { instanceId?: string }) {
       <div className="local-cache-heading-actions">
         {pageMode === "structured" && <button type="button" className="local-cache-button primary" onClick={openAdd} disabled={busy || !loaded}>＋ 新增</button>}
         <button type="button" className="local-cache-button" onClick={() => void toggleMode()} onMouseDown={(event) => event.preventDefault()} disabled={!loaded || busy}>{pageMode === "structured" ? "文本模式" : "结构化模式"}</button>
+        <span className="local-cache-action-separator" aria-hidden="true" />
+        <button type="button" className="local-cache-button danger" onClick={openClearDialog} onMouseDown={(event) => event.preventDefault()} disabled={busy || !loaded || stats.total === 0}>清空缓存</button>
       </div>
     </div>
 
@@ -374,7 +432,7 @@ export function LocalCachePage({ instanceId }: { instanceId?: string }) {
     </div> : <div className="local-cache-text-toolbar"><strong>文本模式</strong><span>每行一个“键 = 值”；空行后的续行归入上一个值。</span><span className="local-cache-text-count">{stats.total} 项</span></div>}
 
     {pageMode === "text" ? <div className="local-cache-text-panel">
-      <textarea className="config-textarea local-cache-input" aria-label="本地缓存文本编辑" value={text} disabled={busy || !loaded} onChange={(event) => { dirtyRef.current = true; setDirty(true); setText(event.target.value); }} onBlur={() => { if (dirtyRef.current) void saveTextMode(); }} placeholder={"KEY = value\nAnotherKey = another value"} rows={18} spellCheck={false} />
+      <textarea className="config-textarea local-cache-input" aria-label="本地缓存文本编辑" value={text} disabled={busy || !loaded} onChange={(event) => { dirtyRef.current = true; setDirty(true); setText(event.target.value); }} onBlur={() => { if (suppressAutoSaveRef.current) return; if (dirtyRef.current) void saveTextMode(); }} placeholder={"KEY = value\nAnotherKey = another value"} rows={18} spellCheck={false} />
     </div> : <div className="local-cache-workspace">
       <section className="local-cache-key-panel" aria-label="缓存键列表">
         <div className="local-cache-key-list" role="listbox" aria-label="缓存键">
@@ -405,9 +463,26 @@ export function LocalCachePage({ instanceId }: { instanceId?: string }) {
             </div>
           </div>
           {!editing && <div className="local-cache-view-tabs"><button type="button" className={effectiveViewMode === "formatted" ? "active" : ""} disabled={!selectedEntry.isJson} onClick={() => setViewMode("formatted")}>格式化</button><button type="button" className={effectiveViewMode === "raw" ? "active" : ""} onClick={() => setViewMode("raw")}>原文</button></div>}
-          {editing ? <textarea ref={editRef} className="local-cache-value-editor" aria-label={`${selectedEntry.key} 的原始值`} value={draft} onChange={(event) => { setDraft(event.target.value); dirtyRef.current = true; setDirty(true); }} onBlur={() => { if (dirtyRef.current) void saveValue(); else { setEditing(false); interactingRef.current = false; } }} spellCheck={false} /> : <LocalCacheCodeView value={displayedValue} empty={selectedEntry.kind === "empty"} ariaLabel={`${selectedEntry.key} 的缓存内容`} />}
+          {editing ? <textarea ref={editRef} className="local-cache-value-editor" aria-label={`${selectedEntry.key} 的原始值`} value={draft} onChange={(event) => { setDraft(event.target.value); dirtyRef.current = true; setDirty(true); }} onBlur={() => { if (suppressAutoSaveRef.current) return; if (dirtyRef.current) void saveValue(); else { setEditing(false); interactingRef.current = false; } }} spellCheck={false} /> : <LocalCacheCodeView value={displayedValue} empty={selectedEntry.kind === "empty"} ariaLabel={`${selectedEntry.key} 的缓存内容`} />}
         </>}
       </section>
+    </div>}
+
+    {confirmingClear && <div className="local-cache-dialog-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeClearDialog(); }}>
+      <div className="local-cache-dialog" role="dialog" aria-modal="true" aria-labelledby="local-cache-clear-title" aria-describedby="local-cache-clear-description">
+        <div className="local-cache-dialog-heading">
+          <div className="local-cache-dialog-icon" aria-hidden="true">!</div>
+          <div><h3 id="local-cache-clear-title">清空本地缓存</h3><p>当前代理 · 本地缓存</p></div>
+        </div>
+        <div className="local-cache-dialog-body">
+          <p id="local-cache-clear-description">确定清空当前代理的全部本地缓存吗？其他端口不受影响，此操作不可撤销。</p>
+          <div className="local-cache-dialog-summary"><span>将删除当前代理的全部缓存项</span><strong>{stats.total} 项</strong></div>
+        </div>
+        <div className="local-cache-dialog-actions">
+          <button ref={clearCancelRef} type="button" className="local-cache-button" onClick={closeClearDialog} disabled={busy}>取消</button>
+          <button type="button" className="local-cache-button danger-solid" onClick={() => void clearAll()} disabled={busy}>{busy ? "清空中…" : "清空缓存"}</button>
+        </div>
+      </div>
     </div>}
   </section>;
 }

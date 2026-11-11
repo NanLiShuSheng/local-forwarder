@@ -1,7 +1,7 @@
 # GitHub Releases 自动更新交接文档
 
-日期：2026-10-26
-状态：自动更新发布范围限定为 Windows x64；GitHub Release 尚未发布
+日期：2026-11-10
+状态：Windows x64 自动更新代码已接入；`0.1.2` 发布准备完成，GitHub Release 尚未创建
 
 ## 目标
 
@@ -9,20 +9,26 @@
 
 GitHub 仓库已确认：`NanLiShuSheng/local-forwarder`，公开仓库，默认分支 `main`。
 
-## 最新状态（2026-10-26）
+## 最新状态（2026-11-10）
 
 - 自动更新发布只支持 Windows x64。Release workflow 只构建 NSIS 安装器，并上传 `.exe`、`.blockmap` 和 `latest.yml`；macOS 本地打包配置保留，不参与自动更新发布。
-- `package.json` 当前版本为 `0.1.1`。GitHub 远端目前只有 `v0.1.0` Tag，Release 列表为空；客户端暂时没有更新元数据可查。要升级 `0.1.1` 安装包，下一次发布版本必须高于 `0.1.1`，例如 `0.1.2`。
-- 最新 Windows CI 在 `npm test` 步骤失败：[Actions run](https://github.com/NanLiShuSheng/local-forwarder/actions/runs/40280186156)。公开 API 不允许读取详细日志，需要仓库管理员在 Actions 页面查看失败用例。
-- Windows Release 不需要 Apple 签名/公证 Secrets。Windows 代码签名可选，主要用于减少 SmartScreen 提示。
-- 自动更新服务和界面已经接入；尚未通过两版 Windows 安装包完成真实升级验收。
+- `package.json` 和 `package-lock.json` 已升级到 `0.1.2`。GitHub Releases 仍为空；下一次发布必须使用匹配的 `v0.1.2` Tag，不能复用 `v0.1.1` 或 `v0.1.0`。
+- Windows CI 的 `npm test` 失败已定位为测试契约漂移：`3931902` 修改了 JSON 预览搜索展开、侧栏背景/标题占位和代理概览锁定方式，但相关 renderer 测试未同步；当前已更新这些测试契约。
+- 同时把 legacy config 子进程测试超时从 4 秒提高到 15 秒，并把 Windows 端口恢复测试改为在 `8080–8089` 中动态选择空闲端口，避免 Windows runner 启动慢或固定端口被占用造成 CI 抖动。
+- `electron-builder.yml` 已显式声明 NSIS `oneClick: true`、`perMachine: false`，保持 per-user 安装，自动更新不应触发 UAC。
+- Release workflow 已预留 `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD` Secrets 注入；未配置证书时安装包为未签名状态。
+- 本地 macOS 全量 `npm test` 已通过：455 个测试，454 通过、1 个 Windows-only 跳过、0 失败；`GITHUB_REF_NAME=v0.1.2 npm run verify:release:tag` 通过。
+- 本地产物已生成并通过 `verify:win`、`verify:release:win`：`dist/Local-Forwarder-Setup-0.1.2.exe`（228,413,129 字节）、`.exe.blockmap`、`latest.yml`；`latest.yml` 的 SHA-512 与实际安装器一致。
+- Windows 升级基线可使用 `release/v0.1.1-candidate/Local-Forwarder-Setup-0.1.1.exe`；已确认其 `resources/app-update.yml` 指向同一 GitHub Release 仓库。
+- Windows CI 仍需在提交后重新运行确认；真实 `0.1.1 -> 0.1.2` 安装升级和代码签名仍需在 Windows 环境完成。
 
 ## 仍需完成
 
-1. 查看并修复 Windows CI 的测试失败，确保 Release 工作流中的 `npm test` 通过。
-2. 准备高于 `0.1.1` 的版本号，更新 `package.json` 和 `package-lock.json`，并创建版本匹配的 `v` Tag。
-3. 确认 GitHub Release 含 NSIS 安装器、对应 `.blockmap` 和 `latest.yml`。
-4. 从 Windows NSIS 安装版检查、下载并升级到新版本，完成端到端验收。
+1. 提交发布改动，创建并推送 `v0.1.2` Tag，确认 Windows CI 和 Release workflow 均通过。
+2. 确认 GitHub Release 含 `Local-Forwarder-Setup-0.1.2.exe`、对应 `.blockmap` 和 `latest.yml`，且不是 Draft。
+3. 在 Windows 安装含更新器的 `0.1.1` 基线，完成检查、下载、安装、重启和 `0.1.1 -> 0.1.2` 版本变化验收。
+4. 验证升级前代理全部停止、配置/缓存/登录数据保留；如安装后未自动拉起应用，再检查 `electron-updater` 的 `autoRunAppAfterInstall` 和安装参数。
+5. 为正式分发准备 Windows 代码签名证书并配置 `WIN_CSC_LINK`、`WIN_CSC_KEY_PASSWORD` Secrets；未签名版本可能触发 SmartScreen 或企业安全软件拦截。
 
 ## 历史记录（截至 2026-09-21）
 
@@ -93,10 +99,12 @@ GitHub 仓库已确认：`NanLiShuSheng/local-forwarder`，公开仓库，默认
 
 ## Windows 发布约定
 
-- 当前版本为 `0.1.1`；下一次更新必须使用更高版本，例如 `0.1.2`。
+- 当前版本为 `0.1.2`；下一版必须使用更高版本，例如 `0.1.3`。
 - Release Tag 必须与 `package.json.version` 匹配，例如 `0.1.2` 对应 `v0.1.2`。
+- NSIS 固定使用 one-click、per-user 安装；若改为 per-machine，需要重新验证 UAC 和更新提权流程。
 - 客户端不内置 GitHub Token。
 - Windows Release 上传 NSIS 安装器、`.blockmap` 和 `latest.yml`；Windows 代码签名可选。
+- Windows 代码签名通过 `WIN_CSC_LINK` 和 `WIN_CSC_KEY_PASSWORD` 注入；证书未配置时不要宣称安装包已签名。
 - 普通构建不能发布；只有匹配版本 Tag 的 Release workflow 才会创建 GitHub Release。
 - 不要执行 `git reset --hard`、`git checkout --` 或清理未跟踪文件；保留工作树中的用户修改。
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { encryptionDirectoryHistoryForKind } from "../../src/renderer/components/ConfigPages";
+import { encryptionDirectoryHistoryForKind, formatEncryptionLocalTime } from "../../src/renderer/components/ConfigPages";
 
 test("keeps input and output encryption directory history separate", () => {
   const preferences = {
@@ -92,7 +92,7 @@ test("history shell boundaries and running state keep menus safe", async () => {
 test("full encryption is primary and incremental encryption is outlined", async () => {
   const component = await readFile("src/renderer/components/ConfigPages.tsx", "utf8");
   const styles = await readFile("src/renderer/styles.css", "utf8");
-  assert.match(component, /className="primary"[\s\S]{0,300}>开始加密/);
+  assert.match(component, /className="primary"[\s\S]{0,500}?开始加密/);
   assert.match(component, /className="encryption-incremental-button"[\s\S]{0,300}增量加密/);
   assert.match(styles, /\.encryption-incremental-button\s*\{/);
 });
@@ -136,13 +136,42 @@ test("encryption page uses only the live log box for progress", async () => {
 test("encryption page shows live progress and file counts above the output directory", async () => {
   const component = await readFile("src/renderer/components/ConfigPages.tsx", "utf8");
   const styles = await readFile("src/renderer/styles.css", "utf8");
-  assert.match(component, /className="encryption-progress"/);
+  assert.match(component, /encryption-progress-card/);
   assert.match(component, /role="progressbar"/);
-  assert.match(component, /总文件数/);
-  assert.match(component, /已加密文件/);
+  assert.match(component, />总文件</);
+  assert.match(component, />已加密</);
+  assert.match(component, />已跳过</);
+  assert.match(component, />待处理</);
   assert.match(component, /setEncryptionProgress/);
   assert.match(component, /progress\.processedFiles/);
-  assert.ok(component.indexOf('className="encryption-progress"') > component.lastIndexOf("加密后文件夹目录"));
-  assert.match(styles, /\.encryption-progress/);
+  assert.ok(component.indexOf('className={`encryption-progress-card') > component.lastIndexOf("加密后文件夹目录"));
+  assert.match(styles, /\.encryption-progress-card/);
   assert.match(styles, /\.encryption-progress-bar/);
+});
+
+test("encryption page uses the refreshed heading, format cards, and live log shell", async () => {
+  const [component, styles] = await Promise.all([
+    readFile("src/renderer/components/ConfigPages.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+  assert.match(component, /className="encryption-heading"/);
+  assert.match(component, /className="encryption-format-grid"/);
+  assert.match(component, /增量清单/);
+  assert.match(component, /className="encryption-current-file"/);
+  assert.match(component, /className="encryption-log-shell"/);
+  assert.match(styles, /\.encryption-format-grid\s*\{/);
+  assert.match(styles, /\.encryption-stat-grid\s*\{/);
+  assert.match(styles, /@keyframes encryption-spin/);
+});
+
+test("formats encryption completion time in local year-month-day hour-minute-second form", () => {
+  const localTimestamp = new Date(2026, 10, 10, 16, 5, 3).getTime();
+  assert.equal(formatEncryptionLocalTime(localTimestamp), "2026-11-10 16:05:03");
+});
+
+test("appends the local completion time only to the final encryption log", async () => {
+  const source = await readFile("src/renderer/components/ConfigPages.tsx", "utf8");
+  assert.match(source, /const completedAt = formatEncryptionLocalTime\(Date\.now\(\)\);/);
+  assert.match(source, /共 \$\{total\} 个） \$\{completedAt\}/);
+  assert.doesNotMatch(source, /加密：\$\{progress\.relativePath\}.*formatEncryptionLocalTime/);
 });

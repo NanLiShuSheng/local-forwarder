@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus, UpdateState } from "../shared/contracts";
 import { AppearancePage } from "./components/AppearancePage";
 import { ConfigPages, type Page } from "./components/ConfigPages";
+import { DecryptionPage } from "./components/DecryptionPage";
 import { LogPanel } from "./components/LogPanel";
 import { JsonPreviewPage } from "./components/JsonPreviewPage";
 import { RuleList } from "./components/RuleList";
@@ -9,17 +10,19 @@ import { ProxyInstancePanel } from "./components/ProxyInstancePanel";
 import { ProxyInstanceSidebar } from "./components/ProxyInstanceSidebar";
 import { UpdateCard } from "./components/UpdateCard";
 import { LocalCachePage } from "./components/LocalCachePage";
+import { LocalVariablesPage } from "./components/LocalVariablesPage";
 import { LoginCachePage } from "./components/LoginCachePage";
 import { ToastProvider, useToast } from "./components/ToastProvider";
 import { loginCacheCustomerSummary } from "./login-cache-data";
 import { createManualCheckTracker, createUpdateStateSynchronizer, resolveManualCheckResult } from "./update-state";
+import { getUpdateDismissalStorage, readDismissedUpdateVersion, writeDismissedUpdateVersion } from "./update-dismissal";
 import { useTheme } from "./useTheme";
 
 const initialStatus: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
 const initialUpdateState: UpdateState = { state: "idle", currentVersion: "" };
 const initialEncryptionPreferences: EncryptionPreferences = { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };
 const initialConfig: AppConfig = { server: { bindHost: "127.0.0.1", port: 8080, timeoutMs: 30000, loggingEnabled: true }, httpRules: [], tcpTargets: [], localValues: {}, mapValues: {}, accounts: {}, cache: { rootDir: "", downloadTarget: "", decryptEnabled: false, autoDownload: false }, request: { host: "127.0.0.1", port: 8080, paramsText: "" }, stringTool: { inputText: "", outputText: "", operation: "replace", findText: "", replaceText: "" } };
-type SidebarNavIconName = "runtime" | "request" | "string" | "json" | "local" | "cache" | "values" | "encryption" | "logs" | "appearance";
+type SidebarNavIconName = "runtime" | "request" | "string" | "json" | "local" | "cache" | "values" | "encryption" | "decryption" | "logs" | "appearance";
 const sidebarNavIconPaths: Record<SidebarNavIconName, string[]> = {
   runtime: ["M4 13a8 8 0 1 1 16 0", "M12 13l3.5-3.5", "M7 17h10"],
   request: ["M5 19 19 5", "M9 5h10v10"],
@@ -29,10 +32,11 @@ const sidebarNavIconPaths: Record<SidebarNavIconName, string[]> = {
   cache: ["M4 7h16v13H4z", "M4 7l2-3h12l2 3", "M8 11h8", "M8 15h5"],
   values: ["M5 6c0-1.1 3.1-2 7-2s7 .9 7 2-3.1 2-7 2-7-.9-7-2Z", "M5 6v6c0 1.1 3.1 2 7 2s7-.9 7-2V6", "M5 12v6c0 1.1 3.1 2 7 2s7-.9 7-2v-6"],
   encryption: ["M7 10V7a5 5 0 0 1 10 0v3", "M5 10h14v10H5z", "M12 14v2"],
+  decryption: ["M7 10V7a5 5 0 0 1 9.6-2", "M5 10h14v10H5z", "M12 14v2"],
   logs: ["M5 6h14", "M5 12h14", "M5 18h14"],
   appearance: ["M5 6h14", "M8 4v4", "M5 12h14", "M15 10v4", "M5 18h14", "M11 16v4"],
 };
-const pages: Array<{ id: Page; label: string; icon: SidebarNavIconName }> = [{ id: "runtime", label: "概览", icon: "runtime" }, { id: "request", label: "请求", icon: "request" }, { id: "encryption", label: "加密", icon: "encryption" }, { id: "json", label: "JSON 可视化", icon: "json" }, { id: "logs", label: "日志", icon: "logs" }, { id: "string", label: "字符串", icon: "string" }, { id: "local", label: "本地变量", icon: "local" }, { id: "local-cache", label: "本地缓存", icon: "cache" }, { id: "values", label: "登录缓存", icon: "values" }, { id: "appearance", label: "外观", icon: "appearance" }];
+const pages: Array<{ id: Page; label: string; icon: SidebarNavIconName }> = [{ id: "runtime", label: "概览", icon: "runtime" }, { id: "request", label: "请求", icon: "request" }, { id: "encryption", label: "加密", icon: "encryption" }, { id: "json", label: "JSON 可视化", icon: "json" }, { id: "logs", label: "日志", icon: "logs" }, { id: "string", label: "字符串", icon: "string" }, { id: "local", label: "本地变量", icon: "local" }, { id: "local-cache", label: "本地缓存", icon: "cache" }, { id: "values", label: "登录缓存", icon: "values" }, { id: "decryption", label: "解密", icon: "decryption" }, { id: "appearance", label: "外观", icon: "appearance" }];
 
 export function createVersionedLogReader(readLogs: () => Promise<LogEntry[]>, applyLogs: (logs: LogEntry[]) => void) {
   let version = 0;
@@ -93,7 +97,6 @@ function AppContent() {
   const [status, setStatus] = useState(initialStatus);
   const [instances, setInstances] = useState<ProxyInstanceSummary[]>([]);
   const [config, setConfig] = useState(initialConfig);
-  const [sharedValues, setSharedValues] = useState<Record<string, string>>({});
   const [loginCache, setLoginCache] = useState<Record<string, string>>({});
   const [loginSuccessNotice, setLoginSuccessNotice] = useState<LoginSuccessNotice>();
   const [encryptionPreferences, setEncryptionPreferences] = useState(initialEncryptionPreferences);
@@ -103,7 +106,7 @@ function AppContent() {
   const [jsonPrefill, setJsonPrefill] = useState<string>();
   const [appVersion, setAppVersion] = useState("");
   const [updateState, setUpdateState] = useState<UpdateState>(initialUpdateState);
-  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string>();
+  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | undefined>(() => readDismissedUpdateVersion(getUpdateDismissalStorage()));
   const loginNoticeIdRef = useRef(0);
   const manualCheckTrackerRef = useRef<ReturnType<typeof createManualCheckTracker> | undefined>(undefined);
   if (manualCheckTrackerRef.current === undefined) {
@@ -193,21 +196,25 @@ function AppContent() {
     try {
       const result = await window.forwarder.installUpdate();
       if (!result.ok) notifyError(result.error ?? "安装更新失败", "安装更新失败");
+      else if (updateState.installMode === "manual") notify({ kind: "success", message: "安装包已打开，请手动完成更新" });
     } catch (cause) {
       notifyError(cause, "安装更新失败");
     }
   };
 
   const dismissUpdate = () => {
-    if (updateState.update?.version !== undefined) setDismissedUpdateVersion(updateState.update.version);
+    const version = updateState.update?.version;
+    if (version !== undefined) {
+      setDismissedUpdateVersion(version);
+      writeDismissedUpdateVersion(getUpdateDismissalStorage(), version);
+    }
   };
 
   const refresh = async () => {
     try {
-      const [nextInstances, nextConfig, nextSharedValues, nextLoginCache, nextStatus, nextEncryptionPreferences] = await Promise.all([window.forwarder.listProxyInstances(), window.forwarder.getConfig(), window.forwarder.getSharedValues(), window.forwarder.getLoginCache(), window.forwarder.status(), window.forwarder.getEncryptionPreferences(), readLogs()]);
+      const [nextInstances, nextConfig, nextLoginCache, nextStatus, nextEncryptionPreferences] = await Promise.all([window.forwarder.listProxyInstances(), window.forwarder.getConfig(), window.forwarder.getLoginCache(), window.forwarder.status(), window.forwarder.getEncryptionPreferences(), readLogs()]);
       setInstances(nextInstances);
       setConfig(nextConfig);
-      setSharedValues(nextSharedValues);
       setLoginCache(nextLoginCache);
       setStatus(nextStatus);
       setEncryptionPreferences(nextEncryptionPreferences);
@@ -242,17 +249,6 @@ function AppContent() {
       return false;
     }
     setConfig(nextConfig);
-    return true;
-  };
-
-  const saveSharedValues = async (values: Record<string, string>) => {
-    const result = await window.forwarder.saveSharedValues(values);
-    if (!result.ok) {
-      notifyError(result.error ?? "本地变量保存失败", "本地变量保存失败");
-      return false;
-    }
-    setSharedValues(values);
-    setInstances(await window.forwarder.listProxyInstances());
     return true;
   };
 
@@ -452,7 +448,7 @@ function AppContent() {
   };
 
   const selectedInstance = instances.find((instance) => instance.selected) ?? instances[0];
-  const pageProps = { config, logs, onChange: save, encryptionPreferences, onSelectEncryptionDirectory: selectEncryptionDirectory, onSaveEncryptionPreferences: saveEncryptionPreferences, onEncryptDirectory: encryptDirectory, onEncryptionProgress: window.forwarder.onEncryptionProgress, onSendRequest: sendRequest, sharedValues, loginCache, onSaveSharedValues: saveSharedValues, onSaveLoginCache: saveLoginCache };
+  const pageProps = { config, logs, onChange: save, encryptionPreferences, onSelectEncryptionDirectory: selectEncryptionDirectory, onSaveEncryptionPreferences: saveEncryptionPreferences, onEncryptDirectory: encryptDirectory, onEncryptionProgress: window.forwarder.onEncryptionProgress, onSendRequest: sendRequest, loginCache, onSaveLoginCache: saveLoginCache };
 
   return <main className="app-shell" data-theme={theme}>
     <aside className="sidebar">
@@ -464,12 +460,14 @@ function AppContent() {
     </aside>
     <section className={`content ${page === "request" ? "request-page-content" : ""} ${page === "json" ? "json-page-content" : ""} ${page === "logs" ? "log-page-content" : ""}`}>
       {page === "appearance" && <AppearancePage mode={mode} theme={theme} onModeChange={setMode} appVersion={appVersion || updateState.currentVersion} checkingForUpdates={updateState.state === "checking"} onCheckForUpdates={checkForUpdates} />}
+      {page === "local" && <LocalVariablesPage />}
       {page === "local-cache" && <LocalCachePage instanceId={selectedInstance?.id} />}
       {page === "values" && <LoginCachePage instanceId={selectedInstance?.id} instanceName={selectedInstance?.name} running={selectedInstance?.status.state === "running"} values={loginCache} onSave={saveLoginCache} />}
+      {page === "decryption" && <DecryptionPage />}
       {page === "runtime" && <><ProxyInstancePanel instances={instances} status={status} config={config} onChange={save} onChooseProjectDirectory={chooseProjectDirectory} onRename={renameProxyInstance} onStart={start} onStop={stop} /><ConfigPages page="addresses" {...pageProps} /></>}
       <div hidden={page !== "json"}><JsonPreviewPage prefillText={jsonPrefill} onPrefillApplied={() => setJsonPrefill(undefined)} /></div>
       {page === "rules" && <RuleList config={config} onChange={save} />}
-      {page !== "runtime" && page !== "local-cache" && page !== "values" && page !== "rules" && page !== "logs" && page !== "appearance" && page !== "json" && <ConfigPages page={page} {...pageProps} />}
+      {page !== "runtime" && page !== "local" && page !== "local-cache" && page !== "values" && page !== "decryption" && page !== "rules" && page !== "logs" && page !== "appearance" && page !== "json" && <ConfigPages page={page} {...pageProps} />}
       {page === "logs" && <LogPanel logs={logs} selected={selectedLog} onSelect={setSelectedLog} onClear={clearLogs} onFillJson={fillJsonPreview} />}
     </section>
     {loginSuccessNotice !== undefined && <LoginSuccessCard notice={loginSuccessNotice} onClose={() => setLoginSuccessNotice(undefined)} onOpenCache={openLoginCache} />}

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>本地变量 - 浏览态原型</title>
+  <link rel="stylesheet" href="local-variables.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">L</div>
+        <div><strong>Local Forwarder</strong><small>本地转发工具</small></div>
+      </div>
+
+      <div class="sidebar-heading">
+        <div><h2>代理实例</h2><p>切换实例后，配置独立保存</p></div>
+      </div>
+      <div class="instance-actions">
+        <button class="start">一键开启</button>
+        <button>一键关闭</button>
+        <button class="create">＋ 新增</button>
+      </div>
+      <div class="instance-card selected">
+        <div class="instance-title"><i class="status-dot"></i><span>行情代理</span><span class="port">:8080</span></div>
+        <code>60.12.9.58:7778</code>
+        <span class="instance-status">运行中</span>
+      </div>
+      <div class="instance-card">
+        <div class="instance-title"><i class="status-dot idle"></i><span>业务办理代理</span><span class="port">:8081</span></div>
+        <code>123.103.83.86:7779</code>
+      </div>
+
+      <nav class="nav" aria-label="功能导航">
+        <span class="nav-label">功能</span>
+        <button><span class="nav-icon">⌂</span>概览</button>
+        <button><span class="nav-icon">↗</span>请求</button>
+        <button><span class="nav-icon">⌕</span>加密</button>
+        <button><span class="nav-icon">{ }</span>JSON 可视化</button>
+        <button><span class="nav-icon">≋</span>日志</button>
+        <button><span class="nav-icon">Aa</span>字符串</button>
+        <button class="active"><span class="nav-icon">$</span>本地变量</button>
+        <button><span class="nav-icon">▤</span>本地缓存</button>
+        <button><span class="nav-icon">●</span>登录缓存</button>
+        <button><span class="nav-icon">☼</span>外观</button>
+      </nav>
+
+      <div class="sidebar-foot">变量作用域<strong>所有代理实例共用</strong></div>
+    </aside>
+
+    <main class="content">
+      <header class="page-heading">
+        <div class="heading-copy">
+          <div class="title-row">
+            <h1>本地变量</h1>
+            <span class="sync-pill"><i></i>已同步 · 18 项</span>
+          </div>
+          <p class="page-subtitle">所有代理实例共用，可在转发地址、请求路径或请求体中使用 <code>($KEY)</code></p>
+        </div>
+        <div class="page-actions">
+          <button class="button primary">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" /></svg>
+            新增变量
+          </button>
+          <button class="button">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5.5 3.5 2.8 8l2.7 4.5M10.5 3.5 13.2 8l-2.7 4.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" /></svg>
+            批量文本
+          </button>
+        </div>
+      </header>
+
+      <section class="variables-shell" aria-label="本地变量管理">
+        <div class="variables-toolbar">
+          <label class="search">
+            <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="4.4" stroke="currentColor" stroke-width="1.25" /><path d="m10.4 10.4 2.5 2.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" /></svg>
+            <input aria-label="搜索本地变量" placeholder="搜索变量名或值" />
+          </label>
+          <div class="filters" role="group" aria-label="变量筛选">
+            <button class="active">全部 18</button>
+            <button>有值 18</button>
+            <button>空值 0</button>
+            <button>长文本 1</button>
+          </div>
+          <div class="toolbar-note"><strong>工作区共享</strong><span class="dot"></span><span>修改后立即用于所有代理</span></div>
+        </div>
+
+        <div class="variables-workspace">
+          <section class="list-pane" aria-label="变量列表">
+            <div class="list-heading">
+              <div><h2>变量列表</h2><p>按名称排序</p></div>
+              <span class="sort-chip">A–Z <span>⌄</span></span>
+            </div>
+            <div class="list-scroll" role="listbox" aria-label="本地变量">
+              <button class="variable-row selected" role="option" aria-selected="true">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">SELFSTOCKLIST</span><span class="type-badge long">长文本</span></span>
+                  <span class="key-preview">000001,000002,000063,000333,000651,000725…</span>
+                </span>
+                <span class="key-meta"><span class="char-count">251</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">TZTUNIQUEID</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">TZT-20261111-8F6A-4C7D-9B12-6E3A…</span>
+                </span>
+                <span class="key-meta"><span class="char-count">40</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">MOBILECODE</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">138****6621</span>
+                </span>
+                <span class="key-meta"><span class="char-count">11</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">HQVERSION</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">6.8.12</span>
+                </span>
+                <span class="key-meta"><span class="char-count">6</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">TRADE_ACCOUNT</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">A9087215</span>
+                </span>
+                <span class="key-meta"><span class="char-count">8</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">CLIENT_ID</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">5851278</span>
+                </span>
+                <span class="key-meta"><span class="char-count">7</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">INFO_SOURCE</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">broker=TZT;channel=APP;env=prod</span>
+                </span>
+                <span class="key-meta"><span class="char-count">38</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">FUND_ACCOUNT</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">109220495</span>
+                </span>
+                <span class="key-meta"><span class="char-count">9</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">USER_CODE</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">5851278</span>
+                </span>
+                <span class="key-meta"><span class="char-count">7</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">LOGIN_TOKEN</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">wSjczW16@170A-DF72246Lxi5xZ…</span>
+                </span>
+                <span class="key-meta"><span class="char-count">28</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">DEVICE_ID</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">8B17A2F4-6C15-4A0E-9E31-2D89C7A4F610</span>
+                </span>
+                <span class="key-meta"><span class="char-count">36</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">APP_VERSION</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">3.6.12</span>
+                </span>
+                <span class="key-meta"><span class="char-count">6</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">OS_TYPE</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">macOS</span>
+                </span>
+                <span class="key-meta"><span class="char-count">5</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">LAST_STATION</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">TYJR-TZT-XET-BJ156-SH--MI;IIP=10.23…</span>
+                </span>
+                <span class="key-meta"><span class="char-count">98</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">SESSION_NO</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">SN-20261111-00281</span>
+                </span>
+                <span class="key-meta"><span class="char-count">16</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">BRANCH_CODE</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">SH01</span>
+                </span>
+                <span class="key-meta"><span class="char-count">4</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">BROKER_ID</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">TZT</span>
+                </span>
+                <span class="key-meta"><span class="char-count">3</span><span class="row-chevron">›</span></span>
+              </button>
+              <button class="variable-row" role="option" aria-selected="false">
+                <span class="key-copy">
+                  <span class="key-line"><span class="key-name">CUSTOM_FLAG</span><span class="type-badge text">文本</span></span>
+                  <span class="key-preview">1</span>
+                </span>
+                <span class="key-meta"><span class="char-count">1</span><span class="row-chevron">›</span></span>
+              </button>
+            </div>
+            <div class="list-footer"><span><strong>18</strong> 个变量</span><span>名称不区分大小写</span></div>
+          </section>
+
+          <section class="detail-pane" aria-label="变量详情">
+            <div class="detail-heading">
+              <div class="detail-title">
+                <div class="detail-kicker"><span class="type-badge long">长文本</span><span>变量详情 · 工作区共享</span></div>
+                <div class="detail-title-line"><h2>SELFSTOCKLIST</h2></div>
+                <div class="detail-meta"><span>251 字符</span><span class="dot"></span><span>1 行</span><span class="dot"></span><span>保存时自动换行显示</span></div>
+              </div>
+              <div class="detail-actions">
+                <button class="button small">
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5" y="5" width="7.5" height="8" rx="1.4" stroke="currentColor" stroke-width="1.15" /><path d="M10.5 5V3.7c0-.66-.54-1.2-1.2-1.2H4.2C3.54 2.5 3 3.04 3 3.7v6.4c0 .66.54 1.2 1.2 1.2H5" stroke="currentColor" stroke-width="1.15" /></svg>
+                  复制值
+                </button>
+                <button class="button primary small">编辑变量</button>
+                <button class="icon-button" title="更多操作" aria-label="更多操作">⋯</button>
+              </div>
+            </div>
+
+            <div class="detail-body">
+              <div class="reference-card">
+                <span class="reference-symbol">( )</span>
+                <div class="reference-copy"><span>引用占位符</span><code>($SELFSTOCKLIST)</code></div>
+                <button class="button small">复制占位符</button>
+              </div>
+
+              <section class="value-card" aria-label="变量值">
+                <div class="value-card-heading">
+                  <div><h3>变量值</h3><em>自动换行</em></div>
+                  <button class="icon-button" title="复制变量值" aria-label="复制变量值">
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5" y="5" width="7.5" height="8" rx="1.4" stroke="currentColor" stroke-width="1.15" /><path d="M10.5 5V3.7c0-.66-.54-1.2-1.2-1.2H4.2C3.54 2.5 3 3.04 3 3.7v6.4c0 .66.54 1.2 1.2 1.2H5" stroke="currentColor" stroke-width="1.15" /></svg>
+                  </button>
+                </div>
+                <div class="code-view">000001,000002,000063,000333,000651,000725,000858,002415,002594,300059,300124,300750,600000,600009,600036,600276,600309,600519,600585,600690,600887,601012,601088,601166,601288,601318,601398,601668,601857,601888,601988,603259,688981,601899,603288,000568</div>
+                <div class="value-card-foot"><span>UTF-8 · 纯文本</span><span>251 字符 · 1 行</span></div>
+              </section>
+
+              <div class="usage-note"><i>i</i><p>可在转发地址、请求路径或请求体中使用 <code>($SELFSTOCKLIST)</code>。引用变量名时不区分大小写。</p></div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

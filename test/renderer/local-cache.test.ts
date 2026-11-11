@@ -78,3 +78,19 @@ test("local cache page does not reuse the local variable page data source", asyn
   assert.doesNotMatch(source, /sharedValues/);
   assert.doesNotMatch(source, /loginCache/);
 });
+
+test("local cache page clears the selected proxy after a second confirmation", async () => {
+  const [source, styles] = await Promise.all([
+    readFile("src/renderer/components/LocalCachePage.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+
+  assert.match(source, /const \[confirmingClear, setConfirmingClear\] = useState\(false\)/);
+  assert.match(source, /className="local-cache-button danger"/);
+  assert.match(source, /disabled=\{busy \|\| !loaded \|\| stats\.total === 0\}/);
+  assert.match(source, /确定清空当前代理的全部本地缓存吗？其他端口不受影响，此操作不可撤销。/);
+  assert.match(source, /await persistValues\(\{\}\)/);
+  assert.match(source, /message: "本地缓存已清空"/);
+  assert.match(styles, /\.local-cache-button\.danger[^\n]*var\(--danger-border\)/);
+  assert.match(styles, /\.local-cache-dialog-overlay[^\n]*position:\s*fixed/);
+});

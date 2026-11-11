@@ -27,3 +27,7 @@ export function getEncryptionEncoderPath(
 export function getEncryptionPreferencesPath(userDataPath: string): string {
   return path.join(userDataPath, "encryption-preferences.json");
 }
+
+export function getDecryptionPreferencesPath(userDataPath: string): string {
+  return path.join(userDataPath, "decryption-preferences.json");
+}

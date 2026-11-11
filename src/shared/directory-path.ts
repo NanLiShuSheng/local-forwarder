@@ -2,6 +2,8 @@ export function parseDirectoryInput(value: string): string {
   const raw = value.trim();
   if (raw === "") throw new Error("目录路径无效");
 
+  if (/^[a-z]:[\\/]/i.test(raw) || raw.startsWith("\\\\")) return raw;
+
   if (/^[a-z][a-z\d+.-]*:/i.test(raw)) {
     let parsed: URL;
     try {
@@ -13,6 +15,7 @@ export function parseDirectoryInput(value: string): string {
     if (parsed.hostname !== "" && parsed.hostname !== "localhost") throw new Error("目录 URL 必须是本地 file URL");
     try {
       const pathname = decodeURIComponent(parsed.pathname);
+      if (/^\/[a-z]:\//i.test(pathname)) return pathname.slice(1);
       if (!pathname.startsWith("/")) throw new Error("目录路径无效");
       return pathname;
     } catch {

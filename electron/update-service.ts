@@ -17,12 +17,14 @@ export interface UpdateAdapter {
   checkForUpdates(): Promise<unknown>;
   downloadUpdate(): Promise<unknown>;
   quitAndInstall(): void;
+  openDownloadedUpdate?(): Promise<unknown>;
 }
 
 export interface UpdateServiceOptions {
   currentVersion: string;
   isPackaged: boolean;
   isSmokeMode: boolean;
+  installMode?: "automatic" | "manual";
   updater?: UpdateAdapter;
   stopAll: () => Promise<{ ok: boolean; error?: string } | void>;
   onInstallStateChange?: (installing: boolean) => void;
@@ -38,11 +40,11 @@ export interface UpdateService {
   dispose(): void;
 }
 
-const BACKGROUND_CHECK_DELAY_MS = 10_000;
 const FALLBACK_ERRORS = {
   check: "检查更新失败",
   download: "下载更新失败",
   install: "安装更新失败",
+  openInstaller: "打开安装包失败",
 } as const;
 
 type UpdateOperation = keyof typeof FALLBACK_ERRORS;
@@ -51,13 +53,14 @@ type OperationResult = { ok: boolean; error?: string };
 export function createUpdateService(options: UpdateServiceOptions): UpdateService {
   const updater = options.updater;
   const active = options.isPackaged && !options.isSmokeMode && updater !== undefined;
+  const installMode = options.installMode ?? "automatic";
   let state: UpdateState = {
     state: "idle",
     currentVersion: options.currentVersion,
+    ...(installMode === "manual" ? { installMode } : {}),
   };
   let disposed = false;
   let backgroundStarted = false;
-  let backgroundTimer: ReturnType<typeof setTimeout> | undefined;
   let checkPromise: Promise<OperationResult> | undefined;
   let downloadPromise: Promise<OperationResult> | undefined;
   let installPromise: Promise<OperationResult> | undefined;
@@ -90,8 +93,8 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
     removeListeners.push(updater.onUpdateDownloaded((update) => {
       setState({ state: "downloaded", currentVersion: options.currentVersion, update });
     }));
-    removeListeners.push(updater.onError(() => {
-      setError(currentOperation);
+    removeListeners.push(updater.onError((error) => {
+      setError(currentOperation, error);
     }));
   }
 
@@ -131,8 +134,29 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
     if (!active) return Promise.resolve({ ok: true });
     if (installPromise !== undefined) return installPromise;
     if (state.state !== "downloaded") {
-      setError("install");
-      return Promise.resolve({ ok: false, error: FALLBACK_ERRORS.install });
+      const operation = installMode === "manual" ? "openInstaller" : "install";
+      return Promise.resolve({ ok: false, error: setError(operation) });
+    }
+
+    if (installMode === "manual") {
+      currentOperation = "openInstaller";
+      installPromise = Promise.resolve()
+        .then(async () => {
+          if (state.state !== "downloaded" || updater.openDownloadedUpdate === undefined) {
+            return { ok: false, error: setError("openInstaller") };
+          }
+          try {
+            await updater.openDownloadedUpdate();
+          } catch (error) {
+            return { ok: false, error: setError("openInstaller", error) };
+          }
+          setState({ ...state, installerOpened: true });
+          return { ok: true };
+        })
+        .finally(() => {
+          installPromise = undefined;
+        });
+      return installPromise;
     }
 
     currentOperation = "install";
@@ -184,51 +208,82 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
     try {
       return Promise.resolve(action())
         .then(() => ({ ok: true }))
-        .catch(() => {
-          setError(operation);
-          return { ok: false, error: FALLBACK_ERRORS[operation] };
+        .catch((error: unknown) => {
+          return { ok: false, error: setError(operation, error) };
         });
-    } catch {
-      setError(operation);
-      return Promise.resolve({ ok: false, error: FALLBACK_ERRORS[operation] });
+    } catch (error) {
+      return Promise.resolve({ ok: false, error: setError(operation, error) });
     }
   }
 
   function startBackgroundCheck(): Promise<void> {
     if (!active || backgroundStarted || disposed) return Promise.resolve();
     backgroundStarted = true;
-    backgroundTimer = setTimeout(() => {
-      backgroundTimer = undefined;
-      void check();
-    }, BACKGROUND_CHECK_DELAY_MS);
-    backgroundTimer.unref?.();
+    void check();
     return Promise.resolve();
   }
 
   function dispose(): void {
     if (disposed) return;
     disposed = true;
-    if (backgroundTimer !== undefined) clearTimeout(backgroundTimer);
-    backgroundTimer = undefined;
     for (const removeListener of removeListeners.splice(0)) removeListener();
   }
 
-  function setError(operation: UpdateOperation): void {
+  function setError(operation: UpdateOperation, error?: unknown): string {
+    const message = describeUpdateFailure(operation, error);
     setState({
       state: "error",
       currentVersion: options.currentVersion,
       update: state.update,
-      error: FALLBACK_ERRORS[operation],
+      error: message,
     });
+    return message;
   }
 
   function setState(next: UpdateState): void {
-    if (disposed || statesEqual(state, next)) return;
-    state = cloneState(next);
+    const normalized = installMode === "manual" ? { ...next, installMode } : next;
+    if (disposed || statesEqual(state, normalized)) return;
+    state = cloneState(normalized);
     options.publish(getState());
   }
 
   return { getState, startBackgroundCheck, check, download, install, dispose };
+}
+
+const ACTIONABLE_UPDATE_ERRORS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/ERR_UPDATER_CHANNEL_FILE_NOT_FOUND|latest\.yml.*not found|Cannot find latest\.yml/i, "服务器上缺少 latest.yml，或更新地址配置错误"],
+  [/ERR_UPDATER_LATEST_VERSION_NOT_FOUND/i, "无法获取最新版本，请检查更新地址和网络"],
+  [/ERR_UPDATER_INVALID_UPDATE_INFO/i, "latest.yml 格式无效"],
+  [/ERR_UPDATER_NO_CHECKSUM/i, "latest.yml 缺少校验值"],
+  [/ERR_UPDATER_INVALID_VERSION/i, "更新包版本号无效"],
+  [/ERR_UPDATER_INVALID_SIGNATURE/i, "更新包签名校验失败"],
+  [/ERR_MANUAL_UPDATE_NOT_FOUND/i, "尚未发布 Mac 更新包"],
+  [/ERR_MANUAL_UPDATE_MANIFEST|ERR_MANUAL_UPDATE_ARCH/i, "Mac 更新元数据无效或缺少当前架构安装包"],
+  [/ERR_MANUAL_UPDATE_CHECKSUM/i, "安装包 SHA-512 校验失败"],
+  [/ERR_MANUAL_UPDATE_DOWNLOAD/i, "安装包下载失败"],
+  [/ERR_MANUAL_UPDATE_OPEN/i, "无法打开安装包"],
+  [/ERR_NAME_NOT_RESOLVED|ENOTFOUND/i, "更新服务器域名无法解析"],
+  [/ERR_CONNECTION_TIMED_OUT|ETIMEDOUT|TIMED_OUT/i, "连接更新服务器超时"],
+  [/ERR_CONNECTION_REFUSED|ECONNREFUSED/i, "更新服务器拒绝连接"],
+  [/ERR_INTERNET_DISCONNECTED|ENETUNREACH|EAI_AGAIN/i, "网络不可用，请检查网络连接"],
+  [/ERR_CERT_|CERT_|certificate/i, "HTTPS 证书校验失败"],
+];
+
+function describeUpdateFailure(operation: UpdateOperation, error?: unknown): string {
+  const fallback = FALLBACK_ERRORS[operation];
+  if (error === undefined || error === null) return fallback;
+  const value = error as { message?: unknown; code?: unknown; statusCode?: unknown };
+  const text = [value.message, value.code].filter((part) => typeof part === "string").join(" ");
+  for (const [pattern, message] of ACTIONABLE_UPDATE_ERRORS) {
+    if (pattern.test(text)) return `${fallback}：${message}`;
+  }
+  if (typeof value.statusCode === "number") {
+    return `${fallback}：服务器返回 HTTP ${value.statusCode}`;
+  }
+  if (typeof value.code === "string" && value.code.startsWith("ERR_UPDATER_")) {
+    return `${fallback}：${value.code}`;
+  }
+  return fallback;
 }
 
 export function createElectronUpdateAdapter(): UpdateAdapter {

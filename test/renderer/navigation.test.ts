@@ -15,7 +15,7 @@ test("sidebar navigation puts the primary pages first in the requested order", a
   assert.ok(pagesMatch);
   const labels = [...pagesMatch[1].matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
 
-  assert.deepEqual(labels, ["概览", "请求", "加密", "JSON 可视化", "日志", "字符串", "本地变量", "本地缓存", "登录缓存", "外观"]);
+  assert.deepEqual(labels, ["概览", "请求", "加密", "JSON 可视化", "日志", "字符串", "本地变量", "本地缓存", "登录缓存", "解密", "外观"]);
 });
 
 test("sidebar navigation removes the visible feature heading without changing its accessible name", async () => {
@@ -38,6 +38,7 @@ test("sidebar navigation gives every tab an icon without changing its label", as
   assert.match(source, /icon: "cache"/);
   assert.match(source, /icon: "values"/);
   assert.match(source, /icon: "encryption"/);
+  assert.match(source, /icon: "decryption"/);
   assert.match(source, /icon: "logs"/);
   assert.match(source, /icon: "appearance"/);
   assert.match(source, /className="sidebar-nav-icon"/);

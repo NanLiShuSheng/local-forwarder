@@ -29,6 +29,14 @@ const request = readRequest();
 if (request.method === "rc4") {
   const data = Buffer.from(request.data, "base64");
   writeResponse({ data: Buffer.from(tzt.RC4(data, request.key)).toString("base64") });
+} else if (request.method === "rc4batch") {
+  if (!Array.isArray(request.data)) throw new Error("rc4batch data must be an array");
+  writeResponse({
+    data: request.data.map((entry) => {
+      const data = Buffer.from(entry, "base64");
+      return Buffer.from(tzt.RC4(data, request.key)).toString("base64");
+    }),
+  });
 } else if (request.method === "jsonltzt") {
   writeResponse({ data: Buffer.from(tzt.jsonltzt(request.query, request.handleSerialNo)).toString("base64") });
 } else if (request.method === "tztljson") {

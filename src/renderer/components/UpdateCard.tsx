@@ -38,6 +38,7 @@ export function UpdateCard({ state, dismissedVersion, onDownload, onInstall, onD
   const percent = Number.isFinite(rawPercent) ? Math.max(0, Math.min(100, rawPercent)) : 0;
   const canInstall = canInstallUpdate(state);
   const isDownloading = state.state === "downloading";
+  const manualInstall = state.installMode === "manual";
   const errorMessage = state.error !== undefined && /[\u4e00-\u9fff]/.test(state.error) ? state.error : "更新操作失败，请重试";
 
   return <aside className="update-card" role="region" aria-label="软件更新" aria-live="polite">
@@ -54,12 +55,16 @@ export function UpdateCard({ state, dismissedVersion, onDownload, onInstall, onD
       <div className="update-card-progress-meta"><span>{formatBytes(state.progress?.transferred ?? 0)} / {formatBytes(state.progress?.total ?? 0)}</span><span>{formatBytes(state.progress?.bytesPerSecond ?? 0)}/s</span></div>
     </div>}
     {state.state === "error" && <p className="update-card-error">{errorMessage}</p>}
-    {state.state === "downloaded" && <p className="update-card-message">更新已下载</p>}
-    {state.state === "available" && <p className="update-card-message">准备下载版本 {version}</p>}
-    {isDownloading && <p className="update-card-message">正在下载更新 {Math.round(percent)}%</p>}
+    {state.state === "downloaded" && <p className="update-card-message">{manualInstall
+      ? state.installerOpened
+        ? "安装包已打开，请退出应用后将 Local Forwarder 拖入 Applications"
+        : "安装包已下载，打开后将 Local Forwarder 拖入 Applications 完成更新"
+      : "更新已下载"}</p>}
+    {state.state === "available" && <p className="update-card-message">{manualInstall ? "准备下载 macOS 安装包" : "准备下载版本"} {version}</p>}
+    {isDownloading && <p className="update-card-message">{manualInstall ? "正在下载安装包" : "正在下载更新"} {Math.round(percent)}%</p>}
     <div className="update-card-actions">
-      {!canInstall && <button type="button" className="button-row-button primary" disabled={isDownloading} onClick={onDownload}>下载更新</button>}
-      {canInstall && <button type="button" className="button-row-button primary" onClick={onInstall}>立即重启更新</button>}
+      {!canInstall && <button type="button" className="button-row-button primary" disabled={isDownloading} onClick={onDownload}>{manualInstall ? "下载安装包" : "下载更新"}</button>}
+      {canInstall && <button type="button" className="button-row-button primary" onClick={onInstall}>{manualInstall ? "打开安装包" : "立即重启更新"}</button>}
       {!isDownloading && <button type="button" className="button-row-button" onClick={onDismiss}>稍后更新</button>}
     </div>
   </aside>;

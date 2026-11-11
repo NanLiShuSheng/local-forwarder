@@ -20,6 +20,10 @@ test("codec preserves the legacy RC4 and encode regression vectors", () => {
 
   assert.equal(codec.rc4(Buffer.from("Plaintext"), "x").toString("hex"), "32da9e2ceaea1a6e75");
   assert.equal(codec.rc4(Buffer.from("Plaintext"), "file").toString("hex"), "7ad9f940a0c3d07a8f");
+  assert.deepEqual(
+    codec.rc4Batch([Buffer.from("Plaintext"), Buffer.from("Plaintext")], "file").map((entry) => entry.toString("hex")),
+    ["7ad9f940a0c3d07a8f", "7ad9f940a0c3d07a8f"],
+  );
   assert.equal(
     codec.encode({ Action: "100", foo: "bar" }, 12).toString("hex"),
     "b7072500000064000300000200000031320006416374696f6e0300000031303003666f6f03000000626172",

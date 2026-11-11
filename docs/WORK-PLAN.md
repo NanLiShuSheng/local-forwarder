@@ -104,10 +104,9 @@
 - Windows CI 位于 `.github/workflows/windows.yml`，执行 `npm ci`、`npm test`、`npm run build`、NSIS 打包、包校验和 packaged smoke，并上传安装器与 `dist/win-unpacked`。
 - Windows 验收命令：`npm run package:win:x64`、`npm run verify:win`、`node scripts/smoke-packaged.mjs`；需在 Windows x64 runner 完成真实安装、HTTP/HTTPS、TCP/TZT、H5 加密、`.d` 解密、端口恢复和卸载后用户数据保留验证。
 
-### GitHub Releases 自动更新（2026-09-22）
+### GitHub Releases 更新（2026-11-11）
 
-- 主进程通过 `electron-updater` 提供手动检查、下载进度和安装前停止代理；renderer 使用持久更新卡片，普通错误继续使用短时 Toast。
-- Release Tag 必须与 `package.json.version` 匹配；Windows NSIS 安装器、`.blockmap` 和 `latest.yml` 会在发布前校验版本、更新元数据和 `sha512`。
-- `.github/workflows/release.yml` 仅对 `v*` Tag 构建 Windows x64，发布任务只依赖 Windows job 并创建 GitHub Release。
-- GitHub 自动更新目前只面向 Windows；macOS 打包脚本保留用于本地构建，不参与 Release。Windows 代码签名不是自动更新前置条件，可单独配置以减少 SmartScreen 提示。
-- 更新服务和发布脚本契约已覆盖；真实 Windows runner、NSIS 安装及两版本自动更新验收需在 Windows 环境执行。
+- Windows 主进程通过 `electron-updater` 提供手动检查、下载进度和安装前停止代理；renderer 使用持久更新卡片，普通错误继续使用短时 Toast。
+- macOS 无 Developer ID 证书时走半自动更新：读取 GitHub Release 的 `mac-update.json`、下载 DMG、校验 SHA-512 后打开安装包，由用户退出应用并手动拖入 Applications。该模式不执行自动替换或重启。
+- Release Tag 必须与 `package.json.version` 匹配；Windows NSIS 安装器、`.blockmap`、`latest.yml`，以及 macOS DMG/ZIP、`latest-mac.yml` 和 `mac-update.json` 会在发布前校验版本、更新元数据和 `sha512`。
+- `.github/workflows/release.yml` 对 `v*` Tag 构建 Windows x64 与 macOS x64/arm64；macOS 未配置签名/公证 Secrets 时跳过公证并发布未签名安装包，面向公开分发仍建议配置 Developer ID 签名和公证。

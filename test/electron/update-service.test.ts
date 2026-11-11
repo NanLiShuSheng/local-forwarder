@@ -37,6 +37,7 @@ class FakeAdapter implements UpdateAdapter {
   checkCalls = 0;
   downloadCalls = 0;
   quitAndInstallCalls = 0;
+  openDownloadedCalls = 0;
   checkDeferred?: Deferred<unknown>;
   downloadDeferred?: Deferred<unknown>;
   private checkingListeners = new Set<() => void>();
@@ -84,6 +85,11 @@ class FakeAdapter implements UpdateAdapter {
 
   quitAndInstall(): void {
     this.quitAndInstallCalls += 1;
+  }
+
+  async openDownloadedUpdate(): Promise<unknown> {
+    this.openDownloadedCalls += 1;
+    return {};
   }
 
   emitChecking(): void {
@@ -233,6 +239,25 @@ test("publishes a Chinese fallback instead of exposing adapter errors", async ()
   assert.equal(service.getState().state, "error");
   assert.equal(service.getState().error, "检查更新失败");
   assert.equal(states.some((state) => JSON.stringify(state).includes("GitHub English failure")), false);
+  service.dispose();
+});
+
+test("maps actionable updater failures without exposing raw adapter text", async () => {
+  const { adapter, service } = createHarness();
+
+  const check = service.check();
+  const error = Object.assign(new Error("net::ERR_CONNECTION_TIMED_OUT"), {
+    code: "ERR_UPDATER_LATEST_VERSION_NOT_FOUND",
+  });
+  adapter.emitError(error);
+  adapter.checkDeferred?.reject(error);
+  const result = await check;
+
+  assert.deepEqual(result, {
+    ok: false,
+    error: "检查更新失败：无法获取最新版本，请检查更新地址和网络",
+  });
+  assert.equal(service.getState().error, "检查更新失败：无法获取最新版本，请检查更新地址和网络");
   service.dispose();
 });
 
@@ -411,6 +436,56 @@ test("holds the install lifecycle lock through shutdown and releases it on failu
   service.dispose();
 });
 
+test("manual install opens the downloaded installer without stopping services", async () => {
+  let stopCalls = 0;
+  const { adapter, service, states } = createHarness({
+    installMode: "manual",
+    stopAll: async () => {
+      stopCalls += 1;
+      return { ok: true };
+    },
+  });
+
+  const download = service.download();
+  adapter.emitDownloaded();
+  adapter.downloadDeferred?.resolve({});
+  await download;
+
+  assert.deepEqual(await service.install(), { ok: true });
+  assert.equal(stopCalls, 0);
+  assert.equal(adapter.openDownloadedCalls, 1);
+  assert.equal(adapter.quitAndInstallCalls, 0);
+  assert.equal(service.getState().installMode, "manual");
+  assert.equal(service.getState().state, "downloaded");
+  assert.equal(service.getState().installerOpened, true);
+  assert.equal(states.some((state) => state.installerOpened === true), true);
+  service.dispose();
+});
+
+test("manual install reports open failures without stopping services", async () => {
+  let stopCalls = 0;
+  const { adapter, service } = createHarness({
+    installMode: "manual",
+    stopAll: async () => {
+      stopCalls += 1;
+      return { ok: true };
+    },
+  });
+  adapter.openDownloadedUpdate = async () => {
+    throw Object.assign(new Error("open failed"), { code: "ERR_MANUAL_UPDATE_OPEN" });
+  };
+
+  const download = service.download();
+  adapter.emitDownloaded();
+  adapter.downloadDeferred?.resolve({});
+  await download;
+
+  assert.deepEqual(await service.install(), { ok: false, error: "打开安装包失败：无法打开安装包" });
+  assert.equal(stopCalls, 0);
+  assert.equal(service.getState().state, "error");
+  service.dispose();
+});
+
 test("does not access an updater when no adapter is provided", async () => {
   let stopCalls = 0;
   const service = createUpdateService({
@@ -432,45 +507,26 @@ test("does not access an updater when no adapter is provided", async () => {
   service.dispose();
 });
 
-test("dispose removes listeners and clears the delayed background check", async () => {
+test("dispose removes listeners and prevents a startup check", async () => {
   const { adapter, service } = createHarness();
 
-  await service.startBackgroundCheck();
   assert.ok(adapter.listenerCount() > 0);
   service.dispose();
   assert.equal(adapter.listenerCount(), 0);
+  await service.startBackgroundCheck();
+  assert.equal(adapter.checkCalls, 0);
 });
 
-test("schedules one unref'd background check after ten seconds", async () => {
-  const originalSetTimeout = globalThis.setTimeout;
-  const originalClearTimeout = globalThis.clearTimeout;
-  let timerCalls = 0;
-  let delay: number | undefined;
-  let callback: (() => void) | undefined;
-  globalThis.setTimeout = ((handler: Parameters<typeof setTimeout>[0], timeout?: Parameters<typeof setTimeout>[1]) => {
-    timerCalls += 1;
-    delay = timeout;
-    callback = handler as () => void;
-    return { unref: () => undefined } as unknown as ReturnType<typeof setTimeout>;
-  }) as typeof globalThis.setTimeout;
-  globalThis.clearTimeout = (() => undefined) as typeof globalThis.clearTimeout;
+test("starts exactly one background check immediately", async () => {
+  const { adapter, service } = createHarness();
 
-  try {
-    const { adapter, service } = createHarness();
-    await service.startBackgroundCheck();
-    await service.startBackgroundCheck();
-    assert.equal(timerCalls, 1);
-    assert.equal(delay, 10_000);
+  await service.startBackgroundCheck();
+  assert.equal(adapter.checkCalls, 1);
 
-    callback?.();
-    assert.equal(adapter.checkCalls, 1);
-    adapter.checkDeferred?.resolve({});
-    await Promise.resolve();
-    await service.startBackgroundCheck();
-    assert.equal(timerCalls, 1);
-    service.dispose();
-  } finally {
-    globalThis.setTimeout = originalSetTimeout;
-    globalThis.clearTimeout = originalClearTimeout;
-  }
+  await service.startBackgroundCheck();
+  assert.equal(adapter.checkCalls, 1);
+
+  adapter.checkDeferred?.resolve({});
+  await Promise.resolve();
+  service.dispose();
 });

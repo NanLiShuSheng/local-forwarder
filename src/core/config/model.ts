@@ -1,5 +1,6 @@
 import type { AppConfig, LegacyData, ProxyInstance, ProxyWorkspace } from "../../shared/contracts";
 import { parseLocalCacheText } from "../../shared/local-cache";
+import { ensureDefaultLocalValues } from "../../shared/local-values";
 
 export type InternalConfig = AppConfig & { legacy: LegacyData };
 
@@ -51,5 +52,5 @@ export function createDefaultWorkspace(config: AppConfig = createDefaultConfig()
   const instance = createDefaultProxyInstance(config);
   let sharedValues: Record<string, string> = {};
   try { sharedValues = parseLocalCacheText(config.localText ?? ""); } catch { /* malformed legacy text remains in the legacy config only */ }
-  return { version: 1, selectedInstanceId: instance.id, sharedValues, instances: [instance] };
+  return { version: 1, selectedInstanceId: instance.id, sharedValues: ensureDefaultLocalValues(sharedValues), instances: [instance] };
 }

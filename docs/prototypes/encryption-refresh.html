@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>加密页视觉优化原型</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --app-background: #0d1421;
+      --app-background-accent: #243c61;
+      --app-background-mid: #101b2d;
+      --sidebar-background: rgb(8 15 27 / 76%);
+      --sidebar-border: #26344b;
+      --panel-background: rgb(17 29 48 / 88%);
+      --surface-background: #14243a;
+      --surface-alt-background: #16263d;
+      --surface-elevated-background: #1a2b43;
+      --surface-selected-background: #1b314c;
+      --code-surface-background: #101d30;
+      --input-background: #111e32;
+      --text-primary: #e9eef7;
+      --text-bright: #f4f8ff;
+      --text-secondary: #a8b9cf;
+      --text-muted: #8597b0;
+      --text-label: #91a5bf;
+      --text-subtle: #9fb2ca;
+      --text-tertiary: #b9c8dc;
+      --text-button: #dae5f4;
+      --text-on-accent: #092019;
+      --border-default: #2a3b55;
+      --border-card: #2b3d58;
+      --border-button: #3b4e68;
+      --border-input: #344862;
+      --border-subtle: #26374e;
+      --border-selected: #79e2c0;
+      --selection-background: #1a304c;
+      --success: #79e2c0;
+      --success-hover: #8ae9cc;
+      --text-success: #79e2c0;
+      --success-soft: rgb(121 226 192 / 12%);
+      --success-faint: rgb(121 226 192 / 13%);
+      --focus-background: rgb(121 226 192 / 10%);
+      --info: #8fc7ff;
+      --info-background: #152840;
+      --progress-end: #5bb7e8;
+      --warning: #f3c67f;
+      --shadow-color: rgb(0 0 0 / 16%);
+      --shadow-menu: rgb(0 0 0 / 30%);
+      --scrollbar-track: #101d31;
+      --scrollbar-thumb: #536b88;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
+    body {
+      margin: 0;
+      min-width: 1200px;
+      overflow: hidden;
+      color: var(--text-primary);
+      background: radial-gradient(circle at 72% -12%, var(--app-background-accent) 0, var(--app-background-mid) 38%, var(--app-background) 78%);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+    .app-shell { display: flex; width: 100%; height: 100vh; overflow: hidden; }
+    .sidebar {
+      display: flex;
+      width: 294px;
+      flex: 0 0 294px;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      border-right: 1px solid var(--sidebar-border);
+      padding: 24px 16px 18px;
+      background: var(--sidebar-background);
+    }
+    .brand { display: flex; align-items: center; gap: 11px; margin: 0 10px 24px; }
+    .brand-mark { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; color: #092019; background: linear-gradient(135deg, #8ae9cc, #54cda9); font-size: 18px; font-weight: 800; box-shadow: 0 8px 22px rgb(84 205 169 / 18%); }
+    .brand strong, .brand small { display: block; }
+    .brand strong { color: var(--text-bright); font-size: 15px; letter-spacing: -.01em; }
+    .brand small { margin-top: 2px; color: var(--text-muted); font-size: 10px; }
+    .sidebar-heading { display: flex; align-items: flex-start; justify-content: space-between; margin: 0 10px 12px; }
+    .sidebar-heading h2 { margin: 0; color: var(--text-bright); font-size: 16px; }
+    .sidebar-heading p { margin: 4px 0 0; color: var(--text-muted); font-size: 10px; }
+    .instance-actions { display: flex; gap: 6px; margin: 0 4px 12px 10px; }
+    .instance-actions button { height: 31px; border: 1px solid var(--border-button); border-radius: 8px; padding: 0 10px; color: var(--text-secondary); background: var(--surface-elevated-background); font-size: 10px; font-weight: 700; }
+    .instance-actions .start { border-color: var(--success); color: var(--text-on-accent); background: var(--success); }
+    .instance-actions .create { margin-left: auto; color: var(--text-secondary); background: transparent; }
+    .instance-card { margin: 0 4px 8px; border: 1px solid var(--border-card); border-radius: 10px; padding: 10px 11px; background: var(--surface-background); }
+    .instance-card.selected { border-color: var(--success); background: var(--surface-selected-background); box-shadow: 0 8px 20px rgb(0 0 0 / 12%); }
+    .instance-title { display: flex; align-items: center; gap: 7px; color: var(--text-bright); font-size: 11px; font-weight: 700; }
+    .instance-title .port { margin-left: auto; color: #8fa4c0; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+    .status-dot.idle { background: #657993; box-shadow: none; }
+    .instance-card code { display: block; margin-top: 8px; color: var(--text-secondary); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .instance-status { display: inline-flex; margin-top: 6px; border-radius: 99px; padding: 2px 6px; color: var(--success); background: var(--success-soft); font-size: 9px; font-weight: 650; }
+    .nav { display: grid; gap: 3px; margin-top: 18px; border-top: 1px solid var(--border-subtle); padding-top: 13px; }
+    .nav-label { margin: 0 10px 4px; color: var(--text-muted); font-size: 9px; font-weight: 700; letter-spacing: .12em; }
+    .nav button { display: flex; height: 34px; align-items: center; gap: 10px; border: 0; border-left: 3px solid transparent; border-radius: 8px; padding: 0 10px; color: var(--text-subtle); background: transparent; font-size: 12px; text-align: left; }
+    .nav button:hover { color: var(--text-bright); background: var(--surface-selected-background); }
+    .nav button.active { border-left-color: var(--border-selected); color: var(--text-bright); background: var(--surface-selected-background); }
+    .nav svg { width: 16px; height: 16px; flex: 0 0 16px; fill: none; stroke: #7086a2; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+    .nav button.active svg { stroke: var(--success); }
+    .sidebar-foot { margin-top: auto; border-top: 1px solid var(--border-subtle); padding: 12px 10px 0; color: var(--text-muted); font-size: 10px; }
+    .sidebar-foot strong { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 10px; }
+
+    .content { flex: 1; width: min(1180px, 100%); height: 100vh; overflow-y: auto; margin: 0 auto; padding: 36px 44px 48px; background: var(--app-background); scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); scrollbar-width: thin; }
+    .panel { border: 1px solid var(--border-default); border-radius: 16px; padding: 24px; background: var(--panel-background); box-shadow: 0 18px 45px var(--shadow-color); }
+    .encryption-page { max-width: 980px; }
+    .eyebrow { margin: 0 0 7px; color: var(--text-label); font-size: .7rem; font-weight: 700; letter-spacing: .13em; text-transform: uppercase; }
+    h2 { margin: 0; color: var(--text-bright); font-size: 1.35rem; letter-spacing: -.03em; }
+
+    .encryption-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
+    .encryption-heading > div > p:last-child { max-width: 680px; margin: 9px 0 0; color: var(--text-secondary); font-size: .78rem; line-height: 1.65; }
+    .local-badge { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px; border: 1px solid var(--border-subtle); border-radius: 99px; padding: 7px 11px; color: var(--text-success); background: var(--success-soft); font-size: .68rem; font-weight: 700; }
+    .local-badge i { width: 7px; height: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px var(--success-faint); }
+
+    .format-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 20px; }
+    .format-grid article { display: flex; align-items: flex-start; gap: 10px; min-width: 0; border: 1px solid var(--border-subtle); border-radius: 11px; padding: 12px; background: linear-gradient(145deg, var(--surface-alt-background), color-mix(in srgb, var(--code-surface-background) 76%, transparent)); }
+    .format-icon { display: grid; flex: 0 0 29px; width: 29px; height: 29px; place-items: center; border: 1px solid color-mix(in srgb, var(--info) 42%, var(--border-subtle)); border-radius: 8px; color: var(--info); background: color-mix(in srgb, var(--info) 11%, transparent); font: .57rem ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; }
+    .format-icon.binary { color: var(--progress-end); border-color: color-mix(in srgb, var(--progress-end) 42%, var(--border-subtle)); background: color-mix(in srgb, var(--progress-end) 10%, transparent); }
+    .format-icon.manifest { color: var(--text-success); border-color: color-mix(in srgb, var(--success) 42%, var(--border-subtle)); background: var(--success-soft); }
+    .format-grid article > div { min-width: 0; }
+    .format-grid strong { display: block; color: var(--text-primary); font-size: .76rem; }
+    .format-grid p { margin: 5px 0 0; color: var(--text-muted); font-size: .67rem; line-height: 1.55; }
+
+    .directory-list { display: grid; gap: 14px; margin-bottom: 18px; }
+    .directory-field { display: grid; gap: 8px; }
+    .directory-label { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .directory-label label { color: var(--text-tertiary); font-size: .76rem; font-weight: 700; }
+    .directory-label span { color: var(--text-muted); font-size: .62rem; }
+    .input-with-button { display: flex; gap: 8px; }
+    .input-shell { position: relative; min-width: 0; flex: 1; }
+    .directory-input { width: 100%; min-width: 0; border: 1px solid var(--border-input); border-radius: 8px; padding: 10px 44px 10px 12px; color: var(--text-primary); background: var(--input-background); outline: none; font: .76rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .directory-input::placeholder { color: var(--text-muted); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .directory-input:focus { border-color: var(--border-selected); box-shadow: 0 0 0 2px var(--focus-background); }
+    .history-toggle { position: absolute; top: 1px; right: 1px; bottom: 1px; display: flex; width: 41px; align-items: center; justify-content: center; border: 0; border-left: 1px solid var(--border-input); border-radius: 0 7px 7px 0; padding: 0; color: var(--text-success); background: transparent; }
+    .history-toggle:hover { background: var(--selection-background); }
+    .chevron { display: block; width: 9px; height: 9px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translate(-2px, -2px); }
+    .browse-button { border: 1px solid var(--border-button); border-radius: 8px; padding: 9px 13px; color: var(--text-button); background: var(--surface-elevated-background); font-size: .72rem; font-weight: 650; white-space: nowrap; }
+    .browse-button:hover { border-color: var(--border-selected); color: var(--text-success); background: var(--focus-background); }
+
+    .progress-card { position: relative; overflow: hidden; display: grid; gap: 12px; border: 1px solid color-mix(in srgb, var(--success) 34%, var(--border-subtle)); border-radius: 13px; padding: 15px 16px; background: linear-gradient(135deg, color-mix(in srgb, var(--success) 7%, var(--code-surface-background)), var(--code-surface-background)); }
+    .progress-card::after { position: absolute; top: -40px; right: -30px; width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle, var(--success-faint), transparent 68%); content: ""; pointer-events: none; }
+    .progress-heading { position: relative; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .progress-heading-copy { display: flex; align-items: center; gap: 10px; }
+    .progress-kicker { color: var(--text-muted); font-size: .65rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .progress-heading strong { color: var(--text-primary); font-size: .78rem; }
+    .progress-heading strong::before { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px var(--success-faint); content: ""; vertical-align: 1px; }
+    .progress-value { text-align: right; }
+    .progress-value b { display: block; color: var(--text-success); font-size: 1rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .progress-value span { display: block; margin-top: 4px; color: var(--text-muted); font-size: .59rem; }
+    .progress-bar { position: relative; z-index: 1; height: 8px; overflow: hidden; border-radius: 99px; background: var(--border-subtle); }
+    .progress-bar span { display: block; width: 72%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--success), var(--progress-end)); }
+    .stat-grid { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .stat-grid div { border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 10px; background: color-mix(in srgb, var(--surface-alt-background) 70%, transparent); }
+    .stat-grid span { display: block; color: var(--text-muted); font-size: .59rem; }
+    .stat-grid strong { display: block; margin-top: 3px; color: var(--text-primary); font-size: .9rem; font-variant-numeric: tabular-nums; }
+    .stat-grid strong.success { color: var(--text-success); }
+    .current-file { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: .61rem; }
+    .current-file code { overflow: hidden; color: var(--text-tertiary); text-overflow: ellipsis; white-space: nowrap; }
+    .current-file .pulse { width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%; background: var(--success); }
+
+    .actions { display: flex; align-items: center; gap: 13px; margin-top: 18px; }
+    .run-button { min-width: 138px; border: 1px solid var(--border-selected); border-radius: 9px; padding: 11px 18px; color: var(--text-on-accent); background: var(--success); font-size: .77rem; font-weight: 800; box-shadow: 0 8px 20px var(--success-faint); }
+    .run-button.loading { opacity: .8; }
+    .run-button .spinner { display: inline-block; width: 11px; height: 11px; margin-right: 6px; border: 1.5px solid rgb(9 32 25 / 35%); border-top-color: var(--text-on-accent); border-radius: 50%; vertical-align: -1px; }
+    .incremental-button { min-width: 108px; border: 1px solid var(--border-button); border-radius: 9px; padding: 11px 14px; color: var(--text-secondary); background: transparent; font-size: .74rem; font-weight: 700; }
+    .incremental-button:hover { border-color: var(--border-selected); color: var(--text-success); background: var(--focus-background); }
+    .actions p { margin: 0; color: var(--text-muted); font-size: .65rem; }
+    .footnote { margin: 10px 0 0; color: var(--text-muted); font-size: .61rem; line-height: 1.55; }
+
+    .log-shell { margin-top: 14px; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--code-surface-background); }
+    .log-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border-subtle); padding: 8px 12px; color: var(--text-muted); font-size: .59rem; }
+    .log-heading strong { color: var(--text-secondary); font-size: .62rem; }
+    .log-heading span { display: inline-flex; align-items: center; gap: 5px; }
+    .log-heading i { width: 5px; height: 5px; border-radius: 50%; background: var(--success); }
+    .log-view { display: grid; max-height: 154px; overflow: auto; padding: 9px 13px; color: var(--text-secondary); font: .71rem/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .log-view > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-prefix, .log-file, .log-muted { display: inline; }
+    .log-prefix { color: var(--text-success); }
+    .log-file { color: var(--text-tertiary); }
+    .log-muted { color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">L</div><div><strong>Local Forwarder</strong><small>本地转发工具</small></div></div>
+      <div class="sidebar-heading"><div><h2>代理实例</h2><p>切换实例后，配置独立保存</p></div></div>
+      <div class="instance-actions"><button class="start">一键开启</button><button>一键关闭</button><button class="create">＋ 新增</button></div>
+      <div class="instance-card selected"><div class="instance-title"><i class="status-dot"></i><span>行情代理</span><span class="port">:8080</span></div><code>60.12.9.58:7778</code><span class="instance-status">运行中</span></div>
+      <div class="instance-card"><div class="instance-title"><i class="status-dot idle"></i><span>业务办理代理</span><span class="port">:8081</span></div><code>123.103.83.86:7779</code></div>
+      <nav class="nav" aria-label="功能导航">
+        <span class="nav-label">功能</span>
+        <button><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 1 1 16 0"/><path d="M12 13l3.5-3.5"/><path d="M7 17h10"/></svg>概览</button>
+        <button><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M9 5h10v10"/></svg>请求</button>
+        <button class="active"><svg viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3"/><path d="M5 10h14v10H5z"/><path d="M12 14v2"/></svg>加密</button>
+        <button><svg viewBox="0 0 24 24"><path d="M8 4c-2 0-3 1-3 3v2c0 2-1 3-2 3 1 0 2 1 2 3v2c0 2 1 3 3 3"/><path d="M16 4c2 0 3 1 3 3v2c0 2 1 3 2 3-1 0-2 1-2 3v2c0 2-1 3-3 3"/></svg>JSON 可视化</button>
+        <button><svg viewBox="0 0 24 24"><path d="M5 6h14"/><path d="M5 12h14"/><path d="M5 18h14"/></svg>日志</button>
+        <button><svg viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h7"/></svg>字符串</button>
+        <button><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg>本地变量</button>
+        <button><svg viewBox="0 0 24 24"><path d="M4 7h16v13H4z"/><path d="M4 7l2-3h12l2 3"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>本地缓存</button>
+        <button><svg viewBox="0 0 24 24"><path d="M5 6c0-1.1 3.1-2 7-2s7 .9 7 2-3.1 2-7 2-7-.9-7-2Z"/><path d="M5 6v6c0 1.1 3.1 2 7 2s7-.9 7-2V6"/><path d="M5 12v6c0 1.1 3.1 2 7 2s7-.9 7-2v-6"/></svg>登录缓存</button>
+        <button><svg viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 9.6-2"/><path d="M5 10h14v10H5z"/><path d="M12 14v2"/></svg>解密</button>
+        <button><svg viewBox="0 0 24 24"><path d="M5 6h14"/><path d="M8 4v4"/><path d="M5 12h14"/><path d="M15 10v4"/><path d="M5 18h14"/><path d="M11 16v4"/></svg>外观</button>
+      </nav>
+      <div class="sidebar-foot">当前版本<strong>v0.3.3 · 行情代理</strong></div>
+    </aside>
+
+    <main class="content">
+      <section class="panel encryption-page">
+        <header class="encryption-heading">
+          <div><p class="eyebrow">/encrypt</p><h2>加密 .d 资源</h2><p>将项目文件递归编码为可发布的 .d 资源，并记录 SHA-256 清单用于后续增量加密。</p></div>
+          <span class="local-badge"><i></i>本地处理</span>
+        </header>
+
+        <div class="format-grid">
+          <article><span class="format-icon">JS</span><div><strong>脚本资源</strong><p>.js / .html / .htm / .css 执行 gzip、RC4 与 CRC32 编码。</p></div></article>
+          <article><span class="format-icon binary">01</span><div><strong>其他资源</strong><p>图片、字体、WASM、PDF 等追加 CRC32 后原样输出。</p></div></article>
+          <article><span class="format-icon manifest">Δ</span><div><strong>增量清单</strong><p>记录源文件 SHA-256，下次仅处理发生变化的文件。</p></div></article>
+        </div>
+
+        <div class="directory-list">
+          <div class="directory-field">
+            <div class="directory-label"><label>加密前文件夹目录</label><span>检测到 148 个待编码文件</span></div>
+            <div class="input-with-button"><div class="input-shell"><input class="directory-input" value="/Users/hdw/Desktop/tzt-h5-project" readonly /><button class="history-toggle" aria-label="显示加密前目录历史"><span class="chevron"></span></button></div><button class="browse-button">选择加密前目录</button></div>
+          </div>
+          <div class="directory-field">
+            <div class="directory-label"><label>加密后文件夹目录</label><span>.d 后缀 · 保留原始目录结构</span></div>
+            <div class="input-with-button"><div class="input-shell"><input class="directory-input" value="/Users/hdw/Desktop/tzt-h5-project.d" readonly /><button class="history-toggle" aria-label="显示加密后目录历史"><span class="chevron"></span></button></div><button class="browse-button">选择加密后目录</button></div>
+          </div>
+        </div>
+
+        <div class="progress-card" aria-live="polite">
+          <div class="progress-heading">
+            <div class="progress-heading-copy"><span class="progress-kicker">加密进度</span><strong>正在加密</strong></div>
+            <div class="progress-value"><b>72%</b><span>预计剩余 01:18</span></div>
+          </div>
+          <div class="progress-bar" role="progressbar" aria-label="加密进度" aria-valuemin="0" aria-valuemax="148" aria-valuenow="107"><span></span></div>
+          <div class="stat-grid"><div><span>总文件</span><strong>148</strong></div><div><span>已加密</span><strong class="success">107</strong></div><div><span>已跳过</span><strong>0</strong></div><div><span>待处理</span><strong>41</strong></div></div>
+          <div class="current-file"><i class="pulse"></i><span>正在处理</span><code>nested/components/market-list.html</code><span style="margin-left:auto">已用时 00:46</span></div>
+        </div>
+
+        <div class="actions"><button class="run-button loading"><span class="spinner"></span>正在加密…</button><button class="incremental-button">增量加密</button><p>增量模式会跳过未变化的文件</p></div>
+        <p class="footnote">加密时自动跳过隐藏文件、node_modules 和 .map；输出目录中的同名 .d 文件会被覆盖。</p>
+
+        <div class="log-shell">
+          <div class="log-heading"><strong>实时日志</strong><span><i></i>处理中 · 最近 7 条</span></div>
+          <div class="log-view">
+            <span class="log-muted">开始执行加密任务…</span>
+            <span><span class="log-prefix">加密：</span><span class="log-file">app.js</span></span>
+            <span><span class="log-prefix">加密：</span><span class="log-file">assets/logo.png</span></span>
+            <span><span class="log-prefix">加密：</span><span class="log-file">assets/fonts/icon.woff2</span></span>
+            <span><span class="log-prefix">加密：</span><span class="log-file">nested/page.html</span></span>
+            <span><span class="log-prefix">加密：</span><span class="log-file">nested/components/market-list.html</span></span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

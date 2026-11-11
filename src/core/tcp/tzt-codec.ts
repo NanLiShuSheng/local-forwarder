@@ -9,13 +9,14 @@ export type TztResponse = Record<string, unknown>;
 
 export interface TztCodec {
   rc4(data: Uint8Array, key: string): Buffer;
+  rc4Batch(data: Uint8Array[], key: string): Buffer[];
   encode(query: TztQuery, serial: number): Buffer;
   decode(frame: Uint8Array): TztResponse;
 }
 
 interface LegacyRequest {
-  method: "rc4" | "jsonltzt" | "tztljson";
-  data?: string;
+  method: "rc4" | "rc4batch" | "jsonltzt" | "tztljson";
+  data?: string | string[];
   key?: string;
   query?: TztQuery;
   handleSerialNo?: number;
@@ -23,7 +24,7 @@ interface LegacyRequest {
 }
 
 interface LegacyResponse {
-  data: string | unknown[];
+  data: string | string[] | unknown[];
 }
 
 const MAGIC = 0x07b7;
@@ -102,7 +103,7 @@ function createLegacyRuntime(): LegacyRuntime {
         output = execFileSync(node, [helper], {
           input: JSON.stringify(request),
           encoding: "utf8",
-          maxBuffer: 10 * 1024 * 1024,
+          maxBuffer: 32 * 1024 * 1024,
           windowsHide: true,
         });
       } catch (error) {
@@ -127,6 +128,16 @@ function decodeBase64Response(response: LegacyResponse): Buffer {
   return Buffer.from(response.data, "base64");
 }
 
+function decodeBase64BatchResponse(response: LegacyResponse, expectedLength: number): Buffer[] {
+  if (!Array.isArray(response.data) || response.data.length !== expectedLength) {
+    throw new Error("TZT codec runtime incompatible: expected a base64 batch response");
+  }
+  return response.data.map((entry) => {
+    if (typeof entry !== "string") throw new Error("TZT codec runtime incompatible: expected a base64 batch response");
+    return Buffer.from(entry, "base64");
+  });
+}
+
 function assertFrameShape(frame: Uint8Array): Buffer {
   const bytes = Buffer.from(frame);
   if (bytes.length < HEADER_SIZE) throw new Error("Invalid TZT frame: truncated header");
@@ -140,8 +151,13 @@ function assertFrameShape(frame: Uint8Array): Buffer {
 function assertRuntimeCompatibility(runtime: LegacyRuntime): void {
   const fileResult = decodeBase64Response(runtime.invoke({ method: "rc4", data: Buffer.from("Plaintext").toString("base64"), key: "file" }));
   const xResult = decodeBase64Response(runtime.invoke({ method: "rc4", data: Buffer.from("Plaintext").toString("base64"), key: "x" }));
+  const batchResult = decodeBase64BatchResponse(runtime.invoke({
+    method: "rc4batch",
+    data: [Buffer.from("Plaintext").toString("base64")],
+    key: "file",
+  }), 1);
   const frame = decodeBase64Response(runtime.invoke({ method: "jsonltzt", query: { Action: "100", foo: "bar" }, handleSerialNo: 12 }));
-  if (fileResult.toString("hex") !== FIXED_FILE_RC4 || xResult.toString("hex") !== FIXED_X_RC4 || frame.toString("hex") !== FIXED_FRAME) {
+  if (fileResult.toString("hex") !== FIXED_FILE_RC4 || xResult.toString("hex") !== FIXED_X_RC4 || batchResult[0]?.toString("hex") !== FIXED_FILE_RC4 || frame.toString("hex") !== FIXED_FRAME) {
     throw new Error("TZT codec runtime incompatible: bundled legacy protocol failed its fixed regression vectors");
   }
 }
@@ -166,6 +182,14 @@ export function createTztCodec(): TztCodec {
   return {
     rc4(data, key) {
       return decodeBase64Response(runtime.invoke({ method: "rc4", data: Buffer.from(data).toString("base64"), key }));
+    },
+    rc4Batch(data, key) {
+      if (data.length === 0) return [];
+      return decodeBase64BatchResponse(runtime.invoke({
+        method: "rc4batch",
+        data: data.map((entry) => Buffer.from(entry).toString("base64")),
+        key,
+      }), data.length);
     },
     encode(query, serial) {
       if (!Number.isSafeInteger(serial) || serial < 0 || serial > 0xffffffff) throw new Error(`Invalid TZT serial number: ${serial}`);

@@ -150,6 +150,8 @@ export interface UpdateProgressSnapshot {
 export interface UpdateState {
   state: UpdateStateKind;
   currentVersion: string;
+  installMode?: "automatic" | "manual";
+  installerOpened?: boolean;
   update?: UpdateInfoSnapshot;
   progress?: UpdateProgressSnapshot;
   error?: string;
@@ -202,6 +204,52 @@ export interface EncryptionProgress {
   relativePath?: string;
 }
 
+export type DecryptionDirectoryKind = "input" | "output";
+
+export interface DecryptionPreferences {
+  inputDir: string;
+  outputDir: string;
+  inputHistory: string[];
+  outputHistory: string[];
+}
+
+export type DecryptionPreferencesPatch = Partial<Pick<DecryptionPreferences, "inputDir" | "outputDir">>;
+
+export interface DecryptionFileResult {
+  relativePath: string;
+  outputPath: string;
+  hashVerified: boolean;
+}
+
+export interface DecryptionFailure {
+  relativePath: string;
+  error: string;
+}
+
+export interface DecryptionResult extends OperationResult {
+  totalFiles?: number;
+  processedFiles?: number;
+  failedFiles?: number;
+  skippedFiles?: number;
+  hashVerifiedFiles?: number;
+  files?: DecryptionFileResult[];
+  failures?: DecryptionFailure[];
+  logs?: string[];
+}
+
+export type DecryptionProgressPhase = "scanning" | "processing" | "completed";
+export type DecryptionProgressStatus = "decrypting" | "completed" | "failed";
+
+export interface DecryptionProgress {
+  phase: DecryptionProgressPhase;
+  status?: DecryptionProgressStatus;
+  current: number;
+  total: number;
+  processedFiles: number;
+  failedFiles: number;
+  relativePath?: string;
+}
+
 export interface ForwarderApi {
   getConfig(): Promise<AppConfig>;
   getAppVersion(): Promise<string>;
@@ -229,6 +277,11 @@ export interface ForwarderApi {
   saveEncryptionPreferences(patch: EncryptionPreferencesPatch): Promise<OperationResult & { preferences?: EncryptionPreferences }>;
   encryptDirectory(inputDir: string, outputDir: string, mode: EncryptionMode): Promise<EncryptionResult>;
   onEncryptionProgress(listener: (progress: EncryptionProgress) => void): () => void;
+  selectDecryptionDirectory(kind: DecryptionDirectoryKind): Promise<OperationResult & { path?: string; canceled?: boolean; preferences?: DecryptionPreferences }>;
+  getDecryptionPreferences(): Promise<DecryptionPreferences>;
+  saveDecryptionPreferences(patch: DecryptionPreferencesPatch): Promise<OperationResult & { preferences?: DecryptionPreferences }>;
+  decryptDirectory(inputDir: string, outputDir: string): Promise<DecryptionResult>;
+  onDecryptionProgress(listener: (progress: DecryptionProgress) => void): () => void;
   sendRequest(request: ManualRequestConfig): Promise<ManualRequestResponse>;
   start(id?: string): Promise<RuntimeStatus>;
   stop(id?: string): Promise<RuntimeStatus>;
@@ -260,6 +313,11 @@ export const IPC_CHANNELS = {
   saveEncryptionPreferences: "encryption:save-preferences",
   encryptDirectory: "encryption:run",
   encryptionProgress: "encryption:progress",
+  selectDecryptionDirectory: "decryption:select-directory",
+  getDecryptionPreferences: "decryption:get-preferences",
+  saveDecryptionPreferences: "decryption:save-preferences",
+  decryptDirectory: "decryption:run",
+  decryptionProgress: "decryption:progress",
   sendRequest: "request:send",
   listProxyInstances: "proxy-instances:list",
   selectProxyInstance: "proxy-instances:select",

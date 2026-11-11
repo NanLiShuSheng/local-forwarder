@@ -16,6 +16,11 @@ function requireSigningEnvironment() {
 
 export default async function notarizeApp(context) {
   if (process.env.GITHUB_ACTIONS !== "true" || context.electronPlatformName !== "darwin") return;
+  const configured = requiredEnvironment.filter((name) => (process.env[name] ?? "").trim());
+  if (configured.length === 0) {
+    console.log("macOS 未配置签名/公证凭据，跳过签名与公证（手动安装更新模式）");
+    return;
+  }
   requireSigningEnvironment();
 
   const { appOutDir, packager } = context;
