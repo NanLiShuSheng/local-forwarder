@@ -13,6 +13,7 @@ test("missing encryption preferences start empty", async () => {
       outputDir: "",
       inputHistory: [],
       outputHistory: [],
+      lowercaseOutput: false,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -32,24 +33,28 @@ test("encryption preferences merge input and output directory selections", async
       outputDir: "",
       inputHistory: [inputDir],
       outputHistory: [],
+      lowercaseOutput: false,
     });
     assert.deepEqual(await saveEncryptionPreferences(preferencesPath, { outputDir }), {
       inputDir,
       outputDir,
       inputHistory: [inputDir],
       outputHistory: [outputDir],
+      lowercaseOutput: false,
     });
     assert.deepEqual(await readEncryptionPreferences(preferencesPath), {
       inputDir,
       outputDir,
       inputHistory: [inputDir],
       outputHistory: [outputDir],
+      lowercaseOutput: false,
     });
     assert.deepEqual(JSON.parse(await readFile(preferencesPath, "utf8")), {
       inputDir,
       outputDir,
       inputHistory: [inputDir],
       outputHistory: [outputDir],
+      lowercaseOutput: false,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -73,6 +78,7 @@ test("input and output directory histories are isolated, capped, and re-promoted
       outputDir: outputDirs[1],
       inputHistory: [inputDirs[0], ...inputDirs.slice(2).reverse()],
       outputHistory: [outputDirs[1], outputDirs[0]],
+      lowercaseOutput: false,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -94,6 +100,7 @@ test("old preferences migrate existing current directories into their histories"
       outputDir,
       inputHistory: [inputDir],
       outputHistory: [outputDir],
+      lowercaseOutput: false,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -118,6 +125,7 @@ test("invalid history fields are safely ignored", async () => {
       outputDir,
       inputHistory: [],
       outputHistory: [outputDir],
+      lowercaseOutput: false,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -144,6 +152,7 @@ test("whitespace-only history entries are ignored while directory paths keep the
       outputDir,
       inputHistory: [inputDir],
       outputHistory: [outputDir],
+      lowercaseOutput: false,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -162,6 +171,7 @@ test("saving a whitespace input directory does not add it to input history", asy
       outputDir: "",
       inputHistory: [],
       outputHistory: [],
+      lowercaseOutput: false,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -181,6 +191,7 @@ test("preferences keep deleted directories in history without restoring them", a
       outputDir: "",
       inputHistory: [inputDir],
       outputHistory: [],
+      lowercaseOutput: false,
     });
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -200,7 +211,23 @@ test("missing preferences return independent history arrays", async () => {
       outputDir: "",
       inputHistory: [],
       outputHistory: [],
+      lowercaseOutput: false,
     });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("lowercase output preference defaults off and persists a boolean setting", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-encryption-preferences-"));
+  const preferencesPath = path.join(root, "preferences.json");
+  try {
+    assert.equal((await readEncryptionPreferences(preferencesPath)).lowercaseOutput, false);
+    assert.equal((await saveEncryptionPreferences(preferencesPath, { lowercaseOutput: true })).lowercaseOutput, true);
+    assert.equal((await readEncryptionPreferences(preferencesPath)).lowercaseOutput, true);
+
+    await writeFile(preferencesPath, JSON.stringify({ lowercaseOutput: "yes" }), "utf8");
+    assert.equal((await readEncryptionPreferences(preferencesPath)).lowercaseOutput, false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -198,7 +198,11 @@ interface JsonPreviewCanvasColors {
   success: string;
   warning: string;
   danger: string;
-  selection: string;
+  selectionRowBackground: string;
+  selectionRowText: string;
+  selectionRowAccent: string;
+  selectionTabText: string;
+  selectionTabUnderline: string;
 }
 
 interface JsonPreviewCanvasOptions {
@@ -232,19 +236,23 @@ function exportColors(preview: HTMLElement): JsonPreviewCanvasColors {
   const style = getComputedStyle(preview);
   return {
     background: cssToken(style, "--panel-background", style.backgroundColor || "#ffffff"),
-    codeBackground: cssToken(style, "--code-background", "#f4f7fb"),
-    surface: cssToken(style, "--surface-background", "#f8fafc"),
-    surfaceAlt: cssToken(style, "--surface-alt-background", "#f0f4f8"),
-    border: cssToken(style, "--border-default", "#d6dfeb"),
-    subtleBorder: cssToken(style, "--border-subtle", "#dbe3ed"),
-    bright: cssToken(style, "--text-bright", "#152033"),
-    text: cssToken(style, "--text-secondary", "#4e6078"),
-    muted: cssToken(style, "--text-muted", "#52647b"),
-    info: cssToken(style, "--info", "#256da8"),
-    success: cssToken(style, "--text-success", "#086b53"),
-    warning: cssToken(style, "--warning", "#8a5a00"),
-    danger: cssToken(style, "--danger-text", "#a93545"),
-    selection: cssToken(style, "--selection-background", "#d7eee7"),
+    codeBackground: cssToken(style, "--code-background", "#f6f8fa"),
+    surface: cssToken(style, "--surface-background", "#f6f8fa"),
+    surfaceAlt: cssToken(style, "--surface-alt-background", "#eff2f5"),
+    border: cssToken(style, "--border-default", "#d0d7de"),
+    subtleBorder: cssToken(style, "--border-subtle", "#d8dee4"),
+    bright: cssToken(style, "--text-bright", "#1f2328"),
+    text: cssToken(style, "--text-secondary", "#424a53"),
+    muted: cssToken(style, "--text-muted", "#59636e"),
+    info: cssToken(style, "--info", "#0969da"),
+    success: cssToken(style, "--text-success", "#1a7f37"),
+    warning: cssToken(style, "--warning", "#946300"),
+    danger: cssToken(style, "--danger-text", "#a40e26"),
+    selectionRowBackground: cssToken(style, "--selection-row-background", "#e7eef5"),
+    selectionRowText: cssToken(style, "--selection-row-text", "#1b3a57"),
+    selectionRowAccent: cssToken(style, "--selection-row-accent", "#5b7894"),
+    selectionTabText: cssToken(style, "--selection-tab-text", "#1b3a57"),
+    selectionTabUnderline: cssToken(style, "--selection-tab-underline", "#5b7894"),
   };
 }
 
@@ -269,7 +277,7 @@ function wrapCanvasText(context: CanvasRenderingContext2D, text: string, maxWidt
 }
 
 function canvasValueColor(type: JsonPreviewRow["type"], colors: JsonPreviewCanvasColors): string {
-  if (type === "string") return colors.success;
+  if (type === "string") return colors.info;
   if (type === "number") return colors.warning;
   if (type === "boolean") return colors.danger;
   if (type === "object" || type === "array") return colors.text;
@@ -352,8 +360,12 @@ function createJsonPreviewCanvas(options: JsonPreviewCanvasOptions): JsonPreview
       context.fillRect(x, padding + headerHeight, 82, 28);
     }
     context.font = exportSmallFont;
-    context.fillStyle = view === activeView ? colors.success : colors.muted;
+    context.fillStyle = view === activeView ? colors.selectionTabText : colors.muted;
     context.fillText(label, x + 10, padding + headerHeight + 7);
+    if (view === activeView) {
+      context.fillStyle = colors.selectionTabUnderline;
+      context.fillRect(x, padding + headerHeight + 26, 82, 2);
+    }
   });
 
   const summary = [["根节点", stats.rootType], ["字段数", String(stats.fields)], ["数组", String(stats.arrays)], ["解析状态", "<1ms"]];
@@ -403,13 +415,16 @@ function createJsonPreviewCanvas(options: JsonPreviewCanvasOptions): JsonPreview
     });
     let rowTop = dataTop + 34;
     tableLayouts.forEach((layout) => {
-      if (layout.row.path === selectedPath) {
-        context.fillStyle = colors.selection;
+      const selected = layout.row.path === selectedPath;
+      if (selected) {
+        context.fillStyle = colors.selectionRowBackground;
         context.fillRect(padding, rowTop, contentWidth, layout.height);
+        context.fillStyle = colors.selectionRowAccent;
+        context.fillRect(padding, rowTop, 3, layout.height);
       }
-      drawCanvasText(context, layout.keyLines, padding + layout.keyIndentation + 10, rowTop + 6, colors.info, exportMonoFont);
-      drawCanvasText(context, layout.valueLines, padding + tableColumnWidths[0] + 10, rowTop + 6, canvasValueColor(layout.row.type, colors), exportSansFont);
-      drawCanvasText(context, layout.typeLines, padding + tableColumnWidths[0] + tableColumnWidths[1] + 10, rowTop + 6, colors.muted, exportSmallFont);
+      drawCanvasText(context, layout.keyLines, padding + layout.keyIndentation + 10, rowTop + 6, selected ? colors.selectionRowText : colors.info, exportMonoFont);
+      drawCanvasText(context, layout.valueLines, padding + tableColumnWidths[0] + 10, rowTop + 6, selected ? colors.selectionRowText : canvasValueColor(layout.row.type, colors), exportSansFont);
+      drawCanvasText(context, layout.typeLines, padding + tableColumnWidths[0] + tableColumnWidths[1] + 10, rowTop + 6, selected ? colors.selectionRowText : colors.muted, exportSmallFont);
       context.strokeStyle = colors.subtleBorder;
       context.beginPath();
       context.moveTo(padding, rowTop + layout.height - 0.5);
@@ -421,14 +436,17 @@ function createJsonPreviewCanvas(options: JsonPreviewCanvasOptions): JsonPreview
     let rowTop = dataTop + 8;
     treeLayouts.forEach((layout) => {
       const x = padding + layout.row.depth * 18 + 10;
-      if (layout.row.path === selectedPath) {
-        context.fillStyle = colors.selection;
+      const selected = layout.row.path === selectedPath;
+      if (selected) {
+        context.fillStyle = colors.selectionRowBackground;
         context.fillRect(padding, rowTop - 2, contentWidth, layout.height);
+        context.fillStyle = colors.selectionRowAccent;
+        context.fillRect(padding, rowTop - 2, 3, layout.height);
       }
       context.font = exportMonoFont;
-      context.fillStyle = canvasValueColor(layout.row.type, colors);
+      context.fillStyle = selected ? colors.selectionRowText : canvasValueColor(layout.row.type, colors);
       context.fillText(`${layout.row.type === "object" || layout.row.type === "array" ? "⌄" : "·"} `, x - 10, rowTop);
-      drawCanvasText(context, layout.labelLines, x + 8, rowTop, canvasValueColor(layout.row.type, colors), exportMonoFont);
+      drawCanvasText(context, layout.labelLines, x + 8, rowTop, selected ? colors.selectionRowText : canvasValueColor(layout.row.type, colors), exportMonoFont);
       rowTop += layout.height;
     });
   }

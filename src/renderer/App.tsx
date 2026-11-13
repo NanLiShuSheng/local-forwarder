@@ -22,7 +22,7 @@ import { useTheme } from "./useTheme";
 
 const initialStatus: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
 const initialUpdateState: UpdateState = { state: "idle", currentVersion: "" };
-const initialEncryptionPreferences: EncryptionPreferences = { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };
+const initialEncryptionPreferences: EncryptionPreferences = { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [], lowercaseOutput: false };
 const initialConfig: AppConfig = { server: { bindHost: "127.0.0.1", port: 8080, timeoutMs: 30000, loggingEnabled: true }, httpRules: [], tcpTargets: [], localValues: {}, mapValues: {}, accounts: {}, cache: { rootDir: "", downloadTarget: "", decryptEnabled: false, autoDownload: false }, request: { host: "127.0.0.1", port: 8080, paramsText: "" }, stringTool: { inputText: "", outputText: "", operation: "replace", findText: "", replaceText: "" } };
 type SidebarNavIconName = "runtime" | "request" | "string" | "json" | "local" | "cache" | "values" | "encryption" | "decryption" | "logs" | "appearance";
 const sidebarNavIconPaths: Record<SidebarNavIconName, string[]> = {
@@ -424,8 +424,8 @@ function AppContent() {
     return selectedPath;
   };
 
-  const encryptDirectory = async (inputDir: string, outputDir: string, mode: EncryptionMode): Promise<EncryptionResult> => {
-    const result = await window.forwarder.encryptDirectory(inputDir, outputDir, mode);
+  const encryptDirectory = async (inputDir: string, outputDir: string, mode: EncryptionMode, lowercaseOutput: boolean): Promise<EncryptionResult> => {
+    const result = await window.forwarder.encryptDirectory(inputDir, outputDir, mode, lowercaseOutput);
     if (!result.ok) notifyError(result.error ?? "加密失败", "加密失败");
     return result;
   };

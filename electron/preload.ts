@@ -72,7 +72,7 @@ const api: ForwarderApi = {
   selectEncryptionDirectory: (kind: EncryptionDirectoryKind) => ipcRenderer.invoke(IPC_CHANNELS.selectEncryptionDirectory, kind),
   getEncryptionPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.getEncryptionPreferences),
   saveEncryptionPreferences: (patch: EncryptionPreferencesPatch) => ipcRenderer.invoke(IPC_CHANNELS.saveEncryptionPreferences, patch),
-  encryptDirectory: (inputDir: string, outputDir: string, mode: EncryptionMode) => ipcRenderer.invoke(IPC_CHANNELS.encryptDirectory, inputDir, outputDir, mode),
+  encryptDirectory: (inputDir: string, outputDir: string, mode: EncryptionMode, lowercaseOutput: boolean) => ipcRenderer.invoke(IPC_CHANNELS.encryptDirectory, inputDir, outputDir, mode, lowercaseOutput),
   onEncryptionProgress: (listener: (progress: EncryptionProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: EncryptionProgress) => listener(progress);
     ipcRenderer.on(IPC_CHANNELS.encryptionProgress, handler);

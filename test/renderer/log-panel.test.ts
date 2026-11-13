@@ -139,7 +139,9 @@ test("log panel marks the selected log row with an accessible selected state", a
   assert.match(markup, /aria-current="true"/);
   assert.match(panelSource, /toLocaleTimeString\(undefined, \{ hour12: false \}\)/);
   assert.match(styles, /\.log-row\s*\{[^}]*padding:\s*9px 0 9px 8px;/);
-  assert.match(styles, /\.log-row:hover, \.log-row\.selected\s*\{[^}]*background:\s*var\(--selection-background\)/);
+  assert.match(styles, /\.log-row:hover\s*\{[^}]*background:\s*var\(--selection-row-hover-background\)/);
+  assert.match(styles, /\.log-row\.selected\s*\{[^}]*color:\s*var\(--selection-row-text\)/);
+  assert.match(styles, /\.log-row\.selected\s*\{[^}]*background:\s*var\(--selection-row-background\)/);
   assert.doesNotMatch(styles, /\.log-row\.selected\s*\{[^}]*box-shadow:/);
 });
 

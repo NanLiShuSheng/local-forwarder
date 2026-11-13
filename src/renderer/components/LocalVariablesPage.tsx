@@ -32,7 +32,7 @@ function VariableTypeBadge({ entry, editing = false }: { entry: LocalVariableEnt
   if (editing) return <span className="local-variables-type edit">编辑中</span>;
   if (entry.chars === 0) return <span className="local-variables-type empty">空值</span>;
   if (entry.isLong) return <span className="local-variables-type long">长文本</span>;
-  return <span className="local-variables-type text">文本</span>;
+  return null;
 }
 
 export function LocalVariablesPage({ active = true }: { active?: boolean }) {

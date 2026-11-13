@@ -6,7 +6,7 @@ export type { EncryptionPreferences, EncryptionPreferencesPatch } from "../../sh
 const HISTORY_LIMIT = 10;
 
 function createEmptyPreferences(): EncryptionPreferences {
-  return { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };
+  return { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [], lowercaseOutput: false };
 }
 
 function normalizeHistory(value: unknown): string[] {
@@ -37,6 +37,7 @@ export async function readEncryptionPreferences(preferencesPath: string): Promis
       outputDir,
       inputHistory: addToHistory(normalizeHistory(parsed.inputHistory), inputDir),
       outputHistory: addToHistory(normalizeHistory(parsed.outputHistory), outputDir),
+      lowercaseOutput: parsed.lowercaseOutput === true,
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return createEmptyPreferences();
@@ -54,6 +55,7 @@ export async function saveEncryptionPreferences(
     outputDir: typeof patch.outputDir === "string" ? patch.outputDir : current.outputDir,
     inputHistory: typeof patch.inputDir === "string" ? addToHistory(current.inputHistory, patch.inputDir) : current.inputHistory,
     outputHistory: typeof patch.outputDir === "string" ? addToHistory(current.outputHistory, patch.outputDir) : current.outputHistory,
+    lowercaseOutput: typeof patch.lowercaseOutput === "boolean" ? patch.lowercaseOutput : current.lowercaseOutput,
   };
   await mkdir(path.dirname(preferencesPath), { recursive: true });
   await writeFile(preferencesPath, JSON.stringify(next, null, 2), { encoding: "utf8", mode: 0o600 });

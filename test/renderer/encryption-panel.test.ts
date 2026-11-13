@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { encryptionDirectoryHistoryForKind, formatEncryptionLocalTime } from "../../src/renderer/components/ConfigPages";
+import { encryptionDirectoryHistoryForKind, formatEncryptionLocalTime, formatEncryptionRemainingTime } from "../../src/renderer/components/ConfigPages";
 
 test("keeps input and output encryption directory history separate", () => {
   const preferences = {
@@ -9,6 +9,7 @@ test("keeps input and output encryption directory history separate", () => {
     outputDir: "/work/output",
     inputHistory: ["/history/input-a", "/history/input-b"],
     outputHistory: ["/history/output-a", "/history/output-b"],
+    lowercaseOutput: false,
   };
   assert.deepEqual(encryptionDirectoryHistoryForKind(preferences, "input"), preferences.inputHistory);
   assert.deepEqual(encryptionDirectoryHistoryForKind(preferences, "output"), preferences.outputHistory);
@@ -22,7 +23,7 @@ test("navigation exposes the encryption page", async () => {
 
 test("App keeps encryption history when selecting or saving a directory", async () => {
   const source = await readFile("src/renderer/App.tsx", "utf8");
-  assert.match(source, /const initialEncryptionPreferences: EncryptionPreferences = \{ inputDir: "", outputDir: "", inputHistory: \[\], outputHistory: \[\] \};/);
+  assert.match(source, /const initialEncryptionPreferences: EncryptionPreferences = \{ inputDir: "", outputDir: "", inputHistory: \[\], outputHistory: \[\], lowercaseOutput: false \};/);
   assert.match(source, /setEncryptionPreferences\(\(current\) => result\.preferences \?\? \{ \.\.\.current, \.\.\.patch \}\);/);
   assert.doesNotMatch(source, /setEncryptionPreferences\(result\.preferences \?\? \{ \.\.\.encryptionPreferences, \.\.\.patch \}\)/);
   assert.match(source, /setEncryptionPreferences\(\(current\) => result\.preferences \?\? \(kind === "input" \? \{ \.\.\.current, inputDir: selectedPath \} : \{ \.\.\.current, outputDir: selectedPath \}\)\);/);
@@ -108,10 +109,27 @@ test("encryption page exposes separate full and incremental actions", async () =
   assert.match(source, /增量加密/);
   assert.match(source, /startEncryption\("full"\)/);
   assert.match(source, /startEncryption\("incremental"\)/);
-  assert.match(source, /onEncryptDirectory\(encryptionInputDir, encryptionOutputDir, mode\)/);
+  assert.match(source, /onEncryptDirectory\(encryptionInputDir, encryptionOutputDir, mode, encryptionLowercaseOutput\)/);
   assert.match(source, /onEncryptionProgress/);
   assert.match(source, /正在扫描文件/);
   assert.match(source, /progress\.relativePath/);
+});
+
+test("encryption page exposes a persisted lowercase output option for files and directories", async () => {
+  const [component, styles] = await Promise.all([
+    readFile("src/renderer/components/ConfigPages.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+  assert.match(component, /encryptionLowercaseOutput/);
+  assert.match(component, /className="encryption-lowercase-toggle"/);
+  assert.match(component, />小写文件输出</);
+  assert.doesNotMatch(component, /适用于信创服务器部署/);
+  assert.doesNotMatch(component, /递归扫描可编码文件/);
+  assert.doesNotMatch(component, /className=\{`encryption-lowercase-option/);
+  assert.match(component, /onSaveEncryptionPreferences\(\{ lowercaseOutput: checked \}\)/);
+  assert.match(component, /disabled=\{encryptionRunning\}/);
+  assert.match(styles, /\.encryption-lowercase-toggle\s*\{/);
+  assert.match(styles, /\.encryption-lowercase-toggle input\s*\{/);
 });
 
 test("encryption page only appends logs for encrypted files", async () => {
@@ -140,13 +158,18 @@ test("encryption page shows live progress and file counts above the output direc
   assert.match(component, /role="progressbar"/);
   assert.match(component, />总文件</);
   assert.match(component, />已加密</);
-  assert.match(component, />已跳过</);
   assert.match(component, />待处理</);
+  assert.match(component, />预计剩余</);
+  assert.doesNotMatch(component, />已跳过</);
+  assert.ok(component.indexOf(">待处理<") < component.indexOf(">预计剩余<"));
   assert.match(component, /setEncryptionProgress/);
   assert.match(component, /progress\.processedFiles/);
+  assert.match(component, /processingStartedAt/);
+  assert.match(component, /setInterval\(\(\) => setEncryptionNow\(Date\.now\(\)\), 1000\)/);
   assert.ok(component.indexOf('className={`encryption-progress-card') > component.lastIndexOf("加密后文件夹目录"));
   assert.match(component, /className="encryption-progress-kicker">加密进度<\/span><strong>\{encryptionStatusLabel\}<\/strong><\/div>\s*<b>\{encryptionProgressPercent\}%<\/b>/);
-  assert.doesNotMatch(component, /encryption-progress-value|encryption-current-file|encryptionEta/);
+  assert.match(component, /const encryptionEta =/);
+  assert.doesNotMatch(component, /encryption-progress-value|encryption-current-file/);
   assert.match(styles, /\.encryption-progress-card/);
   assert.match(styles, /\.encryption-progress-bar/);
   assert.doesNotMatch(styles, /\.encryption-progress-value|\.encryption-current-file/);
@@ -169,6 +192,15 @@ test("encryption page uses the refreshed heading, format cards, and live log she
 test("formats encryption completion time in local year-month-day hour-minute-second form", () => {
   const localTimestamp = new Date(2026, 10, 10, 16, 5, 3).getTime();
   assert.equal(formatEncryptionLocalTime(localTimestamp), "2026-11-10 16:05:03");
+});
+
+test("formats encryption remaining time with compact second, minute, and hour units", () => {
+  assert.equal(formatEncryptionRemainingTime(1), "1 秒");
+  assert.equal(formatEncryptionRemainingTime(59), "59 秒");
+  assert.equal(formatEncryptionRemainingTime(60), "1 分钟");
+  assert.equal(formatEncryptionRemainingTime(61), "2 分钟");
+  assert.equal(formatEncryptionRemainingTime(3600), "1 小时");
+  assert.equal(formatEncryptionRemainingTime(3661), "1 小时 2 分钟");
 });
 
 test("appends the local completion time only to the final encryption log", async () => {

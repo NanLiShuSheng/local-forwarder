@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { collectFiles, encryptDirectory } from "../../../src/core/encryption/encryptor";
+import { collectFiles, encryptDirectory, planEncryptionOutputPaths } from "../../../src/core/encryption/encryptor";
 
 const expectedRelativePaths = ["app.js", path.join("dist", "bundle.js"), path.join("nested", "page.html")].sort();
 
@@ -59,6 +59,71 @@ test("encryptDirectory preserves relative paths and appends .d after encoding", 
     assert.equal(await readFile(path.join(fixture.outputDir, "dist", "bundle.js.d"), "utf8"), "bundle");
     assert.equal(await readFile(path.join(fixture.outputDir, "nested", "page.html.d"), "utf8"), "<main>page</main>");
     assert.equal(JSON.parse(await readFile(path.join(fixture.outputDir, ".encrypt-cache.json"), "utf8")).files["app.js"].length, 64);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("encryptDirectory lowercases every output directory and file segment when requested", async () => {
+  const fixture = await makeFixture();
+  try {
+    await mkdir(path.join(fixture.inputDir, "Assets", "Images"), { recursive: true });
+    await writeFile(path.join(fixture.inputDir, "Assets", "Images", "Logo.PNG"), "logo");
+
+    const result = await encryptDirectory({ ...fixture, lowercaseOutput: true });
+    const mixedCaseFile = result.files.find((file) => file.relativePath === path.join("Assets", "Images", "Logo.PNG"));
+
+    assert.equal(result.totalFiles, 4);
+    assert.notEqual(mixedCaseFile, undefined);
+    assert.ok(mixedCaseFile!.outputPath.endsWith(path.join("assets", "images", "logo.png.d")));
+    assert.equal(await readFile(mixedCaseFile!.outputPath, "utf8"), "logo");
+    assert.deepEqual(await readdir(path.join(fixture.outputDir, "assets", "images")), ["logo.png.d"]);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("lowercase output planning rejects directory and file paths that collide after lowercasing", () => {
+  assert.deepEqual(planEncryptionOutputPaths([path.join("Docs", "Guide", "ReadMe.TXT")], true), [{
+    relativePath: path.join("Docs", "Guide", "ReadMe.TXT"),
+    outputRelativePath: path.join("docs", "guide", "readme.txt"),
+  }]);
+  assert.throws(
+    () => planEncryptionOutputPaths([path.join("Docs", "ReadMe.TXT"), path.join("docs", "readme.txt")], true),
+    /小写文件输出路径冲突/,
+  );
+});
+
+test("encryptDirectory normalizes the actual casing of existing output directories", async () => {
+  const fixture = await makeFixture();
+  try {
+    await mkdir(path.join(fixture.inputDir, "Assets", "Images"), { recursive: true });
+    await mkdir(path.join(fixture.outputDir, "Assets", "Images"), { recursive: true });
+    await writeFile(path.join(fixture.inputDir, "Assets", "Images", "Logo.PNG"), "logo");
+
+    await encryptDirectory({ ...fixture, lowercaseOutput: true });
+
+    const outputEntries = await readdir(fixture.outputDir);
+    assert.ok(outputEntries.includes("assets"));
+    assert.ok(!outputEntries.includes("Assets"));
+    assert.deepEqual(await readdir(path.join(fixture.outputDir, "assets", "images")), ["logo.png.d"]);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("encryptDirectory normalizes the actual casing of existing output files", async () => {
+  const fixture = await makeFixture();
+  try {
+    await mkdir(path.join(fixture.inputDir, "Assets", "Images"), { recursive: true });
+    await mkdir(path.join(fixture.outputDir, "Assets", "Images"), { recursive: true });
+    await writeFile(path.join(fixture.inputDir, "Assets", "Images", "Logo.PNG"), "logo");
+    await writeFile(path.join(fixture.outputDir, "Assets", "Images", "Logo.PNG.d"), "old");
+
+    await encryptDirectory({ ...fixture, lowercaseOutput: true });
+
+    assert.deepEqual(await readdir(path.join(fixture.outputDir, "assets", "images")), ["logo.png.d"]);
+    assert.equal(await readFile(path.join(fixture.outputDir, "assets", "images", "logo.png.d"), "utf8"), "logo");
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
   }

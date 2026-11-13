@@ -86,6 +86,8 @@ test("renderer exposes local variables as a structured editable page", async () 
   assert.match(source, /local-variables-workspace/);
   assert.match(source, /local-variables-row/);
   assert.match(source, /local-variables-label/);
+  assert.match(source, /local-variables-type long">长文本/);
+  assert.doesNotMatch(source, /local-variables-type text">文本/);
   assert.match(source, /local-variables-code-view/);
   assert.match(source, /parseLocalCacheText\(text\)/);
   assert.match(source, /formatLocalCacheText\(copy\)/);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, ForwardingAddressHistory, LogEntry } from "../../shared/contracts";
 import { parseDirectoryInput } from "../../shared/directory-path";
 import { formatLocalCacheText, parseLocalCacheText } from "../../shared/local-cache";
@@ -13,7 +13,7 @@ interface ConfigPagesProps {
   encryptionPreferences: EncryptionPreferences;
   onSelectEncryptionDirectory: (kind: EncryptionDirectoryKind) => Promise<string | undefined>;
   onSaveEncryptionPreferences: (patch: EncryptionPreferencesPatch) => Promise<boolean>;
-  onEncryptDirectory: (inputDir: string, outputDir: string, mode: EncryptionMode) => Promise<EncryptionResult>;
+  onEncryptDirectory: (inputDir: string, outputDir: string, mode: EncryptionMode, lowercaseOutput: boolean) => Promise<EncryptionResult>;
   onEncryptionProgress: (listener: (progress: EncryptionProgress) => void) => () => void;
   loginCache: Record<string, string>;
   onSaveLoginCache: (values: Record<string, string>) => Promise<boolean>;
@@ -24,7 +24,16 @@ interface EncryptionProgressView {
   current: number;
   total: number;
   processedFiles: number;
-  skippedFiles: number;
+  processingStartedAt: number | null;
+}
+
+export function formatEncryptionRemainingTime(seconds: number): string {
+  if (seconds < 60) return `${seconds} 秒`;
+  if (seconds < 3600) return `${Math.ceil(seconds / 60)} 分钟`;
+  const totalMinutes = Math.ceil(seconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const remainingMinutes = totalMinutes % 60;
+  return remainingMinutes === 0 ? `${hours} 小时` : `${hours} 小时 ${remainingMinutes} 分钟`;
 }
 
 function renderEncryptionLogLine(line: string, index: number) {
@@ -161,20 +170,29 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
   const [cacheText, setCacheText] = useState(() => formatLocalCacheText(loginCache));
   const [encryptionInputDir, setEncryptionInputDir] = useState(() => encryptionPreferences.inputDir);
   const [encryptionOutputDir, setEncryptionOutputDir] = useState(() => encryptionPreferences.outputDir);
+  const [encryptionLowercaseOutput, setEncryptionLowercaseOutput] = useState(() => encryptionPreferences.lowercaseOutput);
   const [encryptionRunning, setEncryptionRunning] = useState(false);
   const [encryptionLogs, setEncryptionLogs] = useState<string[]>([]);
-  const [encryptionProgress, setEncryptionProgress] = useState<EncryptionProgressView>({ phase: "idle", current: 0, total: 0, processedFiles: 0, skippedFiles: 0 });
+  const [encryptionProgress, setEncryptionProgress] = useState<EncryptionProgressView>({ phase: "idle", current: 0, total: 0, processedFiles: 0, processingStartedAt: null });
+  const encryptionProcessingStartedAt = useRef<number | null>(null);
+  const [encryptionNow, setEncryptionNow] = useState(() => Date.now());
   useEffect(() => { setAddressDrafts(draftsForTargets(config.tcpTargets)); }, [config.tcpTargets]);
   useEffect(() => { setCacheText(formatLocalCacheText(loginCache)); }, [loginCache]);
-  useEffect(() => { setEncryptionInputDir(encryptionPreferences.inputDir); setEncryptionOutputDir(encryptionPreferences.outputDir); }, [encryptionPreferences]);
+  useEffect(() => { setEncryptionInputDir(encryptionPreferences.inputDir); setEncryptionOutputDir(encryptionPreferences.outputDir); setEncryptionLowercaseOutput(encryptionPreferences.lowercaseOutput); }, [encryptionPreferences]);
   useEffect(() => onEncryptionProgress((progress) => {
+    if (progress.phase === "scanning") {
+      encryptionProcessingStartedAt.current = null;
+    } else if (progress.phase === "processing" && encryptionProcessingStartedAt.current === null) {
+      encryptionProcessingStartedAt.current = Date.now();
+    }
     setEncryptionProgress({
       phase: progress.phase,
       current: progress.phase === "scanning" ? 0 : progress.current,
       total: progress.total,
       processedFiles: progress.processedFiles,
-      skippedFiles: progress.skippedFiles,
+      processingStartedAt: encryptionProcessingStartedAt.current,
     });
+    setEncryptionNow(Date.now());
     if (progress.phase === "scanning") {
       setEncryptionLogs((current) => [...current, "正在扫描文件…"].slice(-200));
       return;
@@ -186,6 +204,11 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
       setEncryptionLogs((current) => [...current, `加密：${progress.relativePath}`].slice(-200));
     }
   }), [onEncryptionProgress]);
+  useEffect(() => {
+    if (!encryptionRunning) return;
+    const interval = setInterval(() => setEncryptionNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [encryptionRunning]);
   useEffect(() => {
     if (openHistoryIndex === undefined && openEncryptionHistoryKind === undefined) return;
     const closeOnOutsidePointerDown = (event: PointerEvent) => {
@@ -290,6 +313,13 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     void saveEncryptionDirectory(kind, directory);
   };
 
+  const updateEncryptionLowercaseOutput = async (checked: boolean) => {
+    setEncryptionLowercaseOutput(checked);
+    if (!await onSaveEncryptionPreferences({ lowercaseOutput: checked })) {
+      setEncryptionLowercaseOutput(!checked);
+    }
+  };
+
   const startEncryption = async (mode: EncryptionMode) => {
     if (!encryptionInputDir || !encryptionOutputDir) {
       notifyError("请先选择加密前和加密后文件夹目录", "加密目录不完整");
@@ -298,22 +328,26 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     setEncryptionRunning(true);
     setOpenEncryptionHistoryKind(undefined);
     setEncryptionLogs(["开始执行加密任务…"]);
-    setEncryptionProgress({ phase: "scanning", current: 0, total: 0, processedFiles: 0, skippedFiles: 0 });
+    encryptionProcessingStartedAt.current = null;
+    setEncryptionNow(Date.now());
+    setEncryptionProgress({ phase: "scanning", current: 0, total: 0, processedFiles: 0, processingStartedAt: null });
     try {
-      const result = await onEncryptDirectory(encryptionInputDir, encryptionOutputDir, mode);
+      const result = await onEncryptDirectory(encryptionInputDir, encryptionOutputDir, mode, encryptionLowercaseOutput);
       if (!result.ok) {
-        setEncryptionProgress((current) => ({ ...current, phase: "idle" }));
+        encryptionProcessingStartedAt.current = null;
+        setEncryptionProgress((current) => ({ ...current, phase: "idle", processingStartedAt: null }));
         return;
       }
       const total = result.totalFiles ?? 0;
       const processed = result.processedFiles ?? total;
       const skipped = result.skippedFiles ?? 0;
       const removed = result.removedFiles ?? 0;
-      setEncryptionProgress({ phase: "completed", current: total, total, processedFiles: processed, skippedFiles: skipped });
+      setEncryptionProgress({ phase: "completed", current: total, total, processedFiles: processed, processingStartedAt: null });
       const completedAt = formatEncryptionLocalTime(Date.now());
       setEncryptionLogs((current) => [...current, "", `完成：处理 ${processed} 个，跳过 ${skipped} 个，删除 ${removed} 个（共 ${total} 个） ${completedAt}`].slice(-200));
     } catch (error) {
-      setEncryptionProgress((current) => ({ ...current, phase: "idle" }));
+      encryptionProcessingStartedAt.current = null;
+      setEncryptionProgress((current) => ({ ...current, phase: "idle", processingStartedAt: null }));
       notifyError(error, "加密失败");
     } finally {
       setEncryptionRunning(false);
@@ -330,13 +364,20 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
       : "等待开始";
   const encryptionStatusTone = encryptionProgress.phase === "completed" ? "completed" : encryptionRunning ? "running" : "idle";
   const encryptionRemainingCount = Math.max(0, encryptionProgress.total - encryptionProgress.current);
+  const encryptionEta = encryptionProgress.phase === "completed"
+    ? "已完成"
+    : !encryptionRunning
+      ? "—"
+      : encryptionProgress.phase === "scanning" || encryptionProgress.current <= 0 || encryptionProgress.total <= encryptionProgress.current || encryptionProgress.processingStartedAt === null
+        ? "计算中"
+        : formatEncryptionRemainingTime(Math.max(1, Math.ceil(Math.max(0, (encryptionNow - encryptionProgress.processingStartedAt) / 1000) * (encryptionProgress.total - encryptionProgress.current) / encryptionProgress.current)));
   const encryptionLogStatus = encryptionRunning ? "处理中" : encryptionProgress.phase === "completed" ? "已完成" : "待命";
 
-  const renderEncryptionDirectoryField = (kind: EncryptionDirectoryKind, label: string, chooseLabel: string, context: string, directory: string, setDirectory: (value: string) => void) => {
+  const renderEncryptionDirectoryField = (kind: EncryptionDirectoryKind, label: string, chooseLabel: string, context: ReactNode, directory: string, setDirectory: (value: string) => void) => {
     const history = encryptionDirectoryHistoryForKind(encryptionPreferences, kind);
     const inputId = `encryption-${kind}-directory`;
     return <div className="encryption-directory-field">
-      <div className="encryption-directory-label"><label htmlFor={inputId}>{label}</label><span>{context}</span></div>
+      <div className="encryption-directory-label"><label htmlFor={inputId}>{label}</label>{typeof context === "string" ? <span>{context}</span> : context}</div>
       <div className="input-with-button">
         <div className="encryption-input-shell" data-encryption-kind={kind}>
           <input id={inputId} className="encryption-directory-input" disabled={encryptionRunning} value={directory} placeholder="粘贴 file:/// URL 或本地目录路径" onChange={(event) => setDirectory(event.target.value)} onBlur={() => void saveEncryptionDirectory(kind, directory)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void saveEncryptionDirectory(kind, directory); } }} />
@@ -367,8 +408,8 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     </div>
 
     <div className="encryption-directory-list">
-      {renderEncryptionDirectoryField("input", "加密前文件夹目录", "选择加密前目录", encryptionProgress.total > 0 ? `检测到 ${encryptionProgress.total} 个待编码文件` : "递归扫描可编码文件", encryptionInputDir, setEncryptionInputDir)}
-      {renderEncryptionDirectoryField("output", "加密后文件夹目录", "选择加密后目录", ".d 后缀 · 保留原始目录结构", encryptionOutputDir, setEncryptionOutputDir)}
+      {renderEncryptionDirectoryField("input", "加密前文件夹目录", "选择加密前目录", <label className="encryption-lowercase-toggle"><input type="checkbox" checked={encryptionLowercaseOutput} disabled={encryptionRunning} onChange={(event) => void updateEncryptionLowercaseOutput(event.target.checked)} /><span>小写文件输出</span></label>, encryptionInputDir, setEncryptionInputDir)}
+      {renderEncryptionDirectoryField("output", "加密后文件夹目录", "选择加密后目录", encryptionLowercaseOutput ? ".d 后缀 · 目录和文件名转小写" : ".d 后缀 · 保留原始目录结构", encryptionOutputDir, setEncryptionOutputDir)}
     </div>
 
     <div className={`encryption-progress-card ${encryptionStatusTone}`} aria-live="polite">
@@ -380,8 +421,8 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
       <div className="encryption-stat-grid">
         <div><span>总文件</span><strong>{encryptionProgress.total}</strong></div>
         <div><span>已加密</span><strong className="success">{encryptionProgress.processedFiles}</strong></div>
-        <div><span>已跳过</span><strong>{encryptionProgress.skippedFiles}</strong></div>
         <div><span>待处理</span><strong>{encryptionRemainingCount}</strong></div>
+        <div><span>预计剩余</span><strong className="encryption-eta" aria-live="off">{encryptionEta}</strong></div>
       </div>
     </div>
 
@@ -390,7 +431,7 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
       <button type="button" className="encryption-incremental-button" disabled={encryptionRunning || !encryptionInputDir || !encryptionOutputDir} onClick={() => void startEncryption("incremental")}>增量加密</button>
       <p>增量模式会跳过未变化的文件</p>
     </div>
-    <p className="encryption-footnote">加密时自动跳过隐藏文件、node_modules 和 .map；输出目录中的同名 .d 文件会被覆盖。</p>
+    <p className="encryption-footnote">加密时自动跳过隐藏文件、node_modules 和 .map；输出目录中的同名 .d 文件会被覆盖。小写文件输出启用后，若多个源路径转小写后发生冲突，将停止执行并提示。</p>
 
     <div className="encryption-log-shell">
       <div className="encryption-log-heading"><strong>实时日志</strong><span><i aria-hidden="true" />{encryptionLogStatus}{encryptionLogs.length > 0 ? ` · ${encryptionLogs.length} 条` : ""}</span></div>

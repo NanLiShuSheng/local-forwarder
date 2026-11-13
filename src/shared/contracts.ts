@@ -170,9 +170,10 @@ export interface EncryptionPreferences {
   outputDir: string;
   inputHistory: string[];
   outputHistory: string[];
+  lowercaseOutput: boolean;
 }
 
-export type EncryptionPreferencesPatch = Partial<Pick<EncryptionPreferences, "inputDir" | "outputDir">>;
+export type EncryptionPreferencesPatch = Partial<Pick<EncryptionPreferences, "inputDir" | "outputDir" | "lowercaseOutput">>;
 
 export interface EncryptionFileResult {
   relativePath: string;
@@ -275,7 +276,7 @@ export interface ForwarderApi {
   selectEncryptionDirectory(kind: EncryptionDirectoryKind): Promise<OperationResult & { path?: string; canceled?: boolean; preferences?: EncryptionPreferences }>;
   getEncryptionPreferences(): Promise<EncryptionPreferences>;
   saveEncryptionPreferences(patch: EncryptionPreferencesPatch): Promise<OperationResult & { preferences?: EncryptionPreferences }>;
-  encryptDirectory(inputDir: string, outputDir: string, mode: EncryptionMode): Promise<EncryptionResult>;
+  encryptDirectory(inputDir: string, outputDir: string, mode: EncryptionMode, lowercaseOutput: boolean): Promise<EncryptionResult>;
   onEncryptionProgress(listener: (progress: EncryptionProgress) => void): () => void;
   selectDecryptionDirectory(kind: DecryptionDirectoryKind): Promise<OperationResult & { path?: string; canceled?: boolean; preferences?: DecryptionPreferences }>;
   getDecryptionPreferences(): Promise<DecryptionPreferences>;

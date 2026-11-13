@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { join } from "node:path";
 import test, { mock } from "node:test";
 import type * as React from "react";
 import {
@@ -21,20 +22,57 @@ const themeTokens = [
   "sidebar-border",
   "panel-background",
   "surface-background",
+  "surface-alt-background",
+  "surface-elevated-background",
+  "surface-hover-background",
   "input-background",
   "code-background",
+  "overview-field-background",
+  "overview-field-border",
+  "overview-field-input-background",
+  "overview-field-input-border",
+  "overview-field-shadow",
   "text-primary",
+  "text-bright",
   "text-secondary",
   "text-muted",
   "text-success",
+  "text-accent",
+  "text-selected",
   "text-description",
   "border-default",
   "border-strong",
   "border-selected",
   "selection-background",
+  "selection-border",
+  "selection-card-text",
+  "selection-muted-text",
+  "selection-tab-text",
+  "selection-tab-underline",
+  "selection-row-background",
+  "selection-row-text",
+  "selection-row-accent",
+  "selection-row-hover-background",
+  "progress-card-background",
+  "progress-card-border",
+  "progress-card-orb",
+  "progress-card-shadow",
+  "progress-stat-background",
+  "progress-stat-border",
+  "progress-track-background",
+  "progress-track-shadow",
+  "progress-fill-background",
+  "progress-fill-shadow",
+  "progress-percent-text",
+  "accent",
+  "accent-hover",
+  "accent-soft",
+  "accent-faint",
   "success",
   "warning",
   "danger",
+  "focus-background",
+  "focus-ring",
 ] as const;
 
 function extractCssRule(source: string, selector: string): string {
@@ -49,6 +87,16 @@ function extractCssToken(rule: string, token: string): string {
   const match = rule.match(new RegExp(`--${token}\\s*:\\s*([^;]+)`));
   assert.ok(match, `missing CSS token: ${token}`);
   return match[1].trim();
+}
+
+async function rendererSourceFiles(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files = await Promise.all(entries.map(async (entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return rendererSourceFiles(path);
+    return /\.(?:css|html|ts|tsx)$/.test(entry.name) ? [path] : [];
+  }));
+  return files.flat();
 }
 
 interface RgbColor {
@@ -472,8 +520,8 @@ test("sidebar navigation defines active and keyboard focus highlight states", as
   const focusRule = extractCssRule(source, ".sidebar-nav button:focus-visible");
 
   assert.match(baseRule, /border-left:\s*3px\s+solid\s+transparent/);
-  assert.match(activeRule, /border-left-color:\s*var\(--border-selected\)/);
-  assert.match(activeRule, /color:\s*var\(--text-bright\)/);
+  assert.match(activeRule, /border-left-color:\s*var\(--selection-border\)/);
+  assert.match(activeRule, /color:\s*var\(--selection-card-text\)/);
   assert.match(activeRule, /background:\s*var\(--surface-selected-background\)/);
   assert.match(focusRule, /outline:\s*2px\s+solid\s+var\(--focus-ring\)/);
 });
@@ -495,67 +543,269 @@ test("styles define independent light and dark theme scopes and tokens", async (
   assert.match(lightThemeRule, /--preview-shadow\s*:/);
 });
 
-test("light theme uses the approved clear mint palette", async () => {
+test("themes use the approved Primer Graphite and Primer Light palettes", async () => {
   const source = await readFile("src/renderer/styles.css", "utf8");
-  const lightRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
-  const expectedTokens: Record<string, string> = {
-    "app-background": "#fcfefd",
-    "app-background-accent": "#ffffff",
-    "app-background-mid": "#f7fcfa",
-    "sidebar-background": "#ffffff",
-    "sidebar-border": "#dbece7",
-    "panel-background": "#ffffff",
-    "surface-background": "#ffffff",
-    "surface-alt-background": "#f7fcfa",
-    "surface-subtle-background": "#f4fbf8",
-    "surface-elevated-background": "#ffffff",
-    "surface-selected-background": "#e4f5ef",
-    "surface-code-background": "#f8fcfa",
-    "input-background": "#ffffff",
-    "code-background": "#f7fcfa",
-    "code-surface-background": "#ffffff",
-    "text-primary": "#17332f",
-    "text-bright": "#13302c",
-    "text-secondary": "#5b726c",
-    "text-muted": "#5b726c",
-    "text-label": "#5b726c",
-    "text-subtle": "#5b726c",
-    "text-tertiary": "#2e584c",
-    "text-code": "#31564b",
-    "text-description": "#5b726c",
-    "border-default": "#d7e9e3",
-    "border-card": "#d1e6df",
-    "border-strong": "#c8e1d9",
-    "border-button": "#c8e1d9",
-    "border-input": "#d4e7e1",
-    "border-field": "#e0eee9",
-    "border-subtle": "#e4efeb",
-    "border-hover": "#55a892",
-    "border-selected": "#247c67",
-    "selection-background": "#e4f5ef",
-    "success": "#247c67",
-    "text-success": "#217660",
-    "success-hover": "#1f6f5c",
-    "focus-ring": "#247c67",
-  };
+  const themes = [
+    {
+      name: "dark",
+      rule: extractCssRule(source, ".app-shell"),
+      expected: {
+        "app-background": "#0d1117",
+        "app-background-accent": "rgb(31 111 235 / 10%)",
+        "sidebar-background": "#010409",
+        "sidebar-border": "#2f3742",
+        "panel-background": "#151b23",
+        "surface-background": "#212830",
+        "surface-alt-background": "#262c36",
+        "surface-elevated-background": "#2a313c",
+        "surface-hover-background": "rgb(56 139 253 / 8%)",
+        "surface-selected-background": "rgb(56 139 253 / 12%)",
+        "input-background": "#010409",
+        "code-background": "#010409",
+        "code-surface-background": "#010409",
+        "text-primary": "#f0f6fc",
+        "text-bright": "#f0f6fc",
+        "text-secondary": "#b7bdc8",
+        "text-muted": "#949ca6",
+        "text-subtle": "#949ca6",
+        "text-description": "#949ca6",
+        "border-default": "#2f3742",
+        "border-strong": "#3d444d",
+        "border-selected": "#1f6feb",
+        "selection-background": "rgb(56 139 253 / 26%)",
+        "selection-border": "#1f6feb",
+        "selection-card-text": "#f0f6fc",
+        "selection-muted-text": "#b7bdc8",
+        "selection-tab-text": "#58a6ff",
+        "selection-tab-underline": "#1f6feb",
+        "selection-row-background": "rgb(56 139 253 / 26%)",
+        "selection-row-text": "#f0f6fc",
+        "selection-row-accent": "#1f6feb",
+        "selection-row-hover-background": "rgb(56 139 253 / 12%)",
+        "accent": "#1f6feb",
+        "accent-hover": "#2269e0",
+        "accent-soft": "rgb(56 139 253 / 12%)",
+        "text-accent": "#58a6ff",
+        "text-selected": "#58a6ff",
+        "success": "#3fb950",
+        "text-success": "#3fb950",
+        "success-hover": "#56d364",
+        "focus-background": "rgb(56 139 253 / 14%)",
+        "focus-ring": "#1f6feb",
+        "warning": "#d29922",
+        "danger": "#f85149",
+      },
+    },
+    {
+      name: "light",
+      rule: extractCssRule(source, ".app-shell[data-theme=\"light\"]"),
+      expected: {
+        "app-background": "#ffffff",
+        "app-background-accent": "#ffffff",
+        "sidebar-background": "#f6f8fa",
+        "sidebar-border": "#d0d7de",
+        "panel-background": "#ffffff",
+        "surface-background": "#f6f8fa",
+        "surface-alt-background": "#eff2f5",
+        "surface-elevated-background": "#ffffff",
+        "surface-hover-background": "#e7eef5",
+        "surface-selected-background": "#dfe8f1",
+        "input-background": "#ffffff",
+        "code-background": "#f6f8fa",
+        "code-surface-background": "#f6f8fa",
+        "text-primary": "#1f2328",
+        "text-bright": "#1f2328",
+        "text-secondary": "#424a53",
+        "text-muted": "#59636e",
+        "text-subtle": "#656d76",
+        "text-description": "#59636e",
+        "border-default": "#d0d7de",
+        "border-strong": "#afb8c1",
+        "border-selected": "#0969da",
+        "selection-background": "#e7eef5",
+        "selection-border": "#7c93a8",
+        "selection-card-text": "#1b3a57",
+        "selection-muted-text": "#526b84",
+        "selection-tab-text": "#1b3a57",
+        "selection-tab-underline": "#5b7894",
+        "selection-row-background": "#e7eef5",
+        "selection-row-text": "#1b3a57",
+        "selection-row-accent": "#5b7894",
+        "selection-row-hover-background": "#f0f3f6",
+        "accent": "#0969da",
+        "accent-hover": "#0550ae",
+        "accent-soft": "#ddf4ff",
+        "text-accent": "#0969da",
+        "text-selected": "#1b3a57",
+        "success": "#1a7f37",
+        "text-success": "#1a7f37",
+        "success-hover": "#2da44e",
+        "focus-background": "#ddf4ff",
+        "focus-ring": "#0969da",
+        "warning": "#946300",
+        "danger": "#cf222e",
+      },
+    },
+  ] as const;
 
-  for (const [token, expected] of Object.entries(expectedTokens)) {
-    assert.equal(extractCssToken(lightRule, token), expected, `unexpected light token: ${token}`);
+  for (const theme of themes) {
+    for (const [token, expected] of Object.entries(theme.expected)) {
+      assert.equal(extractCssToken(theme.rule, token), expected, `unexpected ${theme.name} token: ${token}`);
+    }
+    assert.notEqual(
+      extractCssToken(theme.rule, "accent"),
+      extractCssToken(theme.rule, "success"),
+      `${theme.name} theme must separate interaction accent from success status`,
+    );
   }
+  const lightRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
   assert.match(lightRule, /background:\s*var\(--app-background\)/);
   assert.match(lightRule, /color-scheme:\s*light/);
 });
 
-test("light theme keeps surfaces white and makes selected states distinct", async () => {
+test("light theme uses white panels, subtle gray surfaces, and blue selected states", async () => {
   const source = await readFile("src/renderer/styles.css", "utf8");
   const lightRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
   const panelRule = source.match(/\.app-shell\[data-theme=\"light\"\][^{]*\.panel[^{]*\{[^}]*\}/s)?.[0] ?? "";
-  const selectedInstanceRule = source.match(/\.app-shell\[data-theme=\"light\"\][^{]*\.proxy-instance-sidebar-card\.selected[^{]*\{[^}]*\}/s)?.[0] ?? "";
+  const selectedInstanceRule = extractCssRule(source, ".proxy-instance-sidebar-card.selected");
 
-  assert.equal(extractCssToken(lightRule, "surface-background"), "#ffffff");
-  assert.equal(extractCssToken(lightRule, "surface-selected-background"), "#e4f5ef");
+  assert.equal(extractCssToken(lightRule, "panel-background"), "#ffffff");
+  assert.equal(extractCssToken(lightRule, "surface-background"), "#f6f8fa");
+  assert.equal(extractCssToken(lightRule, "surface-selected-background"), "#dfe8f1");
+  assert.equal(extractCssToken(lightRule, "border-selected"), "#0969da");
   assert.match(panelRule, /box-shadow:\s*0\s+10px\s+26px\s+var\(--shadow-color\)/);
-  assert.match(selectedInstanceRule, /border-color:\s*var\(--border-hover\)/);
+  assert.match(selectedInstanceRule, /border-color:\s*var\(--selection-border\)/);
+  assert.doesNotMatch(source, /\.app-shell\[data-theme=\"light\"\] \.proxy-instance-sidebar-card\.selected\s*\{/);
+});
+
+test("light theme applies the approved slate selection palette to proxy, JSON tabs, and JSON rows", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+  const lightRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
+  const proxyRule = extractCssRule(source, ".proxy-instance-sidebar-card.selected");
+  const tabRule = extractCssRule(source, ".json-preview-tabs button.active");
+  const treeRule = extractCssRule(source, ".json-preview-tree-row.selected");
+  const tableRule = extractCssRule(source, ".json-preview-table tr.selected");
+
+  assert.equal(extractCssToken(lightRule, "surface-selected-background"), "#dfe8f1");
+  assert.equal(extractCssToken(lightRule, "selection-border"), "#7c93a8");
+  assert.equal(extractCssToken(lightRule, "selection-tab-underline"), "#5b7894");
+  assert.equal(extractCssToken(lightRule, "selection-row-background"), "#e7eef5");
+  assert.match(proxyRule, /border-color:\s*var\(--selection-border\)/);
+  assert.match(proxyRule, /background:\s*var\(--surface-selected-background\)/);
+  assert.match(tabRule, /border-bottom-color:\s*var\(--selection-tab-underline\)/);
+  assert.match(tabRule, /color:\s*var\(--selection-tab-text\)/);
+  assert.match(treeRule, /background:\s*var\(--selection-row-background\)/);
+  assert.match(treeRule, /box-shadow:\s*inset 3px 0 0 var\(--selection-row-accent\)/);
+  assert.match(tableRule, /background:\s*var\(--selection-row-background\)/);
+});
+
+test("selection palette covers logs, rules, login cache, and history options", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+  const rules = [
+    [".rule-row.selected", /background:\s*var\(--surface-selected-background\)/],
+    [".log-row.selected", /background:\s*var\(--selection-row-background\)/],
+    [".log-detail-tabs button.active", /color:\s*var\(--selection-tab-text\)/],
+    [".login-cache-filters button.active", /background:\s*var\(--surface-selected-background\)/],
+    [".login-cache-field-row.selected", /background:\s*var\(--selection-row-background\)/],
+    [".address-history-option[aria-selected=\"true\"]", /background:\s*var\(--selection-row-background\)/],
+    [".encryption-history-option[aria-selected=\"true\"]", /background:\s*var\(--selection-row-background\)/],
+    [".decryption-history-option[aria-selected=\"true\"]", /background:\s*var\(--selection-row-background\)/],
+  ] as const;
+
+  for (const [selector, pattern] of rules) {
+    assert.match(extractCssRule(source, selector), pattern, `selection token missing from ${selector}`);
+  }
+});
+
+test("JSON preview reserves success green for status and uses theme interaction colors", async () => {
+  const [componentSource, styleSource] = await Promise.all([
+    readFile("src/renderer/components/JsonPreviewPage.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+  const valueStringRule = extractCssRule(styleSource, ".json-preview-value-string");
+  const treeSelectedRule = styleSource.match(/^\.json-preview-tree-row\.selected :is\([^}]*\}/m)?.[0] ?? "";
+  const exportColorsBlock = componentSource.match(/function exportColors[\s\S]*?\n\}/m)?.[0] ?? "";
+  const valueColorBlock = componentSource.match(/function canvasValueColor[\s\S]*?\n\}/m)?.[0] ?? "";
+
+  assert.match(valueStringRule, /color:\s*var\(--text-accent\)/);
+  assert.match(treeSelectedRule, /\.json-preview-value/);
+  assert.match(valueColorBlock, /type === "string"\) return colors\.info/);
+  assert.match(componentSource, /selectionRowBackground: cssToken\(style, "--selection-row-background"/);
+  assert.match(componentSource, /selectionTabText: cssToken\(style, "--selection-tab-text"/);
+  assert.match(componentSource, /colors\.selectionRowBackground/);
+  assert.match(componentSource, /colors\.selectionTabText/);
+  assert.doesNotMatch(exportColorsBlock, /#f4f7fb|#f8fafc|#f0f4f8|#d6dfeb|#dbe3ed|#152033|#4e6078|#52647b|#256da8|#086b53|#8a5a00|#a93545|#d7eee7/i);
+});
+
+test("renderer source contains no legacy mint or pre-Primer color literals", async () => {
+  const legacyPalette = /#(?:79e2c0|8ae9cc|f2faf7|d7eee7|e4f5ef|247c67|55a892|217660|1f6f5c|0d1421|243c61|101b2d|26344b|14243a|16263d|17253a|1a2b43|1b314c|111f34|111e32|0f1b2d|101d30|e9eef7|f4f8ff|a8b9cf|8597b0|91a5bf|9fb2ca|b9c8dc|b7c8dc|657993|dae5f4|2a3b55|2b3d58|3b5471|3b4e68|344862|263b57|26374e|3b5574|1a304c|f4f7fb|f8fafc|f0f4f8|d6dfeb|dbe3ed|152033|4e6078|52647b|256da8|086b53|8a5a00|a93545)\b/i;
+  const files = await rendererSourceFiles("src/renderer");
+
+  for (const file of files) {
+    const source = await readFile(file, "utf8");
+    assert.doesNotMatch(source, legacyPalette, `legacy color found in ${file}`);
+  }
+});
+
+test("encryption and decryption progress cards use the glacier palette", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+  const darkRule = extractCssRule(source, ".app-shell");
+  const lightRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
+  const encryptionCard = extractCssRule(source, ".encryption-progress-card");
+  const encryptionBar = extractCssRule(source, ".encryption-progress-bar");
+  const encryptionFill = source.match(/^\.encryption-progress-bar span \{[^}]*\}/m)?.[0] ?? "";
+  const encryptionStat = extractCssRule(source, ".encryption-stat-grid div");
+  const decryptionCard = extractCssRule(source, ".decryption-progress-card");
+  const decryptionBar = extractCssRule(source, ".decryption-progress-bar");
+  const decryptionFill = source.match(/^\.decryption-progress-bar span \{[^}]*\}/m)?.[0] ?? "";
+  const decryptionStat = extractCssRule(source, ".decryption-stat-grid div");
+
+  assert.equal(extractCssToken(darkRule, "progress-card-border"), "#29425a");
+  assert.equal(extractCssToken(darkRule, "progress-track-background"), "#22384c");
+  assert.equal(extractCssToken(darkRule, "progress-percent-text"), "#79c0ff");
+  assert.equal(extractCssToken(lightRule, "progress-card-border"), "#c4dcf1");
+  assert.equal(extractCssToken(lightRule, "progress-track-background"), "#d5e8f8");
+  assert.equal(extractCssToken(lightRule, "progress-percent-text"), "#0a66c2");
+
+  for (const rule of [encryptionCard, decryptionCard]) {
+    assert.match(rule, /border:\s*1px solid var\(--progress-card-border\)/);
+    assert.match(rule, /background:\s*var\(--progress-card-background\)/);
+    assert.match(rule, /box-shadow:\s*var\(--progress-card-shadow\)/);
+  }
+  for (const rule of [encryptionBar, decryptionBar]) {
+    assert.match(rule, /height:\s*10px/);
+    assert.match(rule, /background:\s*var\(--progress-track-background\)/);
+    assert.match(rule, /box-shadow:\s*var\(--progress-track-shadow\)/);
+  }
+  for (const rule of [encryptionFill, decryptionFill]) {
+    assert.match(rule, /background:\s*var\(--progress-fill-background\)/);
+    assert.match(rule, /box-shadow:\s*var\(--progress-fill-shadow\)/);
+  }
+  assert.doesNotMatch(source, /\.encryption-progress-card\.completed \.encryption-progress-bar span\s*\{/);
+  assert.doesNotMatch(source, /\.decryption-progress-card\.completed \.decryption-progress-bar span\s*\{/);
+  assert.doesNotMatch(source, /\.encryption-progress-card\.completed\s*\{/);
+  assert.doesNotMatch(source, /\.decryption-progress-card\.completed\s*\{/);
+  assert.doesNotMatch(source, /--progress-completed-(?:background|border|orb)/);
+  assert.doesNotMatch(source, /\.(?:encryption|decryption)-progress-bar span::after/);
+  for (const rule of [encryptionStat, decryptionStat]) {
+    assert.match(rule, /border:\s*1px solid var\(--progress-stat-border\)/);
+    assert.match(rule, /background:\s*var\(--progress-stat-background\)/);
+  }
+});
+
+test("overview config fields use a layered dark surface while light keeps the existing surface", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+  const darkRule = extractCssRule(source, ".app-shell");
+  const lightRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
+  const fieldRule = extractCssRule(source, ".proxy-instance-overview-field");
+  const inputRule = source.match(/^\.proxy-instance-overview-field \.overview-config-input \{[^}]*\}/m)?.[0] ?? "";
+
+  assert.match(extractCssToken(darkRule, "overview-field-background"), /radial-gradient\([^;]*rgb\(56 139 253 \/ 12%\)/);
+  assert.match(extractCssToken(darkRule, "overview-field-background"), /linear-gradient\([^;]*#1b2736/);
+  assert.equal(extractCssToken(lightRule, "overview-field-background"), "var(--surface-alt-background)");
+  assert.match(fieldRule, /background:\s*var\(--overview-field-background\)/);
+  assert.match(fieldRule, /box-shadow:\s*var\(--overview-field-shadow\)/);
+  assert.match(inputRule, /background:\s*var\(--overview-field-input-background\)/);
 });
 
 test("theme text tokens meet AA against actual dark and light backgrounds", async () => {
@@ -589,7 +839,7 @@ test("theme text tokens meet AA against actual dark and light backgrounds", asyn
       }
     }
     const accentText = parseCssColor(extractCssToken(theme.rule, "text-on-accent"));
-    for (const accentBackgroundToken of ["success", "success-hover"]) {
+    for (const accentBackgroundToken of ["accent", "accent-hover"]) {
       const accentBackground = parseCssColor(extractCssToken(theme.rule, accentBackgroundToken));
       const ratio = contrastRatio(accentText, accentBackground);
       assert.ok(ratio >= 4.5, `${theme.name} text-on-accent on ${accentBackgroundToken}: ${ratio.toFixed(2)}`);
@@ -634,10 +884,10 @@ test("AppearancePage structure and theme CSS interactions stay accessible and re
   assert.doesNotMatch(styleSource, /@media \(min-width: 821px\) and \(max-width: 1050px\)/);
   assert.match(styleSource, /@media \(max-width: 900px\) \{[\s\S]*?\.appearance-theme-preview\s*\{[^}]*flex:\s*0 1 48px/s);
   assert.match(styleSource, /@media \(max-width: 900px\) \{[\s\S]*?\.appearance-theme-card-check\s*\{[^}]*width:\s*20px/s);
-  assert.match(styleSource, /\.appearance-theme-default\s*\{[^}]*color:\s*var\(--text-success\)/s);
+  assert.match(styleSource, /\.appearance-theme-default\s*\{[^}]*color:\s*var\(--text-accent\)/s);
   assert.match(styleSource, /\.appearance-theme-card-copy > span:not\(\.appearance-theme-card-label\)\s*\{[^}]*color:\s*var\(--text-description\)/s);
   assert.match(styleSource, /\.status-pill\.running\s*\{[^}]*color:\s*var\(--text-success\)/s);
-  assert.match(styleSource, /\.log-level\s*\{[^}]*color:\s*var\(--text-success\)/s);
+  assert.match(styleSource, /\.log-level\s*\{[^}]*color:\s*var\(--info\)/s);
   assert.match(styleSource, /\.sidebar\s*\{[^}]*background:\s*var\(--sidebar-background\)/s);
   assert.match(styleSource, /\.content\s*\{[^}]*background:\s*var\(--app-background\)/s);
   for (const selector of ["address-input", "select-control"]) {

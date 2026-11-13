@@ -214,35 +214,38 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     try {
       return await readEncryptionPreferences(getEncryptionPreferencesPath(app.getPath("userData")));
     } catch {
-      return { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };
+      return { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [], lowercaseOutput: false };
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.saveEncryptionPreferences, async (_event, patch) => {
     if (typeof patch !== "object" || patch === null || Array.isArray(patch)) return { ok: false, error: "加密目录参数无效" };
     const value = patch as Record<string, unknown>;
-    if (Object.keys(value).some((key) => key !== "inputDir" && key !== "outputDir")) return { ok: false, error: "加密目录参数无效" };
+    if (Object.keys(value).some((key) => key !== "inputDir" && key !== "outputDir" && key !== "lowercaseOutput")) return { ok: false, error: "加密目录参数无效" };
     if (value.inputDir !== undefined && typeof value.inputDir !== "string") return { ok: false, error: "加密前目录参数无效" };
     if (value.outputDir !== undefined && typeof value.outputDir !== "string") return { ok: false, error: "加密后目录参数无效" };
+    if (value.lowercaseOutput !== undefined && typeof value.lowercaseOutput !== "boolean") return { ok: false, error: "小写文件输出参数无效" };
     try {
       const preferences = await saveEncryptionPreferences(
         getEncryptionPreferencesPath(app.getPath("userData")),
-        { inputDir: value.inputDir as string | undefined, outputDir: value.outputDir as string | undefined },
+        { inputDir: value.inputDir as string | undefined, outputDir: value.outputDir as string | undefined, lowercaseOutput: value.lowercaseOutput as boolean | undefined },
       );
       return { ok: true, preferences };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "保存加密目录失败" };
     }
   });
-  registerIpcHandler(policy, IPC_CHANNELS.encryptDirectory, async (_event, inputDir, outputDir, mode) => {
+  registerIpcHandler(policy, IPC_CHANNELS.encryptDirectory, async (_event, inputDir, outputDir, mode, lowercaseOutput) => {
     if (typeof inputDir !== "string" || typeof outputDir !== "string" || !inputDir || !outputDir) {
       return { ok: false, error: "请选择加密前和加密后文件夹目录" };
     }
     if (mode !== "full" && mode !== "incremental") return { ok: false, error: "加密模式无效" };
+    if (lowercaseOutput !== undefined && typeof lowercaseOutput !== "boolean") return { ok: false, error: "小写文件输出参数无效" };
     try {
       const result = await encryptDirectory({
         inputDir,
         outputDir,
         mode: mode as EncryptionMode,
+        lowercaseOutput: lowercaseOutput === true,
         encoderPath: getEncryptionEncoderPath(__dirname, app.isPackaged, process.resourcesPath),
         onProgress: (progress) => {
           for (const window of BrowserWindow.getAllWindows()) window.webContents.send(IPC_CHANNELS.encryptionProgress, progress);

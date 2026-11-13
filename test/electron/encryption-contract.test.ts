@@ -22,8 +22,8 @@ test("IPC contracts expose directory selection and encryption execution", async 
 test("shared encryption contracts preserve history and restrict writable patches", async () => {
   const contracts = await readFile("src/shared/contracts.ts", "utf8");
   const preload = await readFile("electron/preload.ts", "utf8");
-  assert.match(contracts, /export interface EncryptionPreferences\s*\{[\s\S]*inputDir: string;[\s\S]*outputDir: string;[\s\S]*inputHistory: string\[\];[\s\S]*outputHistory: string\[\];/);
-  assert.match(contracts, /export type EncryptionPreferencesPatch\s*=\s*Partial<Pick<EncryptionPreferences,\s*"inputDir"\s*\|\s*"outputDir">>;/);
+  assert.match(contracts, /export interface EncryptionPreferences\s*\{[\s\S]*inputDir: string;[\s\S]*outputDir: string;[\s\S]*inputHistory: string\[\];[\s\S]*outputHistory: string\[\];[\s\S]*lowercaseOutput: boolean;/);
+  assert.match(contracts, /export type EncryptionPreferencesPatch\s*=\s*Partial<Pick<EncryptionPreferences,\s*"inputDir"\s*\|\s*"outputDir"\s*\|\s*"lowercaseOutput">>;/);
   assert.match(contracts, /selectEncryptionDirectory\(kind: EncryptionDirectoryKind\): Promise<OperationResult & \{[\s\S]*preferences\?: EncryptionPreferences\s*;?\s*\}>/);
   assert.match(contracts, /saveEncryptionPreferences\(patch: EncryptionPreferencesPatch\)/);
   assert.match(preload, /EncryptionPreferencesPatch/);
@@ -39,10 +39,11 @@ test("core encryption preferences reuses and re-exports the shared preference ty
   assert.doesNotMatch(core, /type EncryptionPreferencesPatch\s*=/);
 });
 
-test("main encryption preferences fallback includes both history arrays without widening the patch whitelist", async () => {
+test("main encryption preferences fallback includes histories and lowercase output without widening the patch whitelist", async () => {
   const main = await readFile("electron/main.ts", "utf8");
-  assert.match(main, /return \{\s*inputDir: "",\s*outputDir: "",\s*inputHistory: \[\],\s*outputHistory: \[\]\s*\};/);
-  assert.match(main, /Object\.keys\(value\)\.some\(\(key\) => key !== "inputDir" && key !== "outputDir"\)/);
+  assert.match(main, /return \{\s*inputDir: "",\s*outputDir: "",\s*inputHistory: \[\],\s*outputHistory: \[\],\s*lowercaseOutput: false\s*\};/);
+  assert.match(main, /Object\.keys\(value\)\.some\(\(key\) => key !== "inputDir" && key !== "outputDir" && key !== "lowercaseOutput"\)/);
+  assert.match(main, /encryptDirectory\(\{[\s\S]*?lowercaseOutput:[\s\S]*?encoderPath:/);
 });
 
 test("main awaits encryption preferences so malformed JSON reaches the fallback", async () => {
