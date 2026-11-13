@@ -5,3 +5,4 @@ release/
 .superpowers/
 .worktrees/
 .DS_Store
+/hscomm32/
