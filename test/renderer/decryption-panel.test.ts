@@ -5,7 +5,7 @@ import test from "node:test";
 test("navigation exposes decryption directly above appearance", async () => {
   const source = await readFile("src/renderer/App.tsx", "utf8");
   assert.match(source, /\{ id: "decryption", label: "解密", icon: "decryption" \}, \{ id: "appearance", label: "外观", icon: "appearance" \}/);
-  assert.match(source, /page === "decryption" && <DecryptionPage \/>/);
+  assert.match(source, /<PagePane active=\{page === "decryption"\}><DecryptionPage \/><\/PagePane>/);
 });
 
 test("decryption page wires directory history, progress, logs, and execution", async () => {

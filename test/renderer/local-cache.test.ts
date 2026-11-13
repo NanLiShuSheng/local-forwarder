@@ -12,7 +12,7 @@ test("renderer exposes local cache as a separate structured and editable tab", a
   ]);
 
   assert.match(appSource, /\{ id: "local-cache", label: "本地缓存", icon: "cache" \}/);
-  assert.match(appSource, /<LocalCachePage instanceId=\{selectedInstance\?\.id\} \/>/);
+  assert.match(appSource, /<LocalCachePage active=\{page === "local-cache"\} instanceId=\{selectedInstance\?\.id\} \/>/);
   assert.match(pageSource, /Page = .*"local-cache"/);
   assert.match(cacheSource, /window\.forwarder\.getMapValues\(instanceId\)/);
   assert.match(cacheSource, /window\.forwarder\.saveMapValues\(next, targetInstanceId\)/);

@@ -62,8 +62,8 @@ const CATEGORY_ORDER = new Map(LOGIN_CACHE_CATEGORIES.map((category, index) => [
 const CREDENTIAL_KEYS = new Set(["TOKEN", "SESSIONNO", "ACTION", "TYPE", "LOGINTYPE", "USERTYPE", "RIGHTS", "SERVICEID", "REQLINKTYPE", "TOKENTYPE", "LOGINFLAG"]);
 const IDENTITY_KEYS = new Set(["USERCODE", "USERNAME", "FULLNAME", "IDNO", "IDTYPE", "KBRANCH", "OPENBRANCH", "OPENDATE", "CUSTCERT", "ORGANPROPFLAG"]);
 const ACCOUNT_KEYS = new Set(["ACCOUNTLIST", "FUNDACCOUNT", "BANKMONEY", "ISHKACCOUNT", "ISHKSZACCOUNT", "ASSET_PROP", "MAXCOUNT"]);
-const SESSION_KEYS = new Set(["LAST_LOGIN_DATE", "LAST_LOGIN_TIME", "LAST_OP_STATION", "LAST_OP_ENTRUST_WAY", "TZTUSEDTIME", "MOBILETELEPHONE", "PRESTORE_INFO"]);
-const SENSITIVE_KEYS = new Set(["TOKEN", "RIGHTS", "CUSTCERT", "IDNO", "FUNDACCOUNT", "BANKMONEY", "MOBILETELEPHONE", "LAST_OP_STATION"]);
+const SESSION_KEYS = new Set(["LAST_LOGIN_DATE", "LAST_LOGIN_TIME", "LAST_OP_STATION", "LAST_OP_ENTRUST_WAY", "TZTUSEDTIME", "MOBILETELPHONE", "PRESTORE_INFO"]);
+const SENSITIVE_KEYS = new Set(["TOKEN", "RIGHTS", "CUSTCERT", "IDNO", "FUNDACCOUNT", "BANKMONEY", "MOBILETELPHONE", "LAST_OP_STATION"]);
 const KEY_PRIORITY = new Map([
   ["TOKEN", 0],
   ["SESSIONNO", 1],
@@ -206,7 +206,7 @@ export function loginCacheCustomerSummary(values: Record<string, string>): Login
   const name = loginCacheValue(values, "USERNAME") || loginCacheValue(values, "FULLNAME");
   const code = loginCacheValue(values, "USERCODE");
   const certificate = loginCacheValue(values, "IDNO") || loginCacheValue(values, "CUSTCERT");
-  const phone = loginCacheValue(values, "MOBILETELEPHONE");
+  const phone = loginCacheValue(values, "MOBILETELPHONE");
   const accounts = parseLoginCacheAccounts(loginCacheValue(values, "ACCOUNTLIST"));
   return {
     hasCustomer: name.length > 0 || code.length > 0,

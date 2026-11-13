@@ -158,7 +158,6 @@ export function LoginCachePage({ instanceId, instanceName, running = false, valu
             <div><span>开户日期</span><strong>{customer.openDate}</strong></div>
             <div><span>证件号码</span><strong>{customer.certificate}</strong></div>
             <div><span>手机号</span><strong>{customer.phone}</strong></div>
-            <div><span>账户数量</span><strong>{customer.accountCount > 0 ? `${customer.accountCount} 个` : "—"}</strong></div>
           </div>
           <div className="login-cache-customer-accounts">
             <span>账户</span>

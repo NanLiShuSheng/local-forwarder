@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus, UpdateState } from "../shared/contracts";
 import { AppearancePage } from "./components/AppearancePage";
 import { ConfigPages, type Page } from "./components/ConfigPages";
@@ -12,6 +12,8 @@ import { UpdateCard } from "./components/UpdateCard";
 import { LocalCachePage } from "./components/LocalCachePage";
 import { LocalVariablesPage } from "./components/LocalVariablesPage";
 import { LoginCachePage } from "./components/LoginCachePage";
+import { RequestPage } from "./components/RequestPage";
+import { StringToolPage } from "./components/StringToolPage";
 import { ToastProvider, useToast } from "./components/ToastProvider";
 import { loginCacheCustomerSummary } from "./login-cache-data";
 import { createManualCheckTracker, createUpdateStateSynchronizer, resolveManualCheckResult } from "./update-state";
@@ -54,6 +56,13 @@ function SidebarNavIcon({ name }: { name: SidebarNavIconName }) {
   return <svg className="sidebar-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{sidebarNavIconPaths[name].map((path) => <path key={path} d={path} />)}</svg>;
 }
 
+function PagePane({ active, children }: { active: boolean; children: ReactNode }) {
+  const [hasOpened, setHasOpened] = useState(active);
+  useEffect(() => { if (active) setHasOpened(true); }, [active]);
+  if (!hasOpened && !active) return null;
+  return <div className="page-pane" hidden={!active}>{children}</div>;
+}
+
 interface LoginSuccessNotice {
   id: number;
   values: Record<string, string>;
@@ -84,9 +93,8 @@ function LoginSuccessCard({ notice, onClose, onOpenCache }: { notice: LoginSucce
     <div className="login-success-meta">
       <span><b>开户网点</b><strong>{customer.branch}</strong></span>
       <span><b>客户类型</b><strong>{customer.type}</strong></span>
-      <span><b>账户数量</b><strong>{customer.accountCount > 0 ? `${customer.accountCount} 个` : "—"}</strong></span>
     </div>
-    <div className="login-success-footer"><span>请求成功后显示 · 2 秒后自动隐藏</span><button className="login-success-action" type="button" onClick={onOpenCache}>查看登录缓存 →</button></div>
+    <div className="login-success-footer"><span>请求成功后显示 · 3 秒后自动隐藏</span><button className="login-success-action" type="button" onClick={onOpenCache}>查看登录缓存 →</button></div>
   </aside>;
 }
 
@@ -238,7 +246,7 @@ function AppContent() {
     if (loginSuccessNotice === undefined) return;
     const timer = window.setTimeout(() => {
       setLoginSuccessNotice((current) => current?.id === loginSuccessNotice.id ? undefined : current);
-    }, 2000);
+    }, 3000);
     return () => window.clearTimeout(timer);
   }, [loginSuccessNotice]);
 
@@ -448,7 +456,7 @@ function AppContent() {
   };
 
   const selectedInstance = instances.find((instance) => instance.selected) ?? instances[0];
-  const pageProps = { config, logs, onChange: save, encryptionPreferences, onSelectEncryptionDirectory: selectEncryptionDirectory, onSaveEncryptionPreferences: saveEncryptionPreferences, onEncryptDirectory: encryptDirectory, onEncryptionProgress: window.forwarder.onEncryptionProgress, onSendRequest: sendRequest, loginCache, onSaveLoginCache: saveLoginCache };
+  const pageProps = { config, logs, onChange: save, encryptionPreferences, onSelectEncryptionDirectory: selectEncryptionDirectory, onSaveEncryptionPreferences: saveEncryptionPreferences, onEncryptDirectory: encryptDirectory, onEncryptionProgress: window.forwarder.onEncryptionProgress, loginCache, onSaveLoginCache: saveLoginCache };
 
   return <main className="app-shell" data-theme={theme}>
     <aside className="sidebar">
@@ -459,16 +467,18 @@ function AppContent() {
       <SidebarCustomer values={loginCache} />
     </aside>
     <section className={`content ${page === "request" ? "request-page-content" : ""} ${page === "json" ? "json-page-content" : ""} ${page === "logs" ? "log-page-content" : ""}`}>
-      {page === "appearance" && <AppearancePage mode={mode} theme={theme} onModeChange={setMode} appVersion={appVersion || updateState.currentVersion} checkingForUpdates={updateState.state === "checking"} onCheckForUpdates={checkForUpdates} />}
-      {page === "local" && <LocalVariablesPage />}
-      {page === "local-cache" && <LocalCachePage instanceId={selectedInstance?.id} />}
-      {page === "values" && <LoginCachePage instanceId={selectedInstance?.id} instanceName={selectedInstance?.name} running={selectedInstance?.status.state === "running"} values={loginCache} onSave={saveLoginCache} />}
-      {page === "decryption" && <DecryptionPage />}
-      {page === "runtime" && <><ProxyInstancePanel instances={instances} status={status} config={config} onChange={save} onChooseProjectDirectory={chooseProjectDirectory} onRename={renameProxyInstance} onStart={start} onStop={stop} /><ConfigPages page="addresses" {...pageProps} /></>}
-      <div hidden={page !== "json"}><JsonPreviewPage prefillText={jsonPrefill} onPrefillApplied={() => setJsonPrefill(undefined)} /></div>
-      {page === "rules" && <RuleList config={config} onChange={save} />}
-      {page !== "runtime" && page !== "local" && page !== "local-cache" && page !== "values" && page !== "decryption" && page !== "rules" && page !== "logs" && page !== "appearance" && page !== "json" && <ConfigPages page={page} {...pageProps} />}
-      {page === "logs" && <LogPanel logs={logs} selected={selectedLog} onSelect={setSelectedLog} onClear={clearLogs} onFillJson={fillJsonPreview} />}
+      <PagePane active={page === "runtime"}><ProxyInstancePanel instances={instances} status={status} config={config} onChange={save} onChooseProjectDirectory={chooseProjectDirectory} onRename={renameProxyInstance} onStart={start} onStop={stop} /></PagePane>
+      <PagePane active={page === "runtime" || page === "encryption"}><ConfigPages page={page === "runtime" ? "addresses" : page} {...pageProps} /></PagePane>
+      <PagePane active={page === "request"}><RequestPage config={config} onChange={save} onSendRequest={sendRequest} /></PagePane>
+      <PagePane active={page === "string"}><StringToolPage config={config} /></PagePane>
+      <PagePane active={page === "appearance"}><AppearancePage mode={mode} theme={theme} onModeChange={setMode} appVersion={appVersion || updateState.currentVersion} checkingForUpdates={updateState.state === "checking"} onCheckForUpdates={checkForUpdates} /></PagePane>
+      <PagePane active={page === "local"}><LocalVariablesPage active={page === "local"} /></PagePane>
+      <PagePane active={page === "local-cache"}><LocalCachePage active={page === "local-cache"} instanceId={selectedInstance?.id} /></PagePane>
+      <PagePane active={page === "values"}><LoginCachePage instanceId={selectedInstance?.id} instanceName={selectedInstance?.name} running={selectedInstance?.status.state === "running"} values={loginCache} onSave={saveLoginCache} /></PagePane>
+      <PagePane active={page === "decryption"}><DecryptionPage /></PagePane>
+      <PagePane active={page === "json"}><JsonPreviewPage prefillText={jsonPrefill} onPrefillApplied={() => setJsonPrefill(undefined)} /></PagePane>
+      <PagePane active={page === "rules"}><RuleList config={config} onChange={save} /></PagePane>
+      <PagePane active={page === "logs"}><LogPanel logs={logs} selected={selectedLog} onSelect={setSelectedLog} onClear={clearLogs} onFillJson={fillJsonPreview} /></PagePane>
     </section>
     {loginSuccessNotice !== undefined && <LoginSuccessCard notice={loginSuccessNotice} onClose={() => setLoginSuccessNotice(undefined)} onOpenCache={openLoginCache} />}
     <UpdateCard state={updateState} dismissedVersion={dismissedUpdateVersion} onDownload={downloadUpdate} onInstall={installUpdate} onDismiss={dismissUpdate} />

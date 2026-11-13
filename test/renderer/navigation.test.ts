@@ -52,7 +52,7 @@ test("sidebar navigation exposes the JSON visualization page", async () => {
   assert.match(source, /\{ id: "json", label: "JSON 可视化", icon: "json" \}/);
   assert.match(source, /<JsonPreviewPage prefillText=\{jsonPrefill\}/);
   assert.match(pagesSource, /Page = .*"json"/);
-  assert.match(source, /page !== "json"/);
+  assert.match(source, /<PagePane active=\{page === "json"\}><JsonPreviewPage/);
 });
 
 test("App wires log clearing and JSON response fill actions", async () => {

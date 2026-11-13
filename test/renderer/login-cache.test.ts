@@ -92,7 +92,7 @@ test("summarizes customer details for the page, sidebar, and login success notic
     KBRANCH: "1018",
     OPENDATE: "20201106",
     IDNO: "880005597770134550",
-    MOBILETELEPHONE: "123456789",
+    MOBILETELPHONE: "123456789",
     LAST_LOGIN_DATE: "20260720",
     LAST_LOGIN_TIME: "091150",
     ACCOUNTLIST: "SHACCOUNT|A120681838|上海A|\u0003SZACCOUNT|0300756949|深圳A|",
@@ -127,6 +127,8 @@ test("renderer exposes login cache as a visual page with a raw text fallback", a
   assert.match(pageSource, /className="config-textarea login-cache-input"/);
   assert.match(pageSource, /所有字段均按明文完整展示/);
   assert.doesNotMatch(pageSource, /脱敏/);
+  assert.doesNotMatch(pageSource, /账户数量/);
+  assert.doesNotMatch(appSource, /账户数量/);
   assert.match(dataSource, /loginCacheSummary/);
   assert.doesNotMatch(dataSource, /maskLoginCacheValue/);
   assert.match(styles, /\.login-cache-workspace/);
@@ -149,6 +151,7 @@ test("renderer matches the v5 customer card, page-level scrolling, and success n
   assert.match(appSource, /className="sidebar-customer"/);
   assert.match(appSource, /function LoginSuccessCard/);
   assert.match(appSource, /result\.loginSuccess/);
-  assert.match(appSource, /\}, 2000\)/);
+  assert.match(appSource, /3 秒后自动隐藏/);
+  assert.match(appSource, /if \(loginSuccessNotice === undefined\) return;[\s\S]*?\}, 3000\);/);
   assert.match(appSource, /<LoginSuccessCard notice=\{loginSuccessNotice\}/);
 });

@@ -145,8 +145,11 @@ test("encryption page shows live progress and file counts above the output direc
   assert.match(component, /setEncryptionProgress/);
   assert.match(component, /progress\.processedFiles/);
   assert.ok(component.indexOf('className={`encryption-progress-card') > component.lastIndexOf("加密后文件夹目录"));
+  assert.match(component, /className="encryption-progress-kicker">加密进度<\/span><strong>\{encryptionStatusLabel\}<\/strong><\/div>\s*<b>\{encryptionProgressPercent\}%<\/b>/);
+  assert.doesNotMatch(component, /encryption-progress-value|encryption-current-file|encryptionEta/);
   assert.match(styles, /\.encryption-progress-card/);
   assert.match(styles, /\.encryption-progress-bar/);
+  assert.doesNotMatch(styles, /\.encryption-progress-value|\.encryption-current-file/);
 });
 
 test("encryption page uses the refreshed heading, format cards, and live log shell", async () => {
@@ -157,7 +160,6 @@ test("encryption page uses the refreshed heading, format cards, and live log she
   assert.match(component, /className="encryption-heading"/);
   assert.match(component, /className="encryption-format-grid"/);
   assert.match(component, /增量清单/);
-  assert.match(component, /className="encryption-current-file"/);
   assert.match(component, /className="encryption-log-shell"/);
   assert.match(styles, /\.encryption-format-grid\s*\{/);
   assert.match(styles, /\.encryption-stat-grid\s*\{/);

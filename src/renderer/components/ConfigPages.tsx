@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, ForwardingAddressHistory, LogEntry, ManualRequestConfig, ManualRequestResponse } from "../../shared/contracts";
+import { useEffect, useState } from "react";
+import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, ForwardingAddressHistory, LogEntry } from "../../shared/contracts";
 import { parseDirectoryInput } from "../../shared/directory-path";
 import { formatLocalCacheText, parseLocalCacheText } from "../../shared/local-cache";
-import { RequestPage } from "./RequestPage";
-import { StringToolPage } from "./StringToolPage";
 import { useToast } from "./ToastProvider";
 
 export type Page = "runtime" | "local-cache" | "rules" | "addresses" | "request" | "string" | "local" | "values" | "cache" | "encryption" | "decryption" | "logs" | "appearance" | "json";
@@ -17,29 +15,16 @@ interface ConfigPagesProps {
   onSaveEncryptionPreferences: (patch: EncryptionPreferencesPatch) => Promise<boolean>;
   onEncryptDirectory: (inputDir: string, outputDir: string, mode: EncryptionMode) => Promise<EncryptionResult>;
   onEncryptionProgress: (listener: (progress: EncryptionProgress) => void) => () => void;
-  onSendRequest: (request: ManualRequestConfig) => Promise<ManualRequestResponse>;
   loginCache: Record<string, string>;
   onSaveLoginCache: (values: Record<string, string>) => Promise<boolean>;
 }
 type EncryptionProgressViewPhase = EncryptionProgress["phase"] | "idle";
 interface EncryptionProgressView {
   phase: EncryptionProgressViewPhase;
-  status?: EncryptionProgress["status"];
   current: number;
   total: number;
   processedFiles: number;
   skippedFiles: number;
-  processingStartedAt: number | null;
-  relativePath?: string;
-}
-
-function formatEncryptionRemainingTime(seconds: number): string {
-  if (seconds < 60) return `${seconds} 秒`;
-  if (seconds < 3600) return `${Math.ceil(seconds / 60)} 分钟`;
-  const totalMinutes = Math.ceil(seconds / 60);
-  const hours = Math.floor(totalMinutes / 60);
-  const remainingMinutes = totalMinutes % 60;
-  return remainingMinutes === 0 ? `${hours} 小时` : `${hours} 小时 ${remainingMinutes} 分钟`;
 }
 
 function renderEncryptionLogLine(line: string, index: number) {
@@ -168,7 +153,7 @@ export function targetFromDraft(draft: AddressDraft, index: number): AppConfig["
   };
 }
 
-export function ConfigPages({ page, config, logs, onChange, encryptionPreferences, onSelectEncryptionDirectory, onSaveEncryptionPreferences, onEncryptDirectory, onEncryptionProgress, onSendRequest, loginCache, onSaveLoginCache }: ConfigPagesProps) {
+export function ConfigPages({ page, config, logs, onChange, encryptionPreferences, onSelectEncryptionDirectory, onSaveEncryptionPreferences, onEncryptDirectory, onEncryptionProgress, loginCache, onSaveLoginCache }: ConfigPagesProps) {
   const { notifyError } = useToast();
   const [addressDrafts, setAddressDrafts] = useState(() => draftsForTargets(config.tcpTargets));
   const [openHistoryIndex, setOpenHistoryIndex] = useState<number>();
@@ -178,29 +163,18 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
   const [encryptionOutputDir, setEncryptionOutputDir] = useState(() => encryptionPreferences.outputDir);
   const [encryptionRunning, setEncryptionRunning] = useState(false);
   const [encryptionLogs, setEncryptionLogs] = useState<string[]>([]);
-  const [encryptionProgress, setEncryptionProgress] = useState<EncryptionProgressView>({ phase: "idle", current: 0, total: 0, processedFiles: 0, skippedFiles: 0, processingStartedAt: null });
-  const encryptionProcessingStartedAt = useRef<number | null>(null);
-  const [encryptionNow, setEncryptionNow] = useState(() => Date.now());
+  const [encryptionProgress, setEncryptionProgress] = useState<EncryptionProgressView>({ phase: "idle", current: 0, total: 0, processedFiles: 0, skippedFiles: 0 });
   useEffect(() => { setAddressDrafts(draftsForTargets(config.tcpTargets)); }, [config.tcpTargets]);
   useEffect(() => { setCacheText(formatLocalCacheText(loginCache)); }, [loginCache]);
   useEffect(() => { setEncryptionInputDir(encryptionPreferences.inputDir); setEncryptionOutputDir(encryptionPreferences.outputDir); }, [encryptionPreferences]);
   useEffect(() => onEncryptionProgress((progress) => {
-    if (progress.phase === "scanning") {
-      encryptionProcessingStartedAt.current = null;
-    } else if (progress.phase === "processing" && encryptionProcessingStartedAt.current === null) {
-      encryptionProcessingStartedAt.current = Date.now();
-    }
     setEncryptionProgress({
       phase: progress.phase,
-      status: progress.status,
       current: progress.phase === "scanning" ? 0 : progress.current,
       total: progress.total,
       processedFiles: progress.processedFiles,
       skippedFiles: progress.skippedFiles,
-      processingStartedAt: encryptionProcessingStartedAt.current,
-      relativePath: progress.phase === "completed" ? undefined : progress.relativePath,
     });
-    setEncryptionNow(Date.now());
     if (progress.phase === "scanning") {
       setEncryptionLogs((current) => [...current, "正在扫描文件…"].slice(-200));
       return;
@@ -212,11 +186,6 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
       setEncryptionLogs((current) => [...current, `加密：${progress.relativePath}`].slice(-200));
     }
   }), [onEncryptionProgress]);
-  useEffect(() => {
-    if (!encryptionRunning) return;
-    const interval = setInterval(() => setEncryptionNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [encryptionRunning]);
   useEffect(() => {
     if (openHistoryIndex === undefined && openEncryptionHistoryKind === undefined) return;
     const closeOnOutsidePointerDown = (event: PointerEvent) => {
@@ -329,26 +298,22 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     setEncryptionRunning(true);
     setOpenEncryptionHistoryKind(undefined);
     setEncryptionLogs(["开始执行加密任务…"]);
-    encryptionProcessingStartedAt.current = null;
-    setEncryptionNow(Date.now());
-    setEncryptionProgress({ phase: "scanning", current: 0, total: 0, processedFiles: 0, skippedFiles: 0, processingStartedAt: null });
+    setEncryptionProgress({ phase: "scanning", current: 0, total: 0, processedFiles: 0, skippedFiles: 0 });
     try {
       const result = await onEncryptDirectory(encryptionInputDir, encryptionOutputDir, mode);
       if (!result.ok) {
-        encryptionProcessingStartedAt.current = null;
-        setEncryptionProgress((current) => ({ ...current, phase: "idle", status: undefined, processingStartedAt: null, relativePath: undefined }));
+        setEncryptionProgress((current) => ({ ...current, phase: "idle" }));
         return;
       }
       const total = result.totalFiles ?? 0;
       const processed = result.processedFiles ?? total;
       const skipped = result.skippedFiles ?? 0;
       const removed = result.removedFiles ?? 0;
-      setEncryptionProgress({ phase: "completed", status: "completed", current: total, total, processedFiles: processed, skippedFiles: skipped, processingStartedAt: encryptionProcessingStartedAt.current });
+      setEncryptionProgress({ phase: "completed", current: total, total, processedFiles: processed, skippedFiles: skipped });
       const completedAt = formatEncryptionLocalTime(Date.now());
       setEncryptionLogs((current) => [...current, "", `完成：处理 ${processed} 个，跳过 ${skipped} 个，删除 ${removed} 个（共 ${total} 个） ${completedAt}`].slice(-200));
     } catch (error) {
-      encryptionProcessingStartedAt.current = null;
-      setEncryptionProgress((current) => ({ ...current, phase: "idle", status: undefined, processingStartedAt: null, relativePath: undefined }));
+      setEncryptionProgress((current) => ({ ...current, phase: "idle" }));
       notifyError(error, "加密失败");
     } finally {
       setEncryptionRunning(false);
@@ -360,36 +325,11 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     : Math.min(100, Math.round((encryptionProgress.current / encryptionProgress.total) * 100));
   const encryptionStatusLabel = encryptionProgress.phase === "completed"
     ? "加密完成"
-    : !encryptionRunning
-      ? "等待开始"
-      : encryptionProgress.phase === "scanning"
-        ? "正在扫描"
-        : "正在加密";
+    : encryptionRunning
+      ? "正在处理"
+      : "等待开始";
   const encryptionStatusTone = encryptionProgress.phase === "completed" ? "completed" : encryptionRunning ? "running" : "idle";
   const encryptionRemainingCount = Math.max(0, encryptionProgress.total - encryptionProgress.current);
-  const encryptionEta = encryptionProgress.phase === "completed"
-    ? "本轮已完成"
-    : !encryptionRunning
-      ? "等待开始"
-      : encryptionProgress.phase === "scanning" || encryptionProgress.current <= 0 || encryptionProgress.total <= encryptionProgress.current || encryptionProgress.processingStartedAt === null
-        ? "预计剩余计算中"
-        : `预计剩余 ${formatEncryptionRemainingTime(Math.max(1, Math.ceil(Math.max(0, (encryptionNow - encryptionProgress.processingStartedAt) / 1000) * (encryptionProgress.total - encryptionProgress.current) / encryptionProgress.current)))}`;
-  const encryptionElapsed = encryptionRunning && encryptionProgress.processingStartedAt !== null
-    ? `已用时 ${formatEncryptionRemainingTime(Math.max(0, Math.floor((encryptionNow - encryptionProgress.processingStartedAt) / 1000)))}`
-    : undefined;
-  const encryptionCurrentFileLabel = encryptionRunning
-    ? encryptionProgress.phase === "scanning"
-      ? "正在扫描"
-      : encryptionProgress.status === "skipping"
-        ? "已跳过"
-        : encryptionProgress.status === "removing"
-          ? "正在清理"
-          : "正在处理"
-    : encryptionProgress.phase === "completed"
-      ? "已完成"
-      : "待命";
-  const encryptionCurrentFile = encryptionProgress.relativePath
-    ?? (encryptionRunning && encryptionProgress.phase === "scanning" ? "正在扫描文件…" : encryptionProgress.phase === "completed" ? "本轮加密已完成" : "等待开始");
   const encryptionLogStatus = encryptionRunning ? "处理中" : encryptionProgress.phase === "completed" ? "已完成" : "待命";
 
   const renderEncryptionDirectoryField = (kind: EncryptionDirectoryKind, label: string, chooseLabel: string, context: string, directory: string, setDirectory: (value: string) => void) => {
@@ -409,8 +349,6 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
   };
 
   if (page === "addresses") return <section className="panel"><div className="panel-heading"><div><p className="eyebrow">/reqxml</p><h2>转发地址</h2></div></div>{addressDrafts.map((draft, index) => <div className="address-editor" key={draft.id}><label className="address-field"><span>{addressLabels[index] ?? `地址${index + 1}`} 地址</span><div className="address-input-shell"><input className="address-input" value={draft.address} placeholder={forwardingAddressPlaceholder(index)} onChange={(event) => updateAddress(index, event.target.value)} onBlur={() => void saveAddressDrafts()} /><button type="button" className="address-history-toggle" aria-label="显示历史地址" aria-expanded={openHistoryIndex === index} disabled={addressHistoryForIndex(index).length === 0} onClick={() => setOpenHistoryIndex((current) => current === index ? undefined : index)}><span className="address-history-chevron" aria-hidden="true" /></button>{openHistoryIndex === index && <div className="address-history-menu" role="listbox" aria-label="历史地址">{addressHistoryForIndex(index).map((address) => <button type="button" role="option" aria-selected={draft.address === address} className="address-history-option" key={address} onMouseDown={(event) => event.preventDefault()} onClick={() => selectAddressHistory(index, address)}>{address}</button>)}</div>}</div></label></div>)}</section>;
-  if (page === "request") return <RequestPage config={config} onChange={onChange} onSendRequest={onSendRequest} />;
-  if (page === "string") return <StringToolPage config={config} />;
   if (page === "values") return <section className="panel config-textarea-panel">
     <p className="muted config-textarea-hint">当前代理已缓存 {Object.keys(loginCache).length} 项，登录请求成功后会自动更新。</p>
     <textarea className="config-textarea login-cache-input" aria-label="登录缓存" value={cacheText} onChange={(event) => setCacheText(event.target.value)} onBlur={() => void saveLoginCache()} placeholder="Token = xxx\nSessionNo = 123" rows={14} />
@@ -435,8 +373,8 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
 
     <div className={`encryption-progress-card ${encryptionStatusTone}`} aria-live="polite">
       <div className="encryption-progress-heading">
-        <div className="encryption-progress-heading-copy"><span className="encryption-progress-kicker">加密进度</span><strong>{encryptionStatusLabel}</strong></div>
-        <div className="encryption-progress-value"><b>{encryptionProgressPercent}%</b><span>{encryptionEta}</span></div>
+        <div><span className="encryption-progress-kicker">加密进度</span><strong>{encryptionStatusLabel}</strong></div>
+        <b>{encryptionProgressPercent}%</b>
       </div>
       <div className="encryption-progress-bar" role="progressbar" aria-label="加密进度" aria-valuemin={0} aria-valuemax={encryptionProgress.total} aria-valuenow={encryptionProgress.current}><span style={{ width: `${encryptionProgressPercent}%` }} /></div>
       <div className="encryption-stat-grid">
@@ -444,12 +382,6 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
         <div><span>已加密</span><strong className="success">{encryptionProgress.processedFiles}</strong></div>
         <div><span>已跳过</span><strong>{encryptionProgress.skippedFiles}</strong></div>
         <div><span>待处理</span><strong>{encryptionRemainingCount}</strong></div>
-      </div>
-      <div className="encryption-current-file">
-        <i className="encryption-current-pulse" aria-hidden="true" />
-        <span>{encryptionCurrentFileLabel}</span>
-        <code title={encryptionProgress.relativePath}>{encryptionCurrentFile}</code>
-        {encryptionElapsed !== undefined && <span className="encryption-elapsed">{encryptionElapsed}</span>}
       </div>
     </div>
 

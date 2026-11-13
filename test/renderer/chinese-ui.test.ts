@@ -55,7 +55,7 @@ test("renderer places forwarding addresses below overview without a separate tab
   ]);
   assert.doesNotMatch(source, /\{ id: "addresses", label: "转发地址" \}/);
   assert.match(source, /page === "runtime"/);
-  assert.match(source, /<ConfigPages page="addresses"/);
+  assert.match(source, /<ConfigPages page=\{page === "runtime" \? "addresses" : page\}/);
   assert.match(styleSource, /\.dashboard-grid \+ \.panel[^\{]*\{[^}]*margin-top:\s*18px/);
 });
 
@@ -94,7 +94,9 @@ test("renderer exposes local variables as a structured editable page", async () 
   assert.match(source, /批量文本/);
   assert.match(dataSource, /LOCAL_VARIABLE_LONG_THRESHOLD/);
   assert.match(styleSource, /\.local-variables-row[^\n]*min-height:\s*49px/);
-  assert.match(styleSource, /\.local-variables-label[^\n]*max-width:\s*88px/);
+  const labelRule = styleSource.match(/\.local-variables-label\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(labelRule, /flex:\s*0 1 auto/);
+  assert.doesNotMatch(labelRule, /max-width:/);
   assert.match(styleSource, /\.local-variables-code-view[^\n]*white-space:\s*pre-wrap/);
   assert.match(styleSource, /\.local-variables-textarea[^\n]*white-space:\s*pre-wrap/);
 });
@@ -104,8 +106,7 @@ test("renderer gives local variables a separate menu from login cache", async ()
   const pageSource = await readFile("src/renderer/components/ConfigPages.tsx", "utf8");
   assert.match(appSource, /\{ id: "local", label: "本地变量", icon: "local" \}/);
   assert.match(appSource, /\{ id: "values", label: "登录缓存", icon: "values" \}/);
-  assert.match(appSource, /page === "local" && <LocalVariablesPage \/>/);
-  assert.match(appSource, /page !== "local"/);
+  assert.match(appSource, /<PagePane active=\{page === "local"\}><LocalVariablesPage active=\{page === "local"\} \/><\/PagePane>/);
   assert.doesNotMatch(pageSource, /if \(page === "local"\)/);
   const valuesStart = pageSource.indexOf('if (page === "values")');
   const loginSaveStart = pageSource.indexOf("const saveLoginCache");

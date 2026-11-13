@@ -79,6 +79,21 @@ button { cursor: pointer; }
   --update-border: #3b5471;
   --update-shadow: rgb(0 0 0 / 38%);
   --update-progress-track: #26374e;
+  --ui-font-2xs: 0.6875rem;
+  --ui-font-xs: 0.75rem;
+  --ui-font-sm: 0.8125rem;
+  --ui-font-md: 0.875rem;
+  --ui-font-lg: 1rem;
+  --ui-font-xl: 1.25rem;
+  --ui-font-2xl: 1.375rem;
+  --ui-control-sm: 30px;
+  --ui-control: 34px;
+  --ui-control-lg: 38px;
+  --ui-radius-sm: 6px;
+  --ui-radius: 8px;
+  --ui-radius-card: 10px;
+  --ui-radius-panel: 14px;
+  --ui-radius-pill: 999px;
   height: 100vh;
   min-height: 0;
   display: flex;
@@ -217,6 +232,8 @@ button { cursor: pointer; }
 .sidebar-nav button.active .sidebar-nav-icon { color: var(--text-success); opacity: 1; }
 .sidebar-nav button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 .content { flex: 1; min-width: 640px; width: min(1180px, 100%); height: 100vh; min-height: 0; overflow-y: auto; overscroll-behavior: contain; margin: 0 auto; padding: 42px 48px 56px; background: var(--app-background); }
+.page-pane { display: contents; }
+.page-pane[hidden] { display: none; }
 .request-page-content { padding-top: 28px; }
 .topbar { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 30px; }
 .content-toolbar { display: flex; justify-content: flex-end; min-height: 32px; margin-bottom: 14px; }
@@ -551,7 +568,7 @@ h2 { font-size: 1.35rem; }
 .response-body { min-height: 270px; overflow: auto; margin: 0; border: 1px solid var(--border-subtle); border-radius: 10px; padding: 13px; color: var(--text-code); background: var(--code-background); font: 0.75rem/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .rules-panel, .log-panel { min-height: 500px; }
 .log-page-content { display: flex; flex-direction: column; }
-.log-page-content > .log-panel { flex: 1 1 auto; min-height: 0; }
+.log-page-content .log-panel { flex: 1 1 auto; min-height: 0; }
 .log-panel { display: flex; flex-direction: column; }
 .log-panel .log-workspace { flex: 1 1 auto; }
 .log-page-content .log-list { max-height: none; }
@@ -930,7 +947,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--success); }
 .local-variables-key { min-width: 0; flex: 0 1 auto; overflow: hidden; color: var(--text-bright); font: .69rem ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; letter-spacing: .01em; text-overflow: ellipsis; white-space: nowrap; }
 .local-variables-key-preview { display: block; margin-top: 4px; overflow: hidden; color: var(--text-muted); font: .53rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .local-variables-row-meta { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; }
-.local-variables-label { display: inline-flex; max-width: 88px; height: 17px; flex: 0 0 auto; align-items: center; overflow: hidden; border: 1px solid color-mix(in srgb, var(--info) 26%, transparent); border-radius: 4px; padding: 0 5px; color: var(--info); background: var(--info-background); font-size: .47rem; font-weight: 700; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
+.local-variables-label { display: inline-flex; min-width: 0; height: 17px; flex: 0 1 auto; align-items: center; overflow: hidden; border: 1px solid color-mix(in srgb, var(--info) 26%, transparent); border-radius: 4px; padding: 0 5px; color: var(--info); background: var(--info-background); font-size: .47rem; font-weight: 700; line-height: 1; text-overflow: ellipsis; white-space: nowrap; }
 .local-variables-type { display: inline-flex; height: 17px; align-items: center; border-radius: 4px; padding: 0 5px; color: var(--text-secondary); background: var(--surface-elevated-background); font: .47rem ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
 .local-variables-type.text { color: var(--text-success); background: var(--success-soft); }
 .local-variables-type.long { color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, transparent); }
@@ -1099,17 +1116,13 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--success); }
 .encryption-browse-button:disabled { cursor: not-allowed; opacity: .5; }
 .encryption-progress-card { position: relative; overflow: hidden; display: grid; gap: 12px; border: 1px solid var(--border-subtle); border-radius: 13px; padding: 15px 16px; background: linear-gradient(135deg, color-mix(in srgb, var(--success) 7%, var(--code-surface-background)), var(--code-surface-background)); }
 .encryption-progress-card::after { position: absolute; top: -40px; right: -30px; width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle, var(--success-faint), transparent 68%); content: ""; pointer-events: none; }
-.encryption-progress-card.running { border-color: color-mix(in srgb, var(--success) 34%, var(--border-subtle)); }
 .encryption-progress-card.completed { border-color: color-mix(in srgb, var(--success) 42%, var(--border-subtle)); }
-.encryption-progress-heading, .encryption-progress-heading-copy { display: flex; align-items: center; gap: 10px; }
+.encryption-progress-heading, .encryption-progress-heading > div { display: flex; align-items: center; gap: 10px; }
 .encryption-progress-heading { position: relative; z-index: 1; justify-content: space-between; }
 .encryption-progress-kicker { color: var(--text-muted); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .encryption-progress-heading strong { color: var(--text-primary); font-size: 0.78rem; }
 .encryption-progress-heading strong::before { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--success); box-shadow: 0 0 0 4px var(--success-faint); content: ""; vertical-align: 1px; }
-.encryption-progress-card.idle .encryption-progress-heading strong::before { background: var(--text-muted); box-shadow: none; }
-.encryption-progress-value { flex: 0 0 auto; text-align: right; }
-.encryption-progress-value b { display: block; color: var(--text-success); font-size: 1rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.encryption-progress-value span { display: block; margin-top: 4px; color: var(--text-muted); font-size: 0.59rem; }
+.encryption-progress-heading b { color: var(--text-success); font-size: 1rem; font-variant-numeric: tabular-nums; }
 .encryption-progress-bar { position: relative; z-index: 1; height: 8px; overflow: hidden; border-radius: 99px; background: var(--border-subtle); }
 .encryption-progress-bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--success), var(--progress-end)); transition: width 180ms ease; }
 .encryption-stat-grid { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
@@ -1117,11 +1130,6 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--success); }
 .encryption-stat-grid span { display: block; color: var(--text-muted); font-size: 0.59rem; }
 .encryption-stat-grid strong { display: block; margin-top: 3px; color: var(--text-primary); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
 .encryption-stat-grid strong.success { color: var(--text-success); }
-.encryption-current-file { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-muted); font-size: 0.61rem; }
-.encryption-current-file code { min-width: 0; flex: 1 1 auto; overflow: hidden; color: var(--text-tertiary); text-overflow: ellipsis; white-space: nowrap; }
-.encryption-current-pulse { width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%; background: var(--success); }
-.encryption-progress-card.idle .encryption-current-pulse { background: var(--text-muted); }
-.encryption-elapsed { flex: 0 0 auto; margin-left: auto; }
 .encryption-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 13px; margin-top: 18px; }
 .encryption-actions .primary { min-width: 138px; border: 1px solid var(--border-selected); border-radius: 9px; padding: 11px 18px; color: var(--text-on-accent); background: var(--success); font-size: 0.77rem; font-weight: 800; box-shadow: 0 8px 20px var(--success-faint); transition: background-color 150ms ease, transform 150ms ease, opacity 150ms ease; }
 .encryption-actions .primary:hover:not(:disabled) { background: var(--success-hover); transform: translateY(-1px); }
@@ -1239,7 +1247,6 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--success); }
   .encryption-browse-button { align-self: flex-start; }
   .encryption-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .encryption-actions { align-items: flex-start; flex-direction: column; }
-  .encryption-current-file { align-items: flex-start; flex-wrap: wrap; }
   .proxy-instance-sidebar-heading { flex-wrap: wrap; }
   .proxy-instance-sidebar-bulk-actions { flex: 1 1 100%; }
   .proxy-instance-sidebar-action { flex: 1 1 0; min-width: 0; }
@@ -1293,7 +1300,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--success); }
 .login-cache-ready-badge i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .login-cache-ready-badge.partial { border-color: color-mix(in srgb, var(--warning) 30%, transparent); color: var(--warning); background: color-mix(in srgb, var(--warning) 9%, transparent); }
 .login-cache-ready-badge.waiting { border-color: var(--border-subtle); color: var(--text-muted); background: var(--surface-alt-background); }
-.login-cache-customer-details { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; margin-top: 14px; }
+.login-cache-customer-details { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; margin-top: 14px; }
 .login-cache-customer-details > div { min-width: 0; border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 9px; background: color-mix(in srgb, var(--surface-alt-background) 72%, transparent); }
 .login-cache-customer-details span { display: block; color: var(--text-muted); font-size: 0.58rem; }
 .login-cache-customer-details strong { display: block; margin-top: 3px; overflow: hidden; color: var(--text-bright); font: 0.68rem ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
@@ -1333,7 +1340,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--success); }
 .login-success-user-copy p { margin: 2px 0 0; color: var(--text-muted); font-size: 0.56rem; }
 .login-success-user-copy code { color: var(--text-primary); font: 0.62rem ui-monospace, SFMono-Regular, Menlo, monospace; }
 .login-success-time { flex: 0 0 auto; border: 1px solid var(--border-subtle); border-radius: 99px; padding: 2px 6px; color: var(--text-success); background: var(--success-soft); font-size: 0.54rem; font-weight: 700; }
-.login-success-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; padding: 0 12px 10px; }
+.login-success-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; padding: 0 12px 10px; }
 .login-success-meta span { min-width: 0; border: 1px solid var(--border-subtle); border-radius: 7px; padding: 5px 7px; background: color-mix(in srgb, var(--surface-alt-background) 72%, transparent); }
 .login-success-meta b { display: block; color: var(--text-muted); font-size: 0.52rem; font-weight: 600; }
 .login-success-meta strong { display: block; margin-top: 2px; overflow: hidden; color: var(--text-bright); font: 0.62rem ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
@@ -1356,4 +1363,279 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--success); }
   .login-cache-search { min-width: 0; }
   .login-cache-field-row { grid-template-columns: minmax(105px, .9fr) 82px minmax(0, 1.4fr) 38px; gap: 6px; }
   .login-success-card { right: 12px; bottom: 12px; width: calc(100vw - 24px); }
+}
+
+/* UI consistency pass: one type scale, one control scale, shared interaction states. */
+.app-shell { font-size: var(--ui-font-md); line-height: 1.5; }
+.app-shell button,
+.app-shell input,
+.app-shell select,
+.app-shell textarea { font-size: var(--ui-font-sm); }
+.app-shell p,
+.app-shell .muted { font-size: var(--ui-font-sm); line-height: 1.6; }
+.app-shell label { font-size: var(--ui-font-sm); }
+.app-shell small { font-size: var(--ui-font-2xs); }
+.app-shell .eyebrow { margin-bottom: 6px; font-size: var(--ui-font-2xs); letter-spacing: .12em; }
+.app-shell .content { padding: 32px 40px 48px; }
+.app-shell .panel { border-radius: var(--ui-radius-panel); }
+.app-shell .panel-heading { gap: 14px; margin-bottom: 18px; }
+
+.app-shell h3,
+.app-shell .request-card-heading h3,
+.app-shell .string-tool-card-heading h3,
+.app-shell .json-preview-input-summary h3,
+.app-shell .json-preview-output-heading h3,
+.app-shell .local-cache-detail-heading h3,
+.app-shell .local-variables-detail-heading h3,
+.app-shell .local-variables-text-heading h3,
+.app-shell .local-cache-text-heading h3,
+.app-shell .appearance-update-heading h3,
+.app-shell .local-variables-dialog-heading h3,
+.app-shell .local-cache-dialog-heading h3 { font-size: var(--ui-font-lg); line-height: 1.35; }
+.app-shell .panel-heading h2,
+.app-shell .login-cache-title-row h2,
+.app-shell .local-cache-heading h2,
+.app-shell .local-variables-title-row h2,
+.app-shell .encryption-heading h2,
+.app-shell .decryption-heading h2,
+.app-shell .proxy-instance-overview-name-input { font-size: var(--ui-font-2xl); line-height: 1.25; letter-spacing: -.02em; }
+.app-shell .login-cache-customer-name-line h3 { font-size: 1.125rem; line-height: 1.3; }
+.app-shell :is(.encryption-heading > div > p:last-child, .decryption-heading > div > p:last-child, .login-cache-description, .local-variables-heading-copy > p, .appearance-page > .muted, .appearance-update-version, .proxy-instance-subtitle) { font-size: var(--ui-font-sm); line-height: 1.6; }
+
+.app-shell input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(.proxy-instance-overview-name-input),
+.app-shell select {
+  height: var(--ui-control);
+  min-height: var(--ui-control);
+  border-radius: var(--ui-radius);
+  padding: 0 10px;
+}
+.app-shell textarea { border-radius: var(--ui-radius); padding: 10px 12px; line-height: 1.65; }
+.app-shell input::placeholder,
+.app-shell textarea::placeholder { color: var(--text-muted); }
+.app-shell input:focus-visible,
+.app-shell select:focus-visible,
+.app-shell textarea:focus-visible { border-color: var(--border-selected); outline: none; box-shadow: 0 0 0 2px var(--focus-background); }
+
+.app-shell :is(
+  .proxy-instance-sidebar-action,
+  .proxy-instance-project-field button,
+  .button-row button,
+  .button-row-button,
+  .primary-button,
+  .secondary-button,
+  .json-preview-card-actions button,
+  .input-with-button button,
+  .login-cache-button,
+  .local-cache-button,
+  .local-variables-button,
+  .encryption-browse-button,
+  .encryption-actions .primary,
+  .encryption-incremental-button,
+  .decryption-browse-button,
+  .decryption-run-button,
+  .log-clear-button,
+  .log-detail-response-button,
+  .login-cache-detail-actions button
+) {
+  height: var(--ui-control);
+  min-height: var(--ui-control);
+  border-radius: var(--ui-radius);
+  padding: 0 12px;
+  font-size: var(--ui-font-sm);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: none;
+  transform: none;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+.app-shell :is(
+  .primary-button,
+  .button-row-button.primary,
+  .proxy-instance-sidebar-action.start,
+  .local-cache-button.primary,
+  .local-variables-button.primary,
+  .encryption-actions .primary,
+  .decryption-run-button
+) { border-color: var(--success); color: var(--text-on-accent); background: var(--success); }
+.app-shell :is(
+  .secondary-button,
+  .button-row-button:not(.primary),
+  .proxy-instance-project-field button,
+  .json-preview-card-actions button:not(.primary-button):not(.secondary-button),
+  .input-with-button button,
+  .login-cache-button:not(.primary),
+  .local-cache-button:not(.primary):not(.danger):not(.danger-solid),
+  .local-variables-button:not(.primary):not(.danger-solid),
+  .encryption-browse-button,
+  .encryption-incremental-button,
+  .decryption-browse-button,
+  .log-clear-button,
+  .log-detail-response-button,
+  .login-cache-detail-actions button:not(.primary)
+) { border: 1px solid var(--border-button); color: var(--text-button); background: var(--surface-elevated-background); }
+.app-shell .proxy-instance-sidebar-action.stop { border: 1px solid var(--danger-border); color: var(--danger-text); background: var(--danger-background); }
+.app-shell .proxy-instance-sidebar-action.create { border-color: transparent; color: var(--text-tertiary); background: transparent; }
+.app-shell :is(.local-cache-button.danger, .local-variables-button.danger) { border: 1px solid var(--danger-border); color: var(--danger-text); background: var(--danger-background); }
+.app-shell :is(.local-cache-button.danger-solid, .local-variables-button.danger-solid) { border: 1px solid var(--danger); color: #fff; background: var(--danger); }
+.app-shell :is(.encryption-actions > .primary, .encryption-incremental-button, .decryption-run-button) { height: var(--ui-control-lg); min-height: var(--ui-control-lg); padding: 0 16px; }
+
+.app-shell :is(
+  .primary-button,
+  .button-row-button.primary,
+  .proxy-instance-sidebar-action.start,
+  .local-cache-button.primary,
+  .local-variables-button.primary,
+  .encryption-actions .primary,
+  .decryption-run-button
+):hover:not(:disabled) { border-color: var(--success-hover); color: var(--text-on-accent); background: var(--success-hover); }
+.app-shell :is(
+  .secondary-button,
+  .button-row-button:not(.primary),
+  .proxy-instance-project-field button,
+  .json-preview-card-actions button,
+  .input-with-button button,
+  .login-cache-button:not(.primary),
+  .local-cache-button:not(.primary):not(.danger):not(.danger-solid),
+  .local-variables-button:not(.primary):not(.danger-solid),
+  .encryption-browse-button,
+  .encryption-incremental-button,
+  .decryption-browse-button,
+  .log-clear-button,
+  .log-detail-response-button,
+  .login-cache-detail-actions button:not(.primary)
+):hover:not(:disabled) { border-color: var(--border-selected); color: var(--text-success); }
+.app-shell .proxy-instance-sidebar-action.stop:hover:not(:disabled) { border-color: var(--danger); color: var(--danger-strong-text); background: var(--danger-hover-background); }
+.app-shell .proxy-instance-sidebar-action.create:hover:not(:disabled) { border-color: var(--border-selected); color: var(--text-success); background: var(--selection-background); }
+.app-shell :is(.local-cache-button.danger, .local-variables-button.danger):hover:not(:disabled) { border-color: var(--danger); color: var(--danger-strong-text); background: var(--danger-hover-background); }
+.app-shell :is(.local-cache-button.danger-solid, .local-variables-button.danger-solid):hover:not(:disabled) { border-color: var(--danger); color: #fff; background: var(--danger); filter: brightness(1.08); }
+.app-shell button:disabled { cursor: not-allowed; opacity: .45; transform: none; box-shadow: none; }
+.app-shell button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+.app-shell .small-button { height: 28px; min-height: 28px; padding: 0 8px; font-size: var(--ui-font-xs); }
+.app-shell :is(.local-cache-filters button, .local-variables-filters button, .login-cache-filters button, .local-cache-view-tabs button, .log-detail-tabs button) { min-height: 26px; border-radius: var(--ui-radius-sm); padding: 0 8px; font-size: var(--ui-font-xs); font-weight: 700; }
+.app-shell :is(.json-preview-tabs button, .json-preview-toolbar input) { font-size: var(--ui-font-xs); }
+.app-shell :is(.local-cache-icon-button, .local-variables-icon-button) { width: var(--ui-control-sm); height: var(--ui-control-sm); min-width: var(--ui-control-sm); min-height: var(--ui-control-sm); border-radius: var(--ui-radius); padding: 0; font-size: var(--ui-font-lg); }
+.app-shell .address-history-toggle { width: 34px; font-size: var(--ui-font-lg); }
+.app-shell :is(.sidebar-nav button) { min-height: 40px; border-left-width: 2px; padding: 9px 10px; font-size: var(--ui-font-md); font-weight: 600; }
+.app-shell .sidebar-nav { align-content: start; gap: 3px; margin-top: 12px; }
+.app-shell .sidebar-nav-icon { width: 17px; height: 17px; flex-basis: 17px; }
+.app-shell .proxy-instance-sidebar-name { font-size: var(--ui-font-sm); }
+.app-shell .proxy-instance-sidebar-status { font-size: var(--ui-font-2xs); }
+.app-shell :is(.proxy-instance-sidebar-title code, .proxy-instance-sidebar-target code) { font-size: var(--ui-font-2xs); }
+.app-shell .sidebar-customer strong { font-size: var(--ui-font-xs); }
+.app-shell .sidebar-customer code { font-size: var(--ui-font-2xs); }
+
+.app-shell :is(.address-chip, .status-pill) { padding: 6px 10px; font-size: var(--ui-font-xs); }
+.app-shell :is(.proxy-instance-sidebar-status, .local-cache-status, .local-cache-type, .login-cache-ready-badge, .login-cache-category, .login-cache-detail-badges b, .local-variables-label, .appearance-theme-default) { border-radius: var(--ui-radius-pill); font-size: var(--ui-font-2xs); }
+
+.app-shell :is(
+  .proxy-instance-overview-field > span small,
+  .proxy-instance-overview-field .overview-config-hint,
+  .json-preview-status,
+  .json-preview-summary span,
+  .json-preview-table th,
+  .json-preview-tip,
+  .json-preview-count,
+  .login-cache-instance,
+  .login-cache-status,
+  .login-cache-status-title p,
+  .login-cache-flow span,
+  .login-cache-flow em,
+  .login-cache-kpis span,
+  .login-cache-kpis em,
+  .login-cache-identity-meta span,
+  .login-cache-accounts span,
+  .login-cache-accounts em,
+  .login-cache-section-heading p,
+  .login-cache-composition-legend span,
+  .login-cache-health-card p,
+  .login-cache-health-stats span,
+  .login-cache-list-heading p,
+  .login-cache-category,
+  .login-cache-detail-heading > div > span,
+  .login-cache-detail-badges b,
+  .login-cache-value-card > div,
+  .login-cache-meta-grid span,
+  .login-cache-meta-grid strong,
+  .login-cache-checks span,
+  .login-cache-detail-empty span,
+  .login-cache-footnote,
+  .login-cache-text-heading p,
+  .login-cache-customer-subline,
+  .login-cache-customer-details span,
+  .login-cache-customer-details strong,
+  .login-cache-customer-accounts > span,
+  .login-cache-account-chips span,
+  .login-cache-account-chips em,
+  .login-cache-scroll-hint,
+  .login-cache-list-heading-meta > span:last-child,
+  .login-success-heading span,
+  .login-success-user-copy p,
+  .login-success-user-copy code,
+  .login-success-time,
+  .login-success-meta b,
+  .login-success-meta strong,
+  .login-success-footer span,
+  .local-cache-status,
+  .local-cache-text-toolbar,
+  .local-cache-type,
+  .local-cache-detail-meta,
+  .local-variables-label,
+  .local-variables-toolbar-note,
+  .local-variables-list-heading p,
+  .local-variables-list-footer,
+  .local-variables-kicker,
+  .local-variables-detail-meta,
+  .local-variables-reference-card > div span,
+  .local-variables-value-heading em,
+  .local-variables-value-footer,
+  .local-variables-usage-note,
+  .local-variables-detail-empty span,
+  .local-variables-editor-heading p,
+  .local-variables-dirty,
+  .local-variables-field-heading,
+  .local-variables-field-heading span,
+  .local-variables-value-editor-heading,
+  .local-variables-reference-preview > span,
+  .local-variables-reference-preview code,
+  .local-variables-shortcut-hint,
+  .local-variables-shortcut-hint kbd,
+  .local-variables-text-heading p,
+  .local-variables-text-footer,
+  .local-variables-dialog-heading p,
+  .local-variables-dialog-summary,
+  .local-cache-dialog-heading p,
+  .local-cache-dialog-summary,
+  .encryption-local-badge,
+  .encryption-format-grid p,
+  .encryption-directory-label span,
+  .encryption-progress-kicker,
+  .encryption-stat-grid span,
+  .encryption-actions p,
+  .encryption-footnote,
+  .encryption-log-heading,
+  .encryption-log-heading strong,
+  .encryption-log-empty,
+  .decryption-local-badge,
+  .decryption-format-grid p,
+  .decryption-directory-label span,
+  .decryption-progress-kicker,
+  .decryption-stat-grid span,
+  .decryption-actions p,
+  .decryption-footnote,
+  .decryption-failures-heading span:first-child,
+  .decryption-failure-count,
+  .decryption-failure-row p
+) { font-size: var(--ui-font-2xs); }
+
+.app-shell :is(.request-hint, .string-tool-footer, .response-duration, .response-copy-actions small, .request-card-heading > span, .string-tool-card-heading span, .json-preview-input-meta, .json-preview-input-footer, .local-cache-list-empty, .local-cache-value-empty, .local-variables-list-empty, .local-variables-dialog-body, .local-cache-dialog-body, .encryption-log-view, .decryption-log, .decryption-failure-row p, .log-count, .log-detail-body, .log-detail-scalar, .log-detail-key-value) { font-size: var(--ui-font-xs); }
+.app-shell :is(.login-cache-value-card > div button, .local-variables-delete-action, .login-success-action) { font-size: var(--ui-font-xs); }
+.app-shell :is(.login-cache-field-key, .login-cache-field-preview, .login-cache-field-size, .login-cache-composition-legend span b, .login-cache-health-stats b, .login-cache-section-heading > span, .login-cache-instance em, .login-cache-footnote code, .local-variables-type, .local-variables-char-count, .local-variables-key-preview, .local-variables-list-heading > span, .local-variables-reference-symbol, .local-variables-usage-note i, .encryption-format-icon, .decryption-format-icon) { font-size: var(--ui-font-2xs); }
+.app-shell .decryption-format-icon.verify { font-size: var(--ui-font-lg); }
+.app-shell :is(.login-cache-field-chevron, .local-variables-chevron) { font-size: var(--ui-font-lg); }
+.app-shell :is(.request-card, .string-tool-controls, .string-tool-card, .json-preview-card, .local-cache-toolbar, .local-cache-key-panel, .local-cache-detail-panel, .local-variables-list-panel, .local-variables-detail-panel, .login-cache-list-panel, .login-cache-detail-panel) { border-radius: var(--ui-radius-card); }
+
+@media (max-width: 820px) {
+  .app-shell .content { padding: 24px 20px 32px; }
 }

@@ -124,7 +124,7 @@ test("log panel fills the available page height while keeping its columns scroll
 
   assert.match(appSource, /page === "logs" \? "log-page-content" : ""/);
   assert.match(styleSource, /\.log-page-content[^\{]*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column/);
-  assert.match(styleSource, /\.log-page-content > \.log-panel[^\{]*\{[^}]*flex:\s*1[^}]*min-height:\s*0/);
+  assert.match(styleSource, /\.log-page-content \.log-panel[^\{]*\{[^}]*flex:\s*1[^}]*min-height:\s*0/);
   assert.match(styleSource, /\.log-page-content \.log-list[^\{]*\{[^}]*max-height:\s*none/);
   assert.match(styleSource, /\.log-page-content \.log-detail[^\{]*\{[^}]*max-height:\s*none[^}]*min-height:\s*0/);
 });

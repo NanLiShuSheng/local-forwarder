@@ -48,7 +48,7 @@ function LocalCacheCodeView({ value, empty, ariaLabel }: { value: string; empty:
   </div>;
 }
 
-export function LocalCachePage({ instanceId }: { instanceId?: string }) {
+export function LocalCachePage({ instanceId, active = true }: { instanceId?: string; active?: boolean }) {
   const { notify, notifyError } = useToast();
   const [values, setValues] = useState<Record<string, string>>({});
   const [selectedKey, setSelectedKey] = useState<string | undefined>();
@@ -140,7 +140,7 @@ export function LocalCachePage({ instanceId }: { instanceId?: string }) {
   }, [confirmingClear]);
 
   useEffect(() => {
-    if (!confirmingClear) return;
+    if (!active || !confirmingClear) return;
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || busyRef.current) return;
       suppressAutoSaveRef.current = false;
@@ -149,17 +149,17 @@ export function LocalCachePage({ instanceId }: { instanceId?: string }) {
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
-  }, [confirmingClear]);
+  }, [active, confirmingClear]);
 
   useEffect(() => {
     const handleFind = (event: KeyboardEvent) => {
-      if (pageMode !== "structured" || (!event.metaKey && !event.ctrlKey) || event.key.toLocaleLowerCase() !== "f") return;
+      if (!active || pageMode !== "structured" || (!event.metaKey && !event.ctrlKey) || event.key.toLocaleLowerCase() !== "f") return;
       event.preventDefault();
       searchRef.current?.focus();
     };
     window.addEventListener("keydown", handleFind);
     return () => window.removeEventListener("keydown", handleFind);
-  }, [pageMode]);
+  }, [active, pageMode]);
 
   const entries = useMemo(() => filterLocalCacheEntries(values, query, filter), [values, query, filter]);
   const stats = useMemo(() => localCacheStats(values), [values]);

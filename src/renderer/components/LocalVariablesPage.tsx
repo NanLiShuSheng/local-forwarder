@@ -35,7 +35,7 @@ function VariableTypeBadge({ entry, editing = false }: { entry: LocalVariableEnt
   return <span className="local-variables-type text">文本</span>;
 }
 
-export function LocalVariablesPage() {
+export function LocalVariablesPage({ active = true }: { active?: boolean }) {
   const { notify, notifyError } = useToast();
   const [values, setValues] = useState<Record<string, string>>({});
   const [selectedKey, setSelectedKey] = useState<string | undefined>();
@@ -292,6 +292,7 @@ export function LocalVariablesPage() {
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
+      if (!active) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "s") {
         if (busyRef.current) return;
         if (pageMode === "text") {
@@ -321,13 +322,13 @@ export function LocalVariablesPage() {
 
   useEffect(() => {
     const handleFind = (event: KeyboardEvent) => {
-      if (pageMode !== "structured" || (!event.metaKey && !event.ctrlKey) || event.key.toLocaleLowerCase() !== "f") return;
+      if (!active || pageMode !== "structured" || (!event.metaKey && !event.ctrlKey) || event.key.toLocaleLowerCase() !== "f") return;
       event.preventDefault();
       searchRef.current?.focus();
     };
     window.addEventListener("keydown", handleFind);
     return () => window.removeEventListener("keydown", handleFind);
-  }, [pageMode]);
+  }, [active, pageMode]);
 
   const renderEditor = (mode: "add" | "edit") => {
     const isAdding = mode === "add";

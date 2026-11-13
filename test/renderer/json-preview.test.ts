@@ -119,7 +119,7 @@ test("JSON preview accepts and consumes one-time prefills", async () => {
 test("JSON preview stays mounted so its data survives navigation", async () => {
   const source = await readFile("src/renderer/App.tsx", "utf8");
 
-  assert.match(source, /<div hidden=\{page !== "json"\}><JsonPreviewPage prefillText=\{jsonPrefill\} onPrefillApplied=\{\(\) => setJsonPrefill\(undefined\)\} \/><\/div>/);
+  assert.match(source, /<PagePane active=\{page === "json"\}><JsonPreviewPage prefillText=\{jsonPrefill\} onPrefillApplied=\{\(\) => setJsonPrefill\(undefined\)\} \/><\/PagePane>/);
   assert.doesNotMatch(source, /\{page === "json" && <JsonPreviewPage/);
 });
 
