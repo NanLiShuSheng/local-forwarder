@@ -6,3 +6,4 @@ release/
 .worktrees/
 .DS_Store
 /hscomm32/
+/docs/
