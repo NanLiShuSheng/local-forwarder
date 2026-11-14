@@ -16,6 +16,7 @@ publish:
 afterSign: scripts/notarize.mjs
 afterPack: scripts/trim-protocol-node-runtimes.mjs
 mac:
+  icon: resources/icon.icns
   target:
     - dmg
     - zip
