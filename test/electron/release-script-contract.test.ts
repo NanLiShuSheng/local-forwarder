@@ -11,6 +11,8 @@ test("release scripts validate versions, update metadata, signing and notarizati
   const macManifest = await readFile("scripts/create-mac-update-manifest.mjs", "utf8");
   const signing = await readFile("scripts/verify-macos-signing-env.mjs", "utf8");
   const notarize = await readFile("scripts/notarize.mjs", "utf8");
+  const tencentPublisher = await readFile("scripts/publish-tencent.sh", "utf8");
+  const serverPublisher = await readFile("scripts/server/publish-updates.sh", "utf8");
 
   assert.match(tag, /GITHUB_REF_NAME/);
   assert.match(tag, /package\.json/);
@@ -27,6 +29,12 @@ test("release scripts validate versions, update metadata, signing and notarizati
   assert.match(signing, /MACOS_CERTIFICATE_BASE64/);
   assert.match(signing, /APPLE_APP_SPECIFIC_PASSWORD/);
   assert.match(notarize, /notarize/);
+  assert.match(tencentPublisher, /TENCENT_SSH_KEY/);
+  assert.match(tencentPublisher, /rsync/);
+  assert.match(tencentPublisher, /publish-updates\.sh/);
+  assert.match(tencentPublisher, /latest-mac\.yml/);
+  assert.match(serverPublisher, /mac-update\.json/);
+  assert.match(serverPublisher, /manifests\+=/);
 });
 
 test("notarization hook skips Windows builds in GitHub Actions", () => {

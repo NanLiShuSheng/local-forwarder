@@ -3,6 +3,7 @@ import { open, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import type { UpdateAdapter } from "./update-service";
 import type { UpdateInfoSnapshot, UpdateProgressSnapshot } from "../src/shared/contracts";
+import { normalizeUpdateBaseUrl, TENCENT_UPDATE_BASE_URL } from "./update-config";
 
 export type MacUpdateArchitecture = "x64" | "arm64";
 export type ManualUpdateFetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -36,11 +37,11 @@ const PROGRESS_INTERVAL_MS = 150;
 const MANIFEST_TIMEOUT_MS = 30_000;
 const DOWNLOAD_TIMEOUT_MS = 30 * 60_000;
 
-export function createMacUpdateUrls(owner: string, repo: string): { manifestUrl: string; downloadBaseUrl: string } {
-  const base = `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases/latest/download`;
+export function createMacUpdateUrls(baseUrl = TENCENT_UPDATE_BASE_URL): { manifestUrl: string; downloadBaseUrl: string } {
+  const base = normalizeUpdateBaseUrl(baseUrl);
   return {
-    manifestUrl: `${base}/mac-update.json`,
-    downloadBaseUrl: `${base}/`,
+    manifestUrl: `${base}mac-update.json`,
+    downloadBaseUrl: base,
   };
 }
 

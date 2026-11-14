@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { TENCENT_UPDATE_BASE_URL } from "../../electron/update-config";
 
-test("GitHub updater configuration targets the public release repository", async () => {
+test("updater configuration targets the Tencent Cloud release server", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
     dependencies?: Record<string, string>;
     devDependencies?: Record<string, string>;
@@ -14,10 +15,9 @@ test("GitHub updater configuration targets the public release repository", async
 
   assert.equal(typeof packageJson.dependencies?.["electron-updater"], "string");
   assert.equal(typeof packageJson.devDependencies?.["@electron/notarize"], "string");
-  assert.match(builder, /provider:\s*github/);
-  assert.match(builder, /owner:\s*NanLiShuSheng/);
-  assert.match(builder, /repo:\s*local-forwarder/);
-  assert.match(builder, /releaseType:\s*release/);
+  assert.equal(TENCENT_UPDATE_BASE_URL, "https://www.finbr.asia/local-forwarder/");
+  assert.match(builder, /publish:\s*\n\s+provider:\s*generic\s*\n\s+url:\s*https:\/\/www\.finbr\.asia\/local-forwarder\//);
+  assert.doesNotMatch(builder, /provider:\s*github/);
   assert.match(builder, /oneClick:\s*true/);
   assert.match(builder, /perMachine:\s*false/);
   assert.match(builder, /-\s+zip/);
@@ -33,5 +33,6 @@ test("GitHub updater configuration targets the public release repository", async
   assert.match(workflow, /dist\/mac-update\.json/);
   assert.match(workflow, /MACOS_CERTIFICATE_BASE64/);
   assert.match(workflow, /APPLE_APP_SPECIFIC_PASSWORD/);
-  assert.match(electronMain, /createMacUpdateUrls\("NanLiShuSheng", "local-forwarder"\)/);
+  assert.match(workflow, /publish-tencent:/);
+  assert.match(electronMain, /createMacUpdateUrls\(\)/);
 });

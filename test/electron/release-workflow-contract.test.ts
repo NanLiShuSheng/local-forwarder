@@ -20,4 +20,8 @@ test("release workflow builds and publishes Windows and macOS update assets", as
   assert.match(workflow, /release-assets\/macos\/mac-update\.json/);
   assert.match(workflow, /find release-assets\/macos -mindepth 2 -type f -exec cp \{\} release-assets\/macos\/ \\;/);
   assert.match(workflow, /gh release create/);
+  assert.match(workflow, /publish-tencent:/);
+  assert.match(workflow, /TENCENT_DEPLOY_ENABLED/);
+  assert.match(workflow, /TENCENT_SSH_KEY:\s*\$\{\{\s*secrets\.TENCENT_SSH_KEY\s*\}\}/);
+  assert.match(workflow, /scripts\/publish-tencent\.sh release-assets\/tencent/);
 });

@@ -74,10 +74,14 @@ test("compares stable and prerelease versions", () => {
   assert.equal(compareVersions("1.2.3-beta.2", "1.2.3-beta.1"), 1);
 });
 
-test("builds the latest GitHub download URLs", () => {
-  assert.deepEqual(createMacUpdateUrls("NanLiShuSheng", "local-forwarder"), {
-    manifestUrl: "https://github.com/NanLiShuSheng/local-forwarder/releases/latest/download/mac-update.json",
-    downloadBaseUrl: "https://github.com/NanLiShuSheng/local-forwarder/releases/latest/download/",
+test("builds the latest Tencent Cloud download URLs", () => {
+  assert.deepEqual(createMacUpdateUrls(), {
+    manifestUrl: "https://www.finbr.asia/local-forwarder/mac-update.json",
+    downloadBaseUrl: "https://www.finbr.asia/local-forwarder/",
+  });
+  assert.deepEqual(createMacUpdateUrls("https://updates.example.com/local-forwarder"), {
+    manifestUrl: "https://updates.example.com/local-forwarder/mac-update.json",
+    downloadBaseUrl: "https://updates.example.com/local-forwarder/",
   });
 });
 

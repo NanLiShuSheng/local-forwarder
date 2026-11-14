@@ -11,10 +11,8 @@ extraResources:
     filter:
       - "**/*"
 publish:
-  provider: github
-  owner: NanLiShuSheng
-  repo: local-forwarder
-  releaseType: release
+  provider: generic
+  url: https://www.finbr.asia/local-forwarder/
 afterSign: scripts/notarize.mjs
 afterPack: scripts/trim-protocol-node-runtimes.mjs
 mac:

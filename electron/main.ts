@@ -62,7 +62,7 @@ const IPC_CHANNELS = {
 } as const;
 
 const smokeMode = process.argv.includes("--smoke");
-const macUpdateUrls = createMacUpdateUrls("NanLiShuSheng", "local-forwarder");
+const macUpdateUrls = createMacUpdateUrls();
 let manager: ForwardingServiceManager;
 let configStore: ConfigStore;
 let workspaceStore: ProxyWorkspaceStore;

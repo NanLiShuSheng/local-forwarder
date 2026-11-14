@@ -34,7 +34,7 @@ test("Windows package verification and packaged smoke scripts use the unpacked a
   assert.match(smokeScript, /10000/);
 });
 
-test("GitHub update URLs match the uploaded Windows installer asset name", async () => {
+test("update asset names match the uploaded Windows installer", async () => {
   const builderConfig = await readFile("electron-builder.yml", "utf8");
   const releaseWorkflow = await readFile(".github/workflows/release.yml", "utf8");
   const releaseAssets = await readFile("scripts/verify-release-assets.mjs", "utf8");

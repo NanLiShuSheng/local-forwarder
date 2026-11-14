@@ -107,3 +107,47 @@ jobs:
             --verify-tag \
             --title "Local Forwarder $GITHUB_REF_NAME" \
             --generate-notes
+
+  publish-tencent:
+    needs:
+      - build-windows
+      - build-macos
+    if: ${{ vars.TENCENT_DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: local-forwarder-windows-release
+          path: release-assets/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: local-forwarder-macos-release
+          path: release-assets/macos
+      - name: Prepare Tencent Cloud release bundle
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets/tencent
+          find release-assets/macos -mindepth 2 -type f -exec cp {} release-assets/macos/ \;
+          cp release-assets/windows/* release-assets/tencent/
+          cp release-assets/macos/*.dmg release-assets/macos/*.zip \
+            release-assets/macos/*.zip.blockmap release-assets/macos/latest-mac.yml \
+            release-assets/macos/mac-update.json release-assets/tencent/
+      - name: Install Tencent Cloud SSH key
+        env:
+          TENCENT_SSH_HOST: ${{ secrets.TENCENT_SSH_HOST }}
+          TENCENT_SSH_KEY: ${{ secrets.TENCENT_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$TENCENT_SSH_KEY" > ~/.ssh/tencent_deploy
+          chmod 600 ~/.ssh/tencent_deploy
+          ssh-keyscan -H "$TENCENT_SSH_HOST" >> ~/.ssh/known_hosts
+      - name: Upload and publish updates to Tencent Cloud
+        env:
+          TENCENT_SSH_HOST: ${{ secrets.TENCENT_SSH_HOST }}
+          TENCENT_SSH_USER: ${{ secrets.TENCENT_SSH_USER }}
+          TENCENT_RELEASE_ROOT: ${{ vars.TENCENT_RELEASE_ROOT }}
+        run: |
+          export TENCENT_SSH_KEY="$HOME/.ssh/tencent_deploy"
+          scripts/publish-tencent.sh release-assets/tencent
