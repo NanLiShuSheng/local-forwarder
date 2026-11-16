@@ -408,9 +408,11 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     </div>
 
     <div className="encryption-directory-list">
-      {renderEncryptionDirectoryField("input", "加密前文件夹目录", "选择加密前目录", <label className="encryption-lowercase-toggle"><input type="checkbox" checked={encryptionLowercaseOutput} disabled={encryptionRunning} onChange={(event) => void updateEncryptionLowercaseOutput(event.target.checked)} /><span>小写文件输出</span></label>, encryptionInputDir, setEncryptionInputDir)}
+      {renderEncryptionDirectoryField("input", "加密前文件夹目录", "选择加密前目录", encryptionProgress.total > 0 ? `检测到 ${encryptionProgress.total} 个待编码文件` : "递归扫描可编码文件", encryptionInputDir, setEncryptionInputDir)}
       {renderEncryptionDirectoryField("output", "加密后文件夹目录", "选择加密后目录", encryptionLowercaseOutput ? ".d 后缀 · 目录和文件名转小写" : ".d 后缀 · 保留原始目录结构", encryptionOutputDir, setEncryptionOutputDir)}
     </div>
+
+    <label className={`encryption-lowercase-option${encryptionLowercaseOutput ? " selected" : ""}`}><input type="checkbox" checked={encryptionLowercaseOutput} disabled={encryptionRunning} onChange={(event) => void updateEncryptionLowercaseOutput(event.target.checked)} /><span><strong>小写文件输出</strong><small>目录和文件名统一转为小写，适用于信创服务器部署。</small></span></label>
 
     <div className={`encryption-progress-card ${encryptionStatusTone}`} aria-live="polite">
       <div className="encryption-progress-heading">

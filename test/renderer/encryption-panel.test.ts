@@ -121,15 +121,19 @@ test("encryption page exposes a persisted lowercase output option for files and 
     readFile("src/renderer/styles.css", "utf8"),
   ]);
   assert.match(component, /encryptionLowercaseOutput/);
-  assert.match(component, /className="encryption-lowercase-toggle"/);
+  assert.match(component, /useState\(\(\) => encryptionPreferences\.lowercaseOutput\)/);
+  assert.match(component, /className=\{`encryption-lowercase-option\$\{encryptionLowercaseOutput \? " selected" : ""\}`\}/);
   assert.match(component, />小写文件输出</);
-  assert.doesNotMatch(component, /适用于信创服务器部署/);
-  assert.doesNotMatch(component, /递归扫描可编码文件/);
-  assert.doesNotMatch(component, /className=\{`encryption-lowercase-option/);
+  assert.match(component, /目录和文件名统一转为小写，适用于信创服务器部署。/);
+  assert.match(component, /递归扫描可编码文件/);
+  assert.doesNotMatch(component, /encryption-lowercase-toggle/);
   assert.match(component, /onSaveEncryptionPreferences\(\{ lowercaseOutput: checked \}\)/);
   assert.match(component, /disabled=\{encryptionRunning\}/);
-  assert.match(styles, /\.encryption-lowercase-toggle\s*\{/);
-  assert.match(styles, /\.encryption-lowercase-toggle input\s*\{/);
+  assert.match(styles, /\.encryption-lowercase-option\s*\{/);
+  assert.match(styles, /\.encryption-lowercase-option input\s*\{/);
+  assert.match(styles, /\.encryption-lowercase-option\.selected\s*\{/);
+  assert.match(styles, /\.app-shell\[data-theme="light"\] \.encryption-lowercase-option\s*\{/);
+  assert.doesNotMatch(styles, /encryption-lowercase-toggle/);
 });
 
 test("encryption page only appends logs for encrypted files", async () => {

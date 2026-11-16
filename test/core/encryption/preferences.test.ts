@@ -232,3 +232,25 @@ test("lowercase output preference defaults off and persists a boolean setting", 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("lowercase output preference survives later directory selections", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-encryption-preferences-"));
+  const preferencesPath = path.join(root, "preferences.json");
+  const inputDir = path.join(root, "input");
+  const outputDir = path.join(root, "output");
+  await mkdir(inputDir);
+  await mkdir(outputDir);
+  try {
+    await saveEncryptionPreferences(preferencesPath, { lowercaseOutput: true });
+    await saveEncryptionPreferences(preferencesPath, { inputDir });
+    await saveEncryptionPreferences(preferencesPath, { outputDir });
+
+    assert.equal((await readEncryptionPreferences(preferencesPath)).lowercaseOutput, true);
+    assert.equal(JSON.parse(await readFile(preferencesPath, "utf8")).lowercaseOutput, true);
+
+    await saveEncryptionPreferences(preferencesPath, { lowercaseOutput: false });
+    assert.equal((await readEncryptionPreferences(preferencesPath)).lowercaseOutput, false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
