@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>日志行功能号拼接方案</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --page: #080c12;
+      --panel: #0f151d;
+      --card: #111823;
+      --border: #263241;
+      --border-soft: #1d2733;
+      --text: #e6edf3;
+      --text-2: #b7c2ce;
+      --muted: #8794a3;
+      --subtle: #667384;
+      --info: #58a6ff;
+      --warn: #d29922;
+      --danger: #f85149;
+      --code: #b7bdc8;
+      --shadow: 0 18px 44px rgb(0 0 0 / 24%);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 1560px;
+      color: var(--text);
+      background:
+        radial-gradient(1100px 420px at 16% -180px, rgb(31 111 235 / 13%), transparent 64%),
+        radial-gradient(900px 360px at 88% -220px, rgb(88 166 255 / 7%), transparent 62%),
+        linear-gradient(180deg, #090e15 0%, var(--page) 48%, #06090d 100%);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    h1, h2, h3, p { margin: 0; }
+    .review { width: min(1560px, calc(100% - 56px)); margin: 0 auto; padding: 36px 0 42px; }
+    .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; margin-bottom: 20px; }
+    .eyebrow { margin-bottom: 9px; color: #79c0ff; font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    h1 { font-size: 31px; line-height: 1.12; letter-spacing: -.035em; }
+    .lede { max-width: 940px; margin-top: 10px; color: var(--text-2); font-size: 13px; line-height: 1.7; }
+    .lede strong { color: var(--text); font-weight: 700; }
+    .lede code { color: #9fd0ff; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .scope-card { width: 336px; flex: 0 0 336px; border: 1px solid var(--border); border-radius: 14px; padding: 13px 15px; background: rgb(18 26 36 / 82%); box-shadow: var(--shadow); }
+    .scope-card span { display: block; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+    .scope-card strong { display: block; margin-top: 5px; font-size: 14px; }
+    .scope-card small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .scheme-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+    .scheme { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: linear-gradient(180deg, rgb(17 24 33 / 96%), rgb(11 17 24 / 96%)); box-shadow: 0 14px 36px rgb(0 0 0 / 20%); }
+    .scheme.recommended { border-color: #365f8c; box-shadow: 0 0 0 1px rgb(88 166 255 / 8%), 0 18px 42px rgb(0 0 0 / 28%); }
+    .scheme-head { min-height: 132px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 15px 16px 12px; }
+    .scheme-title { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+    .index { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border: 1px solid #35465a; border-radius: 9px; color: #9fb5cb; background: #111a24; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; }
+    .scheme h2 { font-size: 15px; letter-spacing: -.02em; }
+    .scheme-head p { margin-top: 5px; color: var(--muted); font-size: 11px; line-height: 1.65; }
+    .tag { flex: 0 0 auto; border: 1px solid #3e6995; border-radius: 99px; padding: 3px 8px; color: #c7e2ff; background: rgb(31 111 235 / 18%); font-size: 9px; font-weight: 800; white-space: nowrap; }
+    .tag.neutral { border-color: #35465a; color: var(--muted); background: rgb(53 70 90 / 20%); }
+    .preview-wrap { flex: 1 1 auto; margin: 0 14px; border: 1px solid var(--border-soft); border-radius: 12px; padding: 11px; background: #070b10; }
+    .preview-label { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 8px; color: var(--subtle); font-size: 9px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    .preview-label span:last-child { color: #6f8499; font-weight: 600; letter-spacing: 0; text-transform: none; }
+    .log-card { border: 1px solid #182230; border-radius: 10px; padding: 10px 10px 4px; background: #0b1017; }
+    .log-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; color: var(--muted); font-size: 10px; }
+    .log-toolbar .chip { border: 1px solid #263241; border-radius: 6px; padding: 1px 7px; color: #9fb5cb; background: #101822; font-size: 9px; font-weight: 700; }
+    .log-list { display: grid; align-content: start; }
+    .log-row { display: grid; grid-template-columns: 62px 48px minmax(0, 1fr); gap: 9px; align-items: baseline; border-bottom: 1px solid #2f3742; padding: 8px 0 8px 8px; color: var(--code); font-size: 11.5px; }
+    .log-row:last-child { border-bottom: 0; }
+    .log-row time { color: var(--subtle); font-size: 11px; }
+    .log-level { font-size: 10px; font-weight: 800; letter-spacing: .02em; }
+    .log-level.info { color: var(--info); }
+    .log-level.warn { color: var(--warn); }
+    .log-level.error { color: var(--danger); }
+    .log-message { min-width: 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .log-message .fn { color: #7ee787; font-weight: 700; }
+    .log-message .svc { color: #79c0ff; }
+    .log-message .plain { color: var(--code); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif; }
+    .scheme-foot { padding: 12px 16px 15px; }
+    .scheme-foot span { display: block; color: var(--subtle); font-size: 9px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    .scheme-foot code { display: block; margin-top: 6px; border: 1px solid var(--border-soft); border-radius: 8px; padding: 8px 9px; color: #9fd0ff; background: #0a1017; font: 11px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+    .note { margin-top: 16px; border: 1px solid var(--border); border-radius: 12px; padding: 12px 15px; color: var(--text-2); background: rgb(18 26 36 / 70%); font-size: 11.5px; line-height: 1.75; }
+    .note strong { color: var(--text); }
+    .note code { color: #9fd0ff; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <div class="review">
+    <div class="hero">
+      <div>
+        <p class="eyebrow">Log Row Label · Prototype</p>
+        <h1>日志行拼接功能号与服务标识</h1>
+        <p class="lede">
+          <code>/reqxml</code> 请求命中 <code>action</code> 入参时在路径后拼功能号；入参再带 <code>serviceId</code> 时继续拼在后面。
+          下面 4 张卡片用同一条真实请求对比不同拼法，其他类型的日志（管道超时、<code>/api</code> 非 reqxml 请求）保持原样。
+        </p>
+      </div>
+      <div class="scope-card">
+        <span>示例请求</span>
+        <strong>POST /reqxml</strong>
+        <small>action=49055 · serviceId=esb.wwygt.zhcx.cxzjzhxx · ReqLinkType=1</small>
+      </div>
+    </div>
+
+    <div class="scheme-grid">
+      <section class="scheme">
+        <div class="scheme-head">
+          <div class="scheme-title">
+            <span class="index">00</span>
+            <div>
+              <h2>现状</h2>
+              <p>只显示方法与路径，功能号要去详情里找。</p>
+            </div>
+          </div>
+          <span class="tag neutral">当前</span>
+        </div>
+        <div class="preview-wrap">
+          <div class="preview-label"><span>Log List</span><span>现状</span></div>
+          <div class="log-card">
+            <div class="log-toolbar"><span>5 条记录</span><span class="chip">/reqxml</span></div>
+            <div class="log-list">
+              <div class="log-row"><time>14:02:12</time><span class="log-level info">INFO</span><span class="log-message">POST /reqxml</span></div>
+              <div class="log-row"><time>14:02:13</time><span class="log-level info">INFO</span><span class="log-message">POST /ant/reqxml</span></div>
+              <div class="log-row"><time>14:02:14</time><span class="log-level info">INFO</span><span class="log-message">GET /reqxml?Action=100&amp;REQLINKTYPE=0</span></div>
+              <div class="log-row"><time>14:02:15</time><span class="log-level warn">WARN</span><span class="log-message"><span class="plain">连接上游 60.12.9.58:7778 超时，已重试</span></span></div>
+              <div class="log-row"><time>14:02:16</time><span class="log-level error">ERROR</span><span class="log-message"><span class="plain">POST /api 失败：ECONNRESET</span></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="scheme-foot">
+          <span>不变</span>
+          <code>POST /reqxml</code>
+        </div>
+      </section>
+
+      <section class="scheme recommended">
+        <div class="scheme-head">
+          <div class="scheme-title">
+            <span class="index">01</span>
+            <div>
+              <h2>路径式 · 键=值</h2>
+              <p>功能号当路径段，serviceId 带键名，一眼看出是什么参数。</p>
+            </div>
+          </div>
+          <span class="tag">推荐</span>
+        </div>
+        <div class="preview-wrap">
+          <div class="preview-label"><span>Log List</span><span>方案 01</span></div>
+          <div class="log-card">
+            <div class="log-toolbar"><span>5 条记录</span><span class="chip">/reqxml</span></div>
+            <div class="log-list">
+              <div class="log-row"><time>14:02:12</time><span class="log-level info">INFO</span><span class="log-message">POST /reqxml/<span class="fn">49055</span>/<span class="svc">serviceId=esb.wwygt.zhcx.cxzjzhxx</span></span></div>
+              <div class="log-row"><time>14:02:13</time><span class="log-level info">INFO</span><span class="log-message">POST /ant/reqxml/<span class="fn">3010</span></span></div>
+              <div class="log-row"><time>14:02:14</time><span class="log-level info">INFO</span><span class="log-message">GET /reqxml/<span class="fn">100</span></span></div>
+              <div class="log-row"><time>14:02:15</time><span class="log-level warn">WARN</span><span class="log-message"><span class="plain">连接上游 60.12.9.58:7778 超时，已重试</span></span></div>
+              <div class="log-row"><time>14:02:16</time><span class="log-level error">ERROR</span><span class="log-message"><span class="plain">POST /api 失败：ECONNRESET</span></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="scheme-foot">
+          <span>格式</span>
+          <code>POST /reqxml/{action}/{serviceId=值}</code>
+        </div>
+      </section>
+
+      <section class="scheme">
+        <div class="scheme-head">
+          <div class="scheme-title">
+            <span class="index">02</span>
+            <div>
+              <h2>查询串式</h2>
+              <p>serviceId 用 <code>?</code> 挂在后面，像原始 URL。</p>
+            </div>
+          </div>
+          <span class="tag neutral">备选</span>
+        </div>
+        <div class="preview-wrap">
+          <div class="preview-label"><span>Log List</span><span>方案 02</span></div>
+          <div class="log-card">
+            <div class="log-toolbar"><span>5 条记录</span><span class="chip">/reqxml</span></div>
+            <div class="log-list">
+              <div class="log-row"><time>14:02:12</time><span class="log-level info">INFO</span><span class="log-message">POST /reqxml/<span class="fn">49055</span><span class="svc">?serviceId=esb.wwygt.zhcx.cxzjzhxx</span></span></div>
+              <div class="log-row"><time>14:02:13</time><span class="log-level info">INFO</span><span class="log-message">POST /ant/reqxml/<span class="fn">3010</span></span></div>
+              <div class="log-row"><time>14:02:14</time><span class="log-level info">INFO</span><span class="log-message">GET /reqxml/<span class="fn">100</span></span></div>
+              <div class="log-row"><time>14:02:15</time><span class="log-level warn">WARN</span><span class="log-message"><span class="plain">连接上游 60.12.9.58:7778 超时，已重试</span></span></div>
+              <div class="log-row"><time>14:02:16</time><span class="log-level error">ERROR</span><span class="log-message"><span class="plain">POST /api 失败：ECONNRESET</span></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="scheme-foot">
+          <span>格式</span>
+          <code>POST /reqxml/{action}?serviceId=值</code>
+        </div>
+      </section>
+
+      <section class="scheme">
+        <div class="scheme-head">
+          <div class="scheme-title">
+            <span class="index">03</span>
+            <div>
+              <h2>纯值式</h2>
+              <p>只拼 serviceId 的值，最短，但看不出参数名。</p>
+            </div>
+          </div>
+          <span class="tag neutral">备选</span>
+        </div>
+        <div class="preview-wrap">
+          <div class="preview-label"><span>Log List</span><span>方案 03</span></div>
+          <div class="log-card">
+            <div class="log-toolbar"><span>5 条记录</span><span class="chip">/reqxml</span></div>
+            <div class="log-list">
+              <div class="log-row"><time>14:02:12</time><span class="log-level info">INFO</span><span class="log-message">POST /reqxml/<span class="fn">49055</span>/<span class="svc">esb.wwygt.zhcx.cxzjzhxx</span></span></div>
+              <div class="log-row"><time>14:02:13</time><span class="log-level info">INFO</span><span class="log-message">POST /ant/reqxml/<span class="fn">3010</span></span></div>
+              <div class="log-row"><time>14:02:14</time><span class="log-level info">INFO</span><span class="log-message">GET /reqxml/<span class="fn">100</span></span></div>
+              <div class="log-row"><time>14:02:15</time><span class="log-level warn">WARN</span><span class="log-message"><span class="plain">连接上游 60.12.9.58:7778 超时，已重试</span></span></div>
+              <div class="log-row"><time>14:02:16</time><span class="log-level error">ERROR</span><span class="log-message"><span class="plain">POST /api 失败：ECONNRESET</span></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="scheme-foot">
+          <span>格式</span>
+          <code>POST /reqxml/{action}/{值}</code>
+        </div>
+      </section>
+    </div>
+
+    <p class="note">
+      <strong>共同规则：</strong>只对 <code>/reqxml</code>（含 <code>/ant/reqxml</code> 这类带前缀的路径）生效；
+      <code>action</code> 或 <code>serviceId</code> 缺失时按上面的顺序省略后面的段，两个都没有就保持现状文案；
+      重复键取最后一个值，与请求发送逻辑一致；详情面板里的「源码」视图仍然显示原始请求行，不受影响。
+    </p>
+  </div>
+</body>
+</html>
