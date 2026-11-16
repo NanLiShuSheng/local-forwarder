@@ -5,6 +5,8 @@ import test from "node:test";
 const rendererFiles = [
   "src/renderer/App.tsx",
   "src/renderer/components/ConfigPages.tsx",
+  "src/renderer/components/LocalCachePage.tsx",
+  "src/renderer/components/LocalVariablesPage.tsx",
   "src/renderer/components/LogPanel.tsx",
   "src/renderer/components/RuleList.tsx",
   "src/renderer/components/RuntimePanel.tsx",
@@ -17,7 +19,6 @@ const visibleEnglishLabels = [
   "Local Forwarder",
   "Intel Mac service",
   "Overview",
-  "Variables",
   "Settings",
   "Control center",
   "Forwarding rules",
@@ -54,7 +55,7 @@ test("renderer places forwarding addresses below overview without a separate tab
   ]);
   assert.doesNotMatch(source, /\{ id: "addresses", label: "转发地址" \}/);
   assert.match(source, /page === "runtime"/);
-  assert.match(source, /<ConfigPages page="addresses"/);
+  assert.match(source, /<ConfigPages page=\{page === "runtime" \? "addresses" : page\}/);
   assert.match(styleSource, /\.dashboard-grid \+ \.panel[^\{]*\{[^}]*margin-top:\s*18px/);
 });
 
@@ -74,15 +75,32 @@ test("renderer exposes manual login cache and project directory controls", async
   assert.doesNotMatch(panelSource, /<input value=\{config\.projectPath \?\? ""\} readOnly/);
 });
 
-test("renderer keeps the local variable input after saving without a duplicate saved list", async () => {
-  const source = await readFile("src/renderer/components/ConfigPages.tsx", "utf8");
-  assert.match(source, /本地变量输入/);
-  assert.match(source, /onBlur/);
-  assert.match(source, /parseLocalCacheText\(localText\)/);
-  assert.match(source, /onSaveSharedValues\(parsed\)/);
-  assert.match(source, /formatLocalCacheText\(sharedValues\)/);
-  assert.doesNotMatch(source, /setLocalText\(""\)/);
-  assert.doesNotMatch(source, /className="value-list"/);
+test("renderer exposes local variables as a structured editable page", async () => {
+  const [source, dataSource, styleSource] = await Promise.all([
+    readFile("src/renderer/components/LocalVariablesPage.tsx", "utf8"),
+    readFile("src/renderer/local-variable-data.ts", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+  assert.match(source, /window\.forwarder\.getSharedValues\(\)/);
+  assert.match(source, /window\.forwarder\.saveSharedValues\(next\)/);
+  assert.match(source, /local-variables-workspace/);
+  assert.match(source, /local-variables-row/);
+  assert.match(source, /local-variables-label/);
+  assert.match(source, /local-variables-type long">长文本/);
+  assert.doesNotMatch(source, /local-variables-type text">文本/);
+  assert.match(source, /local-variables-code-view/);
+  assert.match(source, /parseLocalCacheText\(text\)/);
+  assert.match(source, /formatLocalCacheText\(copy\)/);
+  assert.match(source, /复制占位符/);
+  assert.match(source, /保存更改/);
+  assert.match(source, /批量文本/);
+  assert.match(dataSource, /LOCAL_VARIABLE_LONG_THRESHOLD/);
+  assert.match(styleSource, /\.local-variables-row[^\n]*min-height:\s*49px/);
+  const labelRule = styleSource.match(/\.local-variables-label\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(labelRule, /flex:\s*0 1 auto/);
+  assert.doesNotMatch(labelRule, /max-width:/);
+  assert.match(styleSource, /\.local-variables-code-view[^\n]*white-space:\s*pre-wrap/);
+  assert.match(styleSource, /\.local-variables-textarea[^\n]*white-space:\s*pre-wrap/);
 });
 
 test("renderer gives local variables a separate menu from login cache", async () => {
@@ -90,41 +108,25 @@ test("renderer gives local variables a separate menu from login cache", async ()
   const pageSource = await readFile("src/renderer/components/ConfigPages.tsx", "utf8");
   assert.match(appSource, /\{ id: "local", label: "本地变量", icon: "local" \}/);
   assert.match(appSource, /\{ id: "values", label: "登录缓存", icon: "values" \}/);
-  const localStart = pageSource.indexOf('if (page === "local")');
+  assert.match(appSource, /<PagePane active=\{page === "local"\}><LocalVariablesPage active=\{page === "local"\} \/><\/PagePane>/);
+  assert.doesNotMatch(pageSource, /if \(page === "local"\)/);
   const valuesStart = pageSource.indexOf('if (page === "values")');
   const loginSaveStart = pageSource.indexOf("const saveLoginCache");
-  assert.ok(localStart >= 0 && valuesStart > localStart);
-  assert.ok(loginSaveStart >= 0 && valuesStart > loginSaveStart);
-  const localPage = pageSource.slice(localStart, valuesStart);
+  assert.ok(valuesStart >= 0 && loginSaveStart >= 0 && valuesStart > loginSaveStart);
   const loginPage = pageSource.slice(valuesStart);
   const loginSaveLogic = pageSource.slice(loginSaveStart, valuesStart);
-  assert.match(localPage, /className="panel config-textarea-panel"/);
   assert.match(loginPage, /className="panel config-textarea-panel"/);
-  assert.match(localPage, /className="muted config-textarea-hint"/);
   assert.match(loginPage, /className="muted config-textarea-hint"/);
-  assert.match(localPage, /className="config-textarea local-values-input"/);
   assert.match(loginPage, /className="config-textarea login-cache-input"/);
-  const localHint = localPage.indexOf("config-textarea-hint");
-  const localInput = localPage.indexOf("local-values-input");
   const cacheHint = loginPage.indexOf("config-textarea-hint");
   const cacheInput = loginPage.indexOf("login-cache-input");
-  assert.ok(localHint >= 0 && localHint < localInput);
   assert.ok(cacheHint >= 0 && cacheHint < cacheInput);
-  assert.match(localPage, /本地变量输入/);
-  assert.doesNotMatch(localPage, /粘贴登录缓存/);
   assert.match(loginPage, /onBlur/);
   assert.match(loginSaveLogic, /parseLocalCacheText\(cacheText\)/);
   assert.match(loginSaveLogic, /onSaveLoginCache\(pasted\)/);
   assert.match(pageSource, /formatLocalCacheText\(loginCache\)/);
   assert.doesNotMatch(loginPage, /保存登录缓存/);
   assert.doesNotMatch(loginPage, /本地变量输入/);
-});
-
-test("renderer wraps long local variable input values instead of forcing horizontal scrolling", async () => {
-  const source = (await Promise.all(rendererStyleFiles.map((file) => readFile(file, "utf8")))).join("\n");
-  assert.match(source, /\.local-values-input[^\n]*white-space:\s*pre-wrap/);
-  assert.match(source, /\.local-values-input[^\n]*overflow-wrap:\s*anywhere/);
-  assert.match(source, /\.local-values-input[^\n]*word-break:\s*break-word/);
 });
 
 test("renderer simplifies configuration page headings and enlarges text areas", async () => {
@@ -136,11 +138,8 @@ test("renderer simplifies configuration page headings and enlarges text areas", 
   assert.doesNotMatch(pageSource, /<p className="eyebrow">登录状态<\/p>/);
   assert.doesNotMatch(pageSource, /<p className="eyebrow">H5 资源编码<\/p>/);
   assert.doesNotMatch(pageSource, /<p className="eyebrow">配置<\/p><h2>设置<\/h2>/);
-  assert.match(pageSource, /className="config-textarea local-values-input"/);
   assert.match(pageSource, /className="config-textarea login-cache-input"/);
-  assert.match(pageSource, /rows=\{18\}/);
   assert.match(pageSource, /rows=\{14\}/);
-  assert.match(styleSource, /\.local-values-input[^\{]*\{[^}]*min-height:\s*420px/);
   assert.match(styleSource, /\.login-cache-input[^\{]*\{[^}]*min-height:\s*340px/);
   assert.match(styleSource, /\.config-textarea-panel \{ display: flex; flex-direction: column; \}/);
   assert.match(styleSource, /\.config-textarea-hint \{ margin: 0 0 12px; line-height: 1\.55; \}/);

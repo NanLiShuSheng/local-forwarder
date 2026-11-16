@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>浅色主题 · Tab 选中态方案</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --page: #f6f8fa;
+      --panel: #ffffff;
+      --panel-soft: #f6f8fa;
+      --border: #d0d7de;
+      --border-strong: #afb8c1;
+      --text: #1f2328;
+      --text-2: #424a53;
+      --muted: #59636e;
+      --subtle: #6e7781;
+      --accent: #0969da;
+      --accent-deep: #0550ae;
+      --accent-soft: #ddf4ff;
+      --ink: #0b3a66;
+      --graphite: #24292f;
+      --indigo: #4338ca;
+      --indigo-soft: #e8eaff;
+      --indigo-border: #c7ccfb;
+      --shadow: 0 18px 40px rgb(31 35 40 / 7%);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 1180px;
+      color: var(--text);
+      background:
+        radial-gradient(1100px 420px at 18% -160px, rgb(9 105 218 / 7%), transparent 62%),
+        linear-gradient(180deg, #fbfcfd 0%, var(--page) 46%, #f1f4f7 100%);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    button { font: inherit; cursor: pointer; }
+    h1, h2, h3, p { margin: 0; }
+    .review { width: min(1480px, calc(100% - 56px)); margin: 0 auto; padding: 42px 0 56px; }
+    .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; margin-bottom: 24px; }
+    .eyebrow { margin-bottom: 9px; color: var(--accent-deep); font-size: 10px; font-weight: 800; letter-spacing: .18em; }
+    h1 { font-size: 34px; line-height: 1.12; letter-spacing: -.035em; }
+    .lede { max-width: 850px; margin-top: 11px; color: var(--text-2); font-size: 14px; line-height: 1.7; }
+    .lede strong { color: var(--text); font-weight: 700; }
+    .current-card { width: 290px; flex: 0 0 290px; border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; background: color-mix(in srgb, var(--panel) 88%, transparent); box-shadow: var(--shadow); }
+    .current-card span { display: block; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+    .current-card strong { display: block; margin-top: 5px; font-size: 18px; letter-spacing: -.02em; }
+    .current-card small { display: block; margin-top: 4px; color: var(--muted); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .current-strip { display: flex; align-items: center; gap: 18px; border: 1px dashed var(--border-strong); border-radius: 14px; margin-bottom: 22px; padding: 13px 16px; background: rgb(255 255 255 / 54%); }
+    .current-strip-label { flex: 0 0 auto; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+    .current-strip-note { color: var(--subtle); font-size: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .variant { overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); box-shadow: 0 12px 30px rgb(31 35 40 / 5%); }
+    .variant.recommended { border-color: color-mix(in srgb, var(--accent) 44%, var(--border)); box-shadow: 0 16px 38px rgb(9 105 218 / 10%); }
+    .variant-head { display: flex; align-items: flex-start; gap: 12px; padding: 17px 18px 13px; }
+    .index { display: grid; width: 31px; height: 31px; flex: 0 0 auto; place-items: center; border: 1px solid var(--border); border-radius: 9px; color: var(--muted); background: var(--panel-soft); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; }
+    .variant-head-copy { min-width: 0; flex: 1; }
+    .variant h2 { font-size: 17px; letter-spacing: -.02em; }
+    .variant-head p { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .tag { flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); border-radius: 99px; padding: 3px 8px; color: var(--accent-deep); background: var(--accent-soft); font-size: 10px; font-weight: 800; }
+    .demo { margin: 0 18px; border: 1px solid var(--border); border-radius: 11px; padding: 13px; background: linear-gradient(180deg, #fbfcfd, var(--panel-soft)); }
+    .demo-label { margin-bottom: 9px; color: var(--subtle); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+    .tabbar { display: flex; width: fit-content; align-items: center; gap: 3px; border: 1px solid var(--border); border-radius: 9px; padding: 3px; background: var(--panel); }
+    .tabbar button { display: inline-flex; min-height: 30px; align-items: center; gap: 6px; border: 1px solid transparent; border-radius: 6px; padding: 0 10px; color: var(--muted); background: transparent; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .tabbar button:hover { color: var(--text); background: #f3f5f7; }
+    .tabbar b { display: inline-grid; min-width: 17px; height: 17px; place-items: center; border-radius: 5px; padding: 0 4px; color: var(--subtle); background: #eef1f4; font-size: 10px; font-weight: 800; }
+    .tabbar button.active { color: var(--accent-deep); background: var(--accent-soft); }
+    .tabbar button.active b { color: var(--accent-deep); background: rgb(9 105 218 / 10%); }
+    .solid-ink button.active { border-color: var(--ink); color: #ffffff; background: var(--ink); box-shadow: 0 3px 9px rgb(11 58 102 / 20%); }
+    .solid-ink button.active b { color: #ffffff; background: rgb(255 255 255 / 18%); }
+    .graphite button.active { border-color: var(--graphite); color: #ffffff; background: var(--graphite); box-shadow: 0 3px 9px rgb(36 41 47 / 18%); }
+    .graphite button.active b { color: #ffffff; background: rgb(255 255 255 / 16%); }
+    .underline { width: 100%; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 0; background: transparent; }
+    .underline button { min-height: 37px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 0 9px 7px; background: transparent; }
+    .underline button:hover { color: var(--text); background: transparent; }
+    .underline button.active { border-bottom-color: var(--accent); color: var(--accent-deep); background: transparent; }
+    .indigo-mist button.active { border-color: var(--indigo-border); color: var(--indigo); background: var(--indigo-soft); box-shadow: 0 2px 6px rgb(67 56 202 / 7%); }
+    .indigo-mist button.active b { color: var(--indigo); background: rgb(67 56 202 / 9%); }
+    .outline-chip button.active { border-color: var(--accent); color: var(--accent-deep); background: var(--panel); box-shadow: 0 0 0 2px rgb(9 105 218 / 8%), 0 2px 5px rgb(31 35 40 / 5%); }
+    .outline-chip button.active b { color: var(--accent-deep); background: var(--accent-soft); }
+    .left-bar button.active { border-color: #c9d1d9; color: var(--accent-deep); background: var(--panel); box-shadow: inset 3px 0 var(--accent), 0 2px 5px rgb(31 35 40 / 5%); }
+    .left-bar button.active b { color: var(--accent-deep); background: var(--accent-soft); }
+    .notes { display: flex; align-items: flex-start; gap: 10px; padding: 13px 18px 17px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+    .notes strong { flex: 0 0 auto; color: var(--text-2); font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+    .footer { display: flex; justify-content: space-between; gap: 24px; margin-top: 22px; border-top: 1px solid var(--border); padding-top: 15px; color: var(--subtle); font-size: 11px; }
+    .footer b { color: var(--text-2); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main class="review">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">LIGHT THEME / TAB SELECTION</p>
+        <h1>浅色主题 · Tab 选中态方案</h1>
+        <p class="lede">同一个“变量筛选”上下文下对比 6 种方向。当前浅蓝色填充偏淡，也容易被 <strong>#DDF4FF</strong> 的整页浅蓝淹没；下面几种方案拉开了选中层级，您选一个后我再落到应用里。</p>
+      </div>
+      <aside class="current-card">
+        <span>当前待替换</span>
+        <strong>浅蓝填充</strong>
+        <small>#C9E8FF · #0550AE</small>
+      </aside>
+    </header>
+
+    <section class="current-strip">
+      <span class="current-strip-label">当前版本</span>
+      <div class="tabbar">
+        <button class="active" type="button">全部 <b>10</b></button>
+        <button type="button">有值 <b>10</b></button>
+        <button type="button">空值 <b>0</b></button>
+        <button type="button">长文本 <b>0</b></button>
+      </div>
+      <span class="current-strip-note">选中与未选中都落在浅蓝区间，层级不够明显。</span>
+    </section>
+
+    <section class="grid">
+      <article class="variant recommended">
+        <div class="variant-head">
+          <span class="index">01</span>
+          <div class="variant-head-copy">
+            <h2>墨蓝实底</h2>
+            <p>用深墨蓝做选中底，和白底形成明确反差；保留蓝色系，但不再是“淡蓝色块”。</p>
+          </div>
+          <span class="tag">推荐</span>
+        </div>
+        <div class="demo">
+          <p class="demo-label">变量筛选</p>
+          <div class="tabbar solid-ink">
+            <button class="active" type="button">全部 <b>10</b></button>
+            <button type="button">有值 <b>10</b></button>
+            <button type="button">空值 <b>0</b></button>
+            <button type="button">长文本 <b>0</b></button>
+          </div>
+        </div>
+        <p class="notes"><strong>特点</strong>对比度最高，一眼能看出当前筛选；适合作为主交互色，不会像亮蓝实底那样抢眼。</p>
+      </article>
+
+      <article class="variant">
+        <div class="variant-head">
+          <span class="index">02</span>
+          <div class="variant-head-copy">
+            <h2>石墨药丸</h2>
+            <p>用中性石墨黑做选中底，蓝色只保留在文字和计数上，整体更克制。</p>
+          </div>
+        </div>
+        <div class="demo">
+          <p class="demo-label">变量筛选</p>
+          <div class="tabbar graphite">
+            <button class="active" type="button">全部 <b>10</b></button>
+            <button type="button">有值 <b>10</b></button>
+            <button type="button">空值 <b>0</b></button>
+            <button type="button">长文本 <b>0</b></button>
+          </div>
+        </div>
+        <p class="notes"><strong>特点</strong>最中性、不挑页面；适合希望界面“少一点品牌蓝”的方向。</p>
+      </article>
+
+      <article class="variant">
+        <div class="variant-head">
+          <span class="index">03</span>
+          <div class="variant-head-copy">
+            <h2>下划线</h2>
+            <p>去掉填充，选中项只用深蓝文字和 2px 下划线标记，接近 GitHub 的页签语言。</p>
+          </div>
+        </div>
+        <div class="demo">
+          <p class="demo-label">变量筛选</p>
+          <div class="tabbar underline">
+            <button class="active" type="button">全部 <b>10</b></button>
+            <button type="button">有值 <b>10</b></button>
+            <button type="button">空值 <b>0</b></button>
+            <button type="button">长文本 <b>0</b></button>
+          </div>
+        </div>
+        <p class="notes"><strong>特点</strong>最轻、最透气；适合内容区较密集的页面，但点击区域不如药丸明显。</p>
+      </article>
+
+      <article class="variant">
+        <div class="variant-head">
+          <span class="index">04</span>
+          <div class="variant-head-copy">
+            <h2>靛蓝柔雾</h2>
+            <p>把当前蓝色往靛蓝方向偏移，选中底更柔，和整页的蓝灰调拉开一点色相。</p>
+          </div>
+        </div>
+        <div class="demo">
+          <p class="demo-label">变量筛选</p>
+          <div class="tabbar indigo-mist">
+            <button class="active" type="button">全部 <b>10</b></button>
+            <button type="button">有值 <b>10</b></button>
+            <button type="button">空值 <b>0</b></button>
+            <button type="button">长文本 <b>0</b></button>
+          </div>
+        </div>
+        <p class="notes"><strong>特点</strong>更年轻、更柔和；适合希望保留浅色底但不想再用同一块浅蓝的方向。</p>
+      </article>
+
+      <article class="variant">
+        <div class="variant-head">
+          <span class="index">05</span>
+          <div class="variant-head-copy">
+            <h2>白底描边</h2>
+            <p>选中项变回白底，用蓝色边框和外圈光晕标记，整体像一组精致的分段控件。</p>
+          </div>
+        </div>
+        <div class="demo">
+          <p class="demo-label">变量筛选</p>
+          <div class="tabbar outline-chip">
+            <button class="active" type="button">全部 <b>10</b></button>
+            <button type="button">有值 <b>10</b></button>
+            <button type="button">空值 <b>0</b></button>
+            <button type="button">长文本 <b>0</b></button>
+          </div>
+        </div>
+        <p class="notes"><strong>特点</strong>最清爽、边界最清楚；适合表单和筛选器较多的页面。</p>
+      </article>
+
+      <article class="variant">
+        <div class="variant-head">
+          <span class="index">06</span>
+          <div class="variant-head-copy">
+            <h2>左侧色条</h2>
+            <p>选中项保留白底和细边框，用左侧 3px 蓝色竖条做导航式强调。</p>
+          </div>
+        </div>
+        <div class="demo">
+          <p class="demo-label">变量筛选</p>
+          <div class="tabbar left-bar">
+            <button class="active" type="button">全部 <b>10</b></button>
+            <button type="button">有值 <b>10</b></button>
+            <button type="button">空值 <b>0</b></button>
+            <button type="button">长文本 <b>0</b></button>
+          </div>
+        </div>
+        <p class="notes"><strong>特点</strong>和侧栏导航语言一致；适合想让“筛选”更像导航层级的方向。</p>
+      </article>
+    </section>
+
+    <footer class="footer">
+      <span><b>说明</b> · 以上均为浅色主题下的静态视觉稿，点击态、键盘焦点态和禁用态会在落地时补齐。</span>
+      <span>Local Forwarder · Theme Review</span>
+    </footer>
+  </main>
+</body>
+</html>

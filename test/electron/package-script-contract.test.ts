@@ -34,7 +34,7 @@ test("Windows package verification and packaged smoke scripts use the unpacked a
   assert.match(smokeScript, /10000/);
 });
 
-test("GitHub update URLs match the uploaded Windows installer asset name", async () => {
+test("update asset names match the uploaded Windows installer", async () => {
   const builderConfig = await readFile("electron-builder.yml", "utf8");
   const releaseWorkflow = await readFile(".github/workflows/release.yml", "utf8");
   const releaseAssets = await readFile("scripts/verify-release-assets.mjs", "utf8");
@@ -46,17 +46,13 @@ test("GitHub update URLs match the uploaded Windows installer asset name", async
   assert.match(verifyScript, /Local-Forwarder-Setup-\$\{packageJson\.version\}\.exe/);
 });
 
-test("GitHub update URLs match the uploaded macOS ZIP and DMG asset names", async () => {
+test("macOS package asset names match their builder configuration", async () => {
   const builderConfig = await readFile("electron-builder.yml", "utf8");
-  const releaseWorkflow = await readFile(".github/workflows/release.yml", "utf8");
   const releaseAssets = await readFile("scripts/verify-release-assets.mjs", "utf8");
   const createDmg = await readFile("scripts/create-dmg.mjs", "utf8");
   const verifyDmg = await readFile("scripts/verify-dmg.mjs", "utf8");
 
   assert.match(builderConfig, /artifactName:\s*Local-Forwarder-\$\{version\}-\$\{arch\}-mac\.\$\{ext\}/);
-  assert.match(releaseWorkflow, /release\/Local-Forwarder-\*-mac\.dmg/);
-  assert.match(releaseWorkflow, /dist\/Local-Forwarder-\*-mac\.zip/);
-  assert.match(releaseWorkflow, /dist\/Local-Forwarder-\*-mac\.zip\.blockmap/);
   assert.match(releaseAssets, /"Local-Forwarder-" \+ version \+ dmgArchitectureSuffix \+ "-mac\.dmg"/);
   assert.match(releaseAssets, /"Local-Forwarder-" \+ version \+ zipArchitectureSuffix \+ "-mac\.zip"/);
   assert.match(createDmg, /"Local-Forwarder-" \+ packageJson\.version \+ architectureSuffix \+ "-mac\.dmg"/);
@@ -75,7 +71,11 @@ test("release package scripts verify platform-specific release assets", async ()
   );
   assert.equal(
     packageJson.scripts["package:release:mac:x64"],
-    "npm run build && electron-builder --mac dir zip --x64 --publish never && node scripts/create-dmg.mjs && npm run verify:package && npm run verify:release:mac",
+    "npm run build && electron-builder --mac dir zip --x64 --publish never && node scripts/create-dmg.mjs && node scripts/create-mac-update-manifest.mjs x64 && npm run verify:package && npm run verify:release:mac",
+  );
+  assert.match(
+    packageJson.scripts["package:release:mac:x64-arm64"] ?? "",
+    /create-mac-update-manifest\.mjs x64 arm64/,
   );
   assert.equal(
     packageJson.scripts["package:x64"],

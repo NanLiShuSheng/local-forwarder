@@ -20,6 +20,11 @@ export function parseLocalCacheText(text: string): Record<string, string> {
   return values;
 }
 
+export function hasSuccessfulLoginErrorNo(values: Record<string, string>): boolean {
+  const errorNo = Number(values.ERRORNO);
+  return Number.isFinite(errorNo) && errorNo > 0;
+}
+
 export function formatLocalCacheText(values: Record<string, string>): string {
   return Object.entries(values).map(([key, value]) => `${key} = ${value}`).join("\n");
 }

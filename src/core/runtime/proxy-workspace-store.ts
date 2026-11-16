@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { AppConfig, ProxyInstance, ProxyWorkspace } from "../../shared/contracts";
 import { parseLocalCacheText } from "../../shared/local-cache";
+import { ensureDefaultLocalValues } from "../../shared/local-values";
 import { isValidProxyWorkspace } from "../../shared/validation";
 import { createDefaultWorkspace } from "../config/model";
 
@@ -24,7 +25,7 @@ function migrateWorkspace(value: unknown): ProxyWorkspace {
   return {
     version: 1,
     selectedInstanceId: source.selectedInstanceId,
-    sharedValues,
+    sharedValues: ensureDefaultLocalValues(sharedValues),
     instances: source.instances.map((instance) => {
       const legacyValues = instance.loginCache ?? instance.config.localValues;
       const config = { ...instance.config, localValues: {} };

@@ -1,19 +1,23 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, net, shell } from "electron";
+import { stat } from "node:fs/promises";
 import path from "node:path";
 import { encryptDirectory } from "../src/core/encryption/encryptor";
 import { readEncryptionPreferences, saveEncryptionPreferences } from "../src/core/encryption/preferences";
-import type { AppConfig, EncryptionMode, LogEntry, ProxyInstanceSummary, UpdateState } from "../src/shared/contracts";
+import { decryptDirectory as decryptDirectoryTree } from "../src/core/decryption/decryptor";
+import { readDecryptionPreferences, saveDecryptionPreferences } from "../src/core/decryption/preferences";
+import type { AppConfig, EncryptionMode, EncryptionProgress, LogEntry, ProxyInstanceSummary, UpdateState } from "../src/shared/contracts";
 import { ConfigStore } from "../src/core/config/config-store";
 import { createDefaultConfig } from "../src/core/config/model";
 import { ForwardingServiceManager } from "../src/core/runtime/forwarding-service-manager";
 import { ProxyWorkspaceStore } from "../src/core/runtime/proxy-workspace-store";
-import { getEncryptionEncoderPath, getEncryptionPreferencesPath, getPreloadPath, getRendererIndexPath } from "./paths";
+import { getDecryptionPreferencesPath, getEncryptionEncoderPath, getEncryptionPreferencesPath, getPreloadPath, getRendererIndexPath } from "./paths";
 import { createRendererSecurityPolicy, type RendererSecurityPolicy } from "./security";
 import { createSaveConfigHandler, createTrustedIpcHandler, type IpcHandler } from "./ipc";
 import { extractManualLoginValues, sendManualRequest } from "../src/core/request/manual-request";
 import { getManualRequestConfigValidationError, isValidManualRequestConfig } from "../src/shared/validation";
 import { createElectronUpdateAdapter, createUpdateService, type UpdateService } from "./update-service";
 import { createUpdateLifecycleGate } from "./update-lifecycle";
+import { createMacManualUpdateAdapter, createMacUpdateUrls } from "./mac-manual-update";
 
 const IPC_CHANNELS = {
   getConfig: "config:get",
@@ -28,12 +32,20 @@ const IPC_CHANNELS = {
   saveSharedValues: "values:shared:save",
   getLoginCache: "values:login:get",
   saveLoginCache: "values:login:save",
+  getMapValues: "values:map:get",
+  saveMapValues: "values:map:save",
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
   getEncryptionPreferences: "encryption:get-preferences",
   saveEncryptionPreferences: "encryption:save-preferences",
   encryptDirectory: "encryption:run",
+  cancelEncryption: "encryption:cancel",
   encryptionProgress: "encryption:progress",
+  selectDecryptionDirectory: "decryption:select-directory",
+  getDecryptionPreferences: "decryption:get-preferences",
+  saveDecryptionPreferences: "decryption:save-preferences",
+  decryptDirectory: "decryption:run",
+  decryptionProgress: "decryption:progress",
   sendRequest: "request:send",
   listProxyInstances: "proxy-instances:list",
   selectProxyInstance: "proxy-instances:select",
@@ -51,11 +63,13 @@ const IPC_CHANNELS = {
 } as const;
 
 const smokeMode = process.argv.includes("--smoke");
+const macUpdateUrls = createMacUpdateUrls();
 let manager: ForwardingServiceManager;
 let configStore: ConfigStore;
 let workspaceStore: ProxyWorkspaceStore;
 let updateService: UpdateService | undefined;
 let updateInstallInProgress = false;
+let encryptionAbortController: AbortController | undefined;
 const updateLifecycle = createUpdateLifecycleGate();
 let quitting = false;
 
@@ -65,6 +79,15 @@ function registerIpcHandler(
   handler: IpcHandler,
 ): void {
   ipcMain.handle(channel, createTrustedIpcHandler(policy, handler));
+}
+
+async function getExistingDirectoryPath(value: string | undefined): Promise<string | undefined> {
+  if (!value) return undefined;
+  try {
+    return (await stat(value)).isDirectory() ? value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function registerIpcHandlers(policy: RendererSecurityPolicy): void {
@@ -104,6 +127,17 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "登录缓存保存失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.getMapValues, (_event, id) => manager.getMapValues(typeof id === "string" && id.length > 0 ? id : undefined));
+  registerIpcHandler(policy, IPC_CHANNELS.saveMapValues, async (_event, values, id) => {
+    if (!isStringRecord(values)) return { ok: false, error: "本地缓存格式无效" };
+    if (id !== undefined && (typeof id !== "string" || id.length === 0)) return { ok: false, error: "代理实例参数无效" };
+    try {
+      await manager.saveMapValues(values, id);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "本地缓存保存失败" };
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.listProxyInstances, (): ProxyInstanceSummary[] => manager.list());
@@ -149,20 +183,28 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.selectProjectDirectory, async () => {
-    const selected = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+    const defaultPath = await getExistingDirectoryPath(manager.getConfig().projectPath);
+    const selected = await dialog.showOpenDialog({
+      ...(defaultPath ? { defaultPath } : {}),
+      properties: ["openDirectory"],
+    });
     if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, canceled: true };
     return { ok: true, path: selected.filePaths[0] };
   });
   registerIpcHandler(policy, IPC_CHANNELS.selectEncryptionDirectory, async (_event, kind) => {
     if (kind !== "input" && kind !== "output") return { ok: false, error: "目录类型无效" };
+    const preferencesPath = getEncryptionPreferencesPath(app.getPath("userData"));
+    const preferences = await readEncryptionPreferences(preferencesPath).catch(() => undefined);
+    const defaultPath = kind === "input" ? preferences?.inputDir : preferences?.outputDir;
     const selected = await dialog.showOpenDialog({
+      ...(defaultPath ? { defaultPath } : {}),
       properties: ["openDirectory", "createDirectory"],
       title: kind === "input" ? "选择加密前文件夹目录" : "选择加密后文件夹目录",
     });
     if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, canceled: true };
     try {
       const preferences = await saveEncryptionPreferences(
-        getEncryptionPreferencesPath(app.getPath("userData")),
+        preferencesPath,
         kind === "input" ? { inputDir: selected.filePaths[0] } : { outputDir: selected.filePaths[0] },
       );
       return { ok: true, path: selected.filePaths[0], preferences };
@@ -174,43 +216,130 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     try {
       return await readEncryptionPreferences(getEncryptionPreferencesPath(app.getPath("userData")));
     } catch {
-      return { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };
+      return { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [], lowercaseOutput: false };
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.saveEncryptionPreferences, async (_event, patch) => {
     if (typeof patch !== "object" || patch === null || Array.isArray(patch)) return { ok: false, error: "加密目录参数无效" };
     const value = patch as Record<string, unknown>;
-    if (Object.keys(value).some((key) => key !== "inputDir" && key !== "outputDir")) return { ok: false, error: "加密目录参数无效" };
+    if (Object.keys(value).some((key) => key !== "inputDir" && key !== "outputDir" && key !== "lowercaseOutput")) return { ok: false, error: "加密目录参数无效" };
     if (value.inputDir !== undefined && typeof value.inputDir !== "string") return { ok: false, error: "加密前目录参数无效" };
     if (value.outputDir !== undefined && typeof value.outputDir !== "string") return { ok: false, error: "加密后目录参数无效" };
+    if (value.lowercaseOutput !== undefined && typeof value.lowercaseOutput !== "boolean") return { ok: false, error: "小写文件输出参数无效" };
     try {
       const preferences = await saveEncryptionPreferences(
         getEncryptionPreferencesPath(app.getPath("userData")),
-        { inputDir: value.inputDir as string | undefined, outputDir: value.outputDir as string | undefined },
+        { inputDir: value.inputDir as string | undefined, outputDir: value.outputDir as string | undefined, lowercaseOutput: value.lowercaseOutput as boolean | undefined },
       );
       return { ok: true, preferences };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "保存加密目录失败" };
     }
   });
-  registerIpcHandler(policy, IPC_CHANNELS.encryptDirectory, async (_event, inputDir, outputDir, mode) => {
+  registerIpcHandler(policy, IPC_CHANNELS.cancelEncryption, () => {
+    if (encryptionAbortController === undefined) return { ok: false, error: "当前没有正在执行的加密任务" };
+    encryptionAbortController.abort();
+    return { ok: true };
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.encryptDirectory, async (_event, inputDir, outputDir, mode, lowercaseOutput) => {
     if (typeof inputDir !== "string" || typeof outputDir !== "string" || !inputDir || !outputDir) {
       return { ok: false, error: "请选择加密前和加密后文件夹目录" };
     }
     if (mode !== "full" && mode !== "incremental") return { ok: false, error: "加密模式无效" };
+    if (lowercaseOutput !== undefined && typeof lowercaseOutput !== "boolean") return { ok: false, error: "小写文件输出参数无效" };
+    if (encryptionAbortController !== undefined) return { ok: false, error: "已有加密任务正在执行" };
+    const controller = new AbortController();
+    let latestProgress: EncryptionProgress | undefined;
+    encryptionAbortController = controller;
     try {
       const result = await encryptDirectory({
         inputDir,
         outputDir,
         mode: mode as EncryptionMode,
+        lowercaseOutput: lowercaseOutput === true,
         encoderPath: getEncryptionEncoderPath(__dirname, app.isPackaged, process.resourcesPath),
+        signal: controller.signal,
         onProgress: (progress) => {
+          latestProgress = progress;
           for (const window of BrowserWindow.getAllWindows()) window.webContents.send(IPC_CHANNELS.encryptionProgress, progress);
         },
       });
       return { ok: true, ...result };
     } catch (error) {
+      if (controller.signal.aborted) {
+        return {
+          ok: false,
+          canceled: true,
+          totalFiles: latestProgress?.total ?? 0,
+          processedFiles: latestProgress?.processedFiles ?? 0,
+          skippedFiles: latestProgress?.skippedFiles ?? 0,
+          removedFiles: latestProgress?.removedFiles ?? 0,
+        };
+      }
       return { ok: false, error: error instanceof Error ? error.message : "加密失败" };
+    } finally {
+      if (encryptionAbortController === controller) encryptionAbortController = undefined;
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.selectDecryptionDirectory, async (_event, kind) => {
+    if (kind !== "input" && kind !== "output") return { ok: false, error: "解密目录类型无效" };
+    const preferencesPath = getDecryptionPreferencesPath(app.getPath("userData"));
+    const preferences = await readDecryptionPreferences(preferencesPath).catch(() => undefined);
+    const defaultPath = kind === "input" ? preferences?.inputDir : preferences?.outputDir;
+    const selected = await dialog.showOpenDialog({
+      ...(defaultPath ? { defaultPath } : {}),
+      properties: kind === "input" ? ["openDirectory"] : ["openDirectory", "createDirectory"],
+      title: kind === "input" ? "选择解密目录" : "选择解密输出目录",
+    });
+    if (selected.canceled || selected.filePaths[0] === undefined) return { ok: false, canceled: true };
+    try {
+      const nextPreferences = await saveDecryptionPreferences(
+        preferencesPath,
+        kind === "input" ? { inputDir: selected.filePaths[0] } : { outputDir: selected.filePaths[0] },
+      );
+      return { ok: true, path: selected.filePaths[0], preferences: nextPreferences };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "保存解密目录失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.getDecryptionPreferences, async () => {
+    try {
+      return await readDecryptionPreferences(getDecryptionPreferencesPath(app.getPath("userData")));
+    } catch {
+      return { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [] };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.saveDecryptionPreferences, async (_event, patch) => {
+    if (typeof patch !== "object" || patch === null || Array.isArray(patch)) return { ok: false, error: "解密目录参数无效" };
+    const value = patch as Record<string, unknown>;
+    if (Object.keys(value).some((key) => key !== "inputDir" && key !== "outputDir")) return { ok: false, error: "解密目录参数无效" };
+    if (value.inputDir !== undefined && typeof value.inputDir !== "string") return { ok: false, error: "待解密目录参数无效" };
+    if (value.outputDir !== undefined && typeof value.outputDir !== "string") return { ok: false, error: "解密输出目录参数无效" };
+    try {
+      const preferences = await saveDecryptionPreferences(
+        getDecryptionPreferencesPath(app.getPath("userData")),
+        { inputDir: value.inputDir as string | undefined, outputDir: value.outputDir as string | undefined },
+      );
+      return { ok: true, preferences };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "保存解密目录失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.decryptDirectory, async (_event, inputDir, outputDir) => {
+    if (typeof inputDir !== "string" || typeof outputDir !== "string" || !inputDir || !outputDir) {
+      return { ok: false, error: "请选择解密目录和解密输出目录" };
+    }
+    try {
+      const result = await decryptDirectoryTree({
+        inputDir,
+        outputDir,
+        onProgress: (progress) => {
+          for (const window of BrowserWindow.getAllWindows()) window.webContents.send(IPC_CHANNELS.decryptionProgress, progress);
+        },
+      });
+      return { ok: true, ...result };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "解密失败" };
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.sendRequest, async (_event, payload) => {
@@ -219,11 +348,15 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
     }
     try {
       const result = await sendManualRequest({ ...payload, timeoutMs: manager.getConfig().server.timeoutMs });
+      let loginSuccess = false;
       if (result.body !== undefined) {
         const loginValues = extractManualLoginValues(payload.paramsText, result.body);
-        if (loginValues !== undefined) manager.mergeLocalValues(loginValues);
+        if (loginValues !== undefined) {
+          manager.mergeLocalValues(loginValues);
+          loginSuccess = true;
+        }
       }
-      return { ok: true, ...result };
+      return { ok: true, ...result, loginSuccess };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "请求失败" };
     }
@@ -326,11 +459,26 @@ async function stopAllForUpdate(): Promise<{ ok: boolean; error?: string }> {
 }
 
 function initializeUpdateService(): void {
+  const manualInstall = process.platform === "darwin";
+  const updater = app.isPackaged && !smokeMode
+    ? manualInstall
+      ? createMacManualUpdateAdapter({
+          currentVersion: app.getVersion(),
+          architecture: process.arch === "arm64" ? "arm64" : "x64",
+          manifestUrl: macUpdateUrls.manifestUrl,
+          downloadBaseUrl: macUpdateUrls.downloadBaseUrl,
+          downloadDirectory: app.getPath("downloads"),
+          fetchImpl: (input, init) => net.fetch(input, init),
+          openPath: (filePath) => shell.openPath(filePath),
+        })
+      : createElectronUpdateAdapter()
+    : undefined;
   updateService = createUpdateService({
     currentVersion: app.getVersion(),
     isPackaged: app.isPackaged,
     isSmokeMode: smokeMode,
-    updater: app.isPackaged && !smokeMode ? createElectronUpdateAdapter() : undefined,
+    installMode: manualInstall ? "manual" : "automatic",
+    updater,
     stopAll: stopAllForUpdate,
     onInstallStateChange: (installing) => {
       updateInstallInProgress = installing;
@@ -347,6 +495,7 @@ function createWindow(policy: RendererSecurityPolicy): void {
   const window = new BrowserWindow({
     width: 1200,
     height: 760,
+    minWidth: 960,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

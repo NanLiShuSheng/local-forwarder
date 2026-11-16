@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { createReadStream } from "node:fs";
 import path from "node:path";
 
 const projectRoot = path.resolve(import.meta.dirname, "..");
@@ -35,7 +37,32 @@ function verifyWindowsAssets() {
   console.log(`Windows Release 资产校验通过: ${version}`);
 }
 
-function verifyMacAssets(architecture) {
+async function sha512File(filePath) {
+  const hash = createHash("sha512");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("base64");
+}
+
+function verifyMacUpdateManifest(architectures) {
+  const manifestPath = path.join(projectRoot, "dist", "mac-update.json");
+  requireFile(manifestPath, "macOS 更新元数据");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  if (manifest.version !== version) throw new Error(`macOS 更新元数据版本不匹配: ${manifestPath}`);
+  if (!Array.isArray(manifest.files)) throw new Error(`macOS 更新元数据缺少 files: ${manifestPath}`);
+
+  for (const architecture of architectures) {
+    const suffix = architecture === "arm64" ? "-arm64" : "";
+    const dmgName = `Local-Forwarder-${version}${suffix}-mac.dmg`;
+    const dmgPath = path.join(projectRoot, "release", dmgName);
+    requireFile(dmgPath, "macOS DMG");
+    const file = manifest.files.find((entry) => entry?.arch === architecture);
+    if (file === undefined) throw new Error(`macOS 更新元数据缺少 ${architecture} 安装包: ${manifestPath}`);
+    if (file.name !== dmgName) throw new Error(`macOS 更新元数据文件名不匹配: ${file.name}`);
+    if (file.size !== statSync(dmgPath).size) throw new Error(`macOS 更新元数据大小不匹配: ${dmgName}`);
+  }
+}
+
+async function verifyMacAssets(architecture) {
   const dmgArchitectureSuffix = architecture === "arm64" ? "-arm64" : "";
   const zipArchitectureSuffix = architecture === "arm64" ? "-arm64" : "-x64";
   const dmgName = "Local-Forwarder-" + version + dmgArchitectureSuffix + "-mac.dmg";
@@ -45,6 +72,13 @@ function verifyMacAssets(architecture) {
   requireFile(path.join(distDir, zipName), "macOS ZIP");
   requireFile(path.join(distDir, `${zipName}.blockmap`), "macOS 更新差分映射");
   verifyManifest(path.join(distDir, "latest-mac.yml"), zipName);
+  verifyMacUpdateManifest([architecture]);
+  const dmgPath = path.join(projectRoot, "release", dmgName);
+  const manifest = JSON.parse(readFileSync(path.join(distDir, "mac-update.json"), "utf8"));
+  const manifestFile = manifest.files.find((entry) => entry?.arch === architecture);
+  if (manifestFile === undefined || manifestFile.sha512 !== await sha512File(dmgPath)) {
+    throw new Error(`macOS 更新元数据 SHA-512 不匹配: ${dmgName}`);
+  }
   console.log("macOS " + architecture + " Release 资产校验通过: " + version);
 }
 
@@ -54,10 +88,10 @@ try {
   else if (platform === "mac") {
     const architecture = process.argv[3] ?? "x64";
     if (architecture === "all") {
-      verifyMacAssets("x64");
-      verifyMacAssets("arm64");
+      await verifyMacAssets("x64");
+      await verifyMacAssets("arm64");
     } else if (architecture === "x64" || architecture === "arm64") {
-      verifyMacAssets(architecture);
+      await verifyMacAssets(architecture);
     } else {
       throw new Error("macOS release architecture must be x64, arm64, or all");
     }

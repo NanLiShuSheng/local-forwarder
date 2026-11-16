@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>加密 / 解密进度 · 方案原型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --page: #f4f6f8;
+      --surface: #ffffff;
+      --surface-soft: #f6f8fa;
+      --border: #d0d7de;
+      --border-soft: #d8dee4;
+      --text: #1f2328;
+      --text-2: #424a53;
+      --muted: #59636e;
+      --accent: #0969da;
+      --accent-strong: #0550ae;
+      --accent-soft: #ddf4ff;
+      --success: #1a7f37;
+      --success-soft: #dafbe1;
+      --warning: #946300;
+      --danger: #cf222e;
+      --danger-soft: #ffebe9;
+      --shadow: 0 18px 42px rgb(31 35 40 / 7%);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 1180px;
+      color: var(--text);
+      background:
+        radial-gradient(900px 320px at 15% -140px, rgb(9 105 218 / 6%), transparent 66%),
+        linear-gradient(180deg, #fbfcfd 0%, var(--page) 52%, #eef2f5 100%);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    h1, h2, h3, p { margin: 0; }
+    button { font: inherit; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .review { width: min(1544px, calc(100% - 56px)); margin: 0 auto; padding: 34px 0 44px; }
+    .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 36px; margin-bottom: 20px; }
+    .eyebrow { margin-bottom: 8px; color: var(--accent-strong); font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    h1 { font-size: 30px; line-height: 1.14; letter-spacing: -.035em; }
+    .lede { max-width: 920px; margin-top: 9px; color: var(--text-2); font-size: 13px; line-height: 1.7; }
+    .lede strong { color: var(--text); }
+    .legend { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; background: rgb(255 255 255 / 84%); box-shadow: var(--shadow); color: var(--muted); font-size: 11px; }
+    .legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+    .scheme { margin-top: 18px; }
+    .scheme-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 10px; }
+    .scheme-title { display: flex; align-items: flex-start; gap: 10px; }
+    .scheme-index { display: grid; width: 29px; height: 29px; flex: 0 0 auto; place-items: center; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: var(--surface); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; }
+    .scheme h2 { font-size: 16px; line-height: 1.25; letter-spacing: -.015em; }
+    .scheme-head p { margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .tag { flex: 0 0 auto; border: 1px solid #b6c8d8; border-radius: 99px; padding: 3px 9px; color: #203b52; background: #e6edf4; font-size: 10px; font-weight: 800; }
+    .compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .canvas {
+      position: relative;
+      min-width: 0;
+      min-height: 292px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      padding: 20px;
+      background: var(--surface-soft);
+    }
+    .canvas::before { position: absolute; top: -110px; right: -90px; width: 280px; height: 280px; border-radius: 50%; background: radial-gradient(circle, rgb(9 105 218 / 8%), transparent 68%); content: ""; pointer-events: none; }
+    .canvas-tag { position: absolute; z-index: 2; top: 12px; right: 14px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .task-card { position: relative; z-index: 1; overflow: hidden; border: 1px solid var(--border); border-radius: 13px; background: var(--surface); box-shadow: 0 10px 24px rgb(31 35 40 / 5%); }
+    .task-card strong, .task-card b { font-variant-numeric: tabular-nums; }
+    .task-kicker { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+    .status-dot { display: inline-block; width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+    .progress-track { overflow: hidden; height: 7px; border-radius: 99px; background: var(--progress-track); }
+    .progress-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--progress-end)); }
+    .mini-actions { position: relative; z-index: 1; display: flex; align-items: center; gap: 7px; margin-top: 12px; }
+    .mini-actions button { height: 31px; border: 1px solid var(--border); border-radius: 7px; padding: 0 11px; color: var(--text-2); background: var(--surface); font-size: 11px; font-weight: 700; }
+    .mini-actions .primary { border-color: var(--accent); color: #ffffff; background: var(--accent); }
+    .mini-actions span { margin-left: 2px; color: var(--muted); font-size: 10px; }
+
+    .compact-card { padding: 16px 18px 14px; }
+    .compact-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+    .compact-status { display: flex; align-items: center; gap: 9px; color: var(--text); font-size: 15px; font-weight: 750; letter-spacing: -.01em; }
+    .compact-file { margin-top: 5px; color: var(--muted); font-size: 11px; }
+    .compact-file code { color: var(--text-2); }
+    .compact-percent { flex: 0 0 auto; color: var(--accent); font-size: 30px; font-weight: 780; line-height: 1; letter-spacing: -.045em; }
+    .compact-percent small { margin-left: 2px; font-size: 13px; font-weight: 700; }
+    .compact-card .progress-track { margin-top: 13px; }
+    .compact-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 15px; margin-top: 10px; color: var(--muted); font-size: 10px; }
+    .compact-stats span { display: inline-flex; align-items: baseline; gap: 4px; }
+    .compact-stats b { color: var(--text); font-size: 12px; }
+    .compact-stats .ok b { color: var(--success); }
+    .compact-stats .skip b { color: var(--warning); }
+
+    .ring-card { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 18px; padding: 18px; }
+    .progress-ring { display: grid; width: 108px; height: 108px; place-self: center; place-items: center; border-radius: 50%; background: conic-gradient(var(--accent) 0 53%, var(--progress-track) 53% 100%); }
+    .progress-ring::before { grid-area: 1 / 1; width: 84px; height: 84px; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border-soft); content: ""; }
+    .ring-label { position: relative; grid-area: 1 / 1; display: grid; place-items: center; text-align: center; }
+    .ring-label strong { color: var(--text); font-size: 24px; line-height: 1; letter-spacing: -.045em; }
+    .ring-label span { margin-top: 4px; color: var(--muted); font-size: 9px; }
+    .ring-body { min-width: 0; }
+    .ring-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .ring-head h3 { margin-top: 3px; font-size: 16px; letter-spacing: -.018em; }
+    .status-pill { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; border: 1px solid var(--accent-border); border-radius: 99px; padding: 3px 7px; color: var(--accent-strong); background: var(--accent-soft); font-size: 9px; font-weight: 800; }
+    .status-pill i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+    .ring-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+    .ring-stats span { min-width: 0; border: 1px solid var(--border-soft); border-radius: 7px; padding: 6px 7px; color: var(--muted); background: var(--surface-soft); font-size: 9px; }
+    .ring-stats b { display: block; margin-top: 2px; overflow: hidden; color: var(--text); font-size: 13px; text-overflow: ellipsis; }
+    .ring-stats .ok b { color: var(--success); }
+    .ring-stats .bad b { color: var(--danger); }
+    .current-file { display: flex; min-width: 0; align-items: center; gap: 7px; margin-top: 9px; border: 1px solid var(--border-soft); border-radius: 8px; padding: 7px 9px; background: var(--surface); }
+    .file-icon { display: grid; width: 23px; height: 23px; flex: 0 0 auto; place-items: center; border: 1px solid var(--accent-border); border-radius: 6px; color: var(--accent); background: var(--accent-soft); font: 8px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; }
+    .current-file code { min-width: 0; flex: 1; overflow: hidden; color: var(--text-2); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .current-file em { flex: 0 0 auto; color: var(--accent); font-size: 9px; font-style: normal; font-weight: 700; }
+
+    .queue-card { padding: 15px 17px 13px; }
+    .queue-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .queue-title { display: flex; align-items: center; gap: 9px; margin-top: 3px; font-size: 15px; font-weight: 750; }
+    .queue-title span { color: var(--muted); font-size: 10px; font-weight: 600; }
+    .queue-percent { flex: 0 0 auto; color: var(--accent); font-size: 22px; font-weight: 780; letter-spacing: -.04em; }
+    .queue-card .progress-track { margin-top: 11px; }
+    .queue-stats { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    .queue-stats span { border: 1px solid var(--border-soft); border-radius: 99px; padding: 2px 7px; color: var(--muted); background: var(--surface-soft); font-size: 9px; }
+    .queue-stats b { margin-left: 3px; color: var(--text); font-size: 10px; }
+    .queue-current { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-top: 10px; border: 1px solid var(--accent-border); border-radius: 8px; padding: 7px 9px; background: var(--accent-soft); }
+    .queue-current > span:first-child { color: var(--accent-strong); font-size: 9px; font-weight: 800; }
+    .queue-current code { min-width: 0; overflow: hidden; color: var(--text-2); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .queue-current > span:last-child { color: var(--accent-strong); font-size: 9px; font-weight: 700; }
+    .queue-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; color: var(--muted); font-size: 9px; }
+    .queue-foot span { display: inline-flex; min-width: 0; align-items: center; gap: 5px; }
+    .queue-foot code { overflow: hidden; color: var(--text-2); text-overflow: ellipsis; white-space: nowrap; }
+    .success-dot { width: 5px; height: 5px; flex: 0 0 auto; border-radius: 50%; background: var(--success); }
+
+    .theme-light {
+      color: var(--text);
+      --surface: #ffffff;
+      --surface-soft: #f6f8fa;
+      --border: #d0d7de;
+      --border-soft: #d8dee4;
+      --text: #1f2328;
+      --text-2: #424a53;
+      --muted: #59636e;
+      --accent: #0969da;
+      --accent-strong: #0550ae;
+      --accent-soft: #ddf4ff;
+      --accent-border: #b6e3ff;
+      --progress-track: #e7edf3;
+      --progress-end: #218bff;
+      --success: #1a7f37;
+      --warning: #946300;
+      --danger: #cf222e;
+    }
+    .theme-dark {
+      color: var(--text);
+      color-scheme: dark;
+      --surface: #161b22;
+      --surface-soft: #0d1117;
+      --border: #30363d;
+      --border-soft: #30363d;
+      --text: #f0f6fc;
+      --text-2: #c9d1d9;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-strong: #79c0ff;
+      --accent-soft: rgb(56 139 253 / 13%);
+      --accent-border: rgb(88 166 255 / 32%);
+      --progress-track: #30363d;
+      --progress-end: #1f6feb;
+      --success: #3fb950;
+      --warning: #d29922;
+      --danger: #f85149;
+      background: #0d1117;
+    }
+    .theme-dark .task-card { box-shadow: 0 12px 28px rgb(0 0 0 / 28%); }
+    .compact-canvas { min-height: 226px; }
+    .theme-dark .mini-actions .primary { color: #ffffff; }
+    .note { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 12px; color: var(--muted); font-size: 10px; line-height: 1.7; }
+    .note strong { color: var(--text-2); }
+  </style>
+</head>
+<body>
+  <main class="review">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Progress component options</p>
+        <h1>加密 / 解密进度 · 三套方案</h1>
+        <p class="lede">统一使用同一套信息结构，分别对比<strong>紧凑度、进度识别、运行状态可读性</strong>。每套方案都提供浅色与深色版本，蓝色仅表示进行中，绿色只用于成功结果。</p>
+      </div>
+      <div class="legend"><i></i>当前任务进行中</div>
+    </header>
+
+    <section class="scheme">
+      <div class="scheme-head">
+        <div class="scheme-title">
+          <span class="scheme-index">01</span>
+          <div><h2>A · 紧凑横幅</h2><p>把状态、百分比、进度条和统计压成一块，页面占用最小，适合当前信息密度。</p></div>
+        </div>
+        <span class="tag">推荐</span>
+      </div>
+      <div class="compare">
+        <article class="canvas theme-light compact-canvas">
+          <span class="canvas-tag">Light</span>
+          <div class="task-card compact-card">
+            <div class="compact-top">
+              <div>
+                <div class="compact-status"><i class="status-dot"></i>加密进行中</div>
+                <p class="compact-file">正在处理 <code>src/account/login.js</code></p>
+              </div>
+              <div class="compact-percent">53<small>%</small></div>
+            </div>
+            <div class="progress-track"><i style="width: 53%"></i></div>
+            <div class="compact-stats">
+              <span><b>240</b>总文件</span>
+              <span class="ok"><b>128</b>已加密</span>
+              <span class="skip"><b>12</b>已跳过</span>
+              <span><b>100</b>待处理</span>
+            </div>
+          </div>
+          <div class="mini-actions"><button class="primary">正在加密…</button><button>增量加密</button><span>增量模式会跳过未变化的文件</span></div>
+        </article>
+        <article class="canvas theme-dark compact-canvas">
+          <span class="canvas-tag">Dark</span>
+          <div class="task-card compact-card">
+            <div class="compact-top">
+              <div>
+                <div class="compact-status"><i class="status-dot"></i>加密进行中</div>
+                <p class="compact-file">正在处理 <code>src/account/login.js</code></p>
+              </div>
+              <div class="compact-percent">53<small>%</small></div>
+            </div>
+            <div class="progress-track"><i style="width: 53%"></i></div>
+            <div class="compact-stats">
+              <span><b>240</b>总文件</span>
+              <span class="ok"><b>128</b>已加密</span>
+              <span class="skip"><b>12</b>已跳过</span>
+              <span><b>100</b>待处理</span>
+            </div>
+          </div>
+          <div class="mini-actions"><button class="primary">正在加密…</button><button>增量加密</button><span>增量模式会跳过未变化的文件</span></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="scheme">
+      <div class="scheme-head">
+        <div class="scheme-title">
+          <span class="scheme-index">02</span>
+          <div><h2>B · 环形仪表盘</h2><p>以环形百分比作为主视觉，右侧集中状态、统计和当前文件，适合强调完成感。</p></div>
+        </div>
+      </div>
+      <div class="compare">
+        <article class="canvas theme-light">
+          <span class="canvas-tag">Light</span>
+          <div class="task-card ring-card">
+            <div class="progress-ring">
+              <div class="ring-label"><strong>53%</strong><span>128 / 240</span></div>
+            </div>
+            <div class="ring-body">
+              <div class="ring-head">
+                <div><span class="task-kicker">解密任务</span><h3>正在还原资源</h3></div>
+                <span class="status-pill"><i></i>处理中</span>
+              </div>
+              <div class="ring-stats">
+                <span>总文件<b>240</b></span>
+                <span class="ok">已还原<b>126</b></span>
+                <span class="bad">失败<b>2</b></span>
+                <span>待处理<b>112</b></span>
+              </div>
+              <div class="current-file"><span class="file-icon">JS</span><code>src/legacy/account.html</code><em>还原中</em></div>
+            </div>
+          </div>
+          <div class="mini-actions"><button class="primary">正在解密…</button><span>输出目录中的同名文件会被直接替换</span></div>
+        </article>
+        <article class="canvas theme-dark">
+          <span class="canvas-tag">Dark</span>
+          <div class="task-card ring-card">
+            <div class="progress-ring">
+              <div class="ring-label"><strong>53%</strong><span>128 / 240</span></div>
+            </div>
+            <div class="ring-body">
+              <div class="ring-head">
+                <div><span class="task-kicker">解密任务</span><h3>正在还原资源</h3></div>
+                <span class="status-pill"><i></i>处理中</span>
+              </div>
+              <div class="ring-stats">
+                <span>总文件<b>240</b></span>
+                <span class="ok">已还原<b>126</b></span>
+                <span class="bad">失败<b>2</b></span>
+                <span>待处理<b>112</b></span>
+              </div>
+              <div class="current-file"><span class="file-icon">JS</span><code>src/legacy/account.html</code><em>还原中</em></div>
+            </div>
+          </div>
+          <div class="mini-actions"><button class="primary">正在解密…</button><span>输出目录中的同名文件会被直接替换</span></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="scheme">
+      <div class="scheme-head">
+        <div class="scheme-title">
+          <span class="scheme-index">03</span>
+          <div><h2>C · 任务队列</h2><p>突出“当前文件 + 最近完成”，日志与统计保持可见，适合长时间批量处理时盯进度。</p></div>
+        </div>
+      </div>
+      <div class="compare">
+        <article class="canvas theme-light">
+          <span class="canvas-tag">Light</span>
+          <div class="task-card queue-card">
+            <div class="queue-head">
+              <div><span class="task-kicker">加密任务</span><div class="queue-title"><i class="status-dot"></i>正在编码资源<span>128 / 240</span></div></div>
+              <strong class="queue-percent">53%</strong>
+            </div>
+            <div class="progress-track"><i style="width: 53%"></i></div>
+            <div class="queue-stats"><span>总文件<b>240</b></span><span>已加密<b>128</b></span><span>已跳过<b>12</b></span><span>待处理<b>100</b></span></div>
+            <div class="queue-current"><span>当前文件</span><code>src/account/login.js</code><span>编码中</span></div>
+            <div class="queue-foot"><span><i class="success-dot"></i>最近完成 <code>src/account/config.js</code></span><span>实时日志 128 条</span></div>
+          </div>
+          <div class="mini-actions"><button class="primary">正在加密…</button><button>增量加密</button><span>输出目录中的同名 .d 将被覆盖</span></div>
+        </article>
+        <article class="canvas theme-dark">
+          <span class="canvas-tag">Dark</span>
+          <div class="task-card queue-card">
+            <div class="queue-head">
+              <div><span class="task-kicker">加密任务</span><div class="queue-title"><i class="status-dot"></i>正在编码资源<span>128 / 240</span></div></div>
+              <strong class="queue-percent">53%</strong>
+            </div>
+            <div class="progress-track"><i style="width: 53%"></i></div>
+            <div class="queue-stats"><span>总文件<b>240</b></span><span>已加密<b>128</b></span><span>已跳过<b>12</b></span><span>待处理<b>100</b></span></div>
+            <div class="queue-current"><span>当前文件</span><code>src/account/login.js</code><span>编码中</span></div>
+            <div class="queue-foot"><span><i class="success-dot"></i>最近完成 <code>src/account/config.js</code></span><span>实时日志 128 条</span></div>
+          </div>
+          <div class="mini-actions"><button class="primary">正在加密…</button><button>增量加密</button><span>输出目录中的同名 .d 将被覆盖</span></div>
+        </article>
+      </div>
+    </section>
+
+    <p class="note"><strong>说明：</strong>A 方案最省空间，建议作为默认；B 方案的进度识别最强，但卡片高度略大；C 方案更适合批量任务监控，但视觉层级最多。加密与解密共用同一结构，仅替换“已加密 / 已还原”和“已跳过 / 失败”等指标名称。</p>
+  </main>
+</body>
+</html>

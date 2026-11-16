@@ -100,6 +100,20 @@ function containsSearch(value: JsonPreviewValue, path: string, key: string, sear
   return childEntries(value).some((child) => containsSearch(child.value, `${path}${child.path}`, child.key, search));
 }
 
+function expandedPathsForSearch(value: JsonPreviewValue, search: string): Set<string> {
+  const expanded = new Set<string>();
+  if (search === "") return expanded;
+
+  const needle = search.toLocaleLowerCase();
+  if (containsSearch(value, "$", "$", needle)) expanded.add("$");
+  for (const row of flattenJsonValue(value)) {
+    if ((row.type === "object" || row.type === "array") && containsSearch(row.value, row.path, row.key, needle)) {
+      expanded.add(row.path);
+    }
+  }
+  return expanded;
+}
+
 function visibleTableRows(rows: JsonPreviewRow[], expandedPaths: Set<string>, search: string): JsonPreviewRow[] {
   const visible: JsonPreviewRow[] = [];
   const ancestors: Array<{ expanded: boolean }> = [];
@@ -108,7 +122,7 @@ function visibleTableRows(rows: JsonPreviewRow[], expandedPaths: Set<string>, se
     const expandable = row.type === "object" || row.type === "array";
     const hiddenByAncestor = ancestors.some((ancestor) => !ancestor.expanded);
     if (!hiddenByAncestor && (search === "" || containsSearch(row.value, row.path, row.key, search))) visible.push(row);
-    if (expandable) ancestors.push({ expanded: expandedPaths.has(row.path) || search !== "" });
+    if (expandable) ancestors.push({ expanded: expandedPaths.has(row.path) });
   }
   return visible;
 }
@@ -145,7 +159,7 @@ interface TreeNodeProps {
 function TreeNode({ keyLabel, path, value, depth, expandedPaths, search, selectedPath, onSelect, onToggle }: TreeNodeProps) {
   if (!containsSearch(value, path, keyLabel, search)) return null;
   const container = isContainer(value);
-  const expanded = expandedPaths.has(path) || search !== "";
+  const expanded = expandedPaths.has(path);
   const entries = container ? childEntries(value) : [];
   const delimitedArray = parsePipeDelimitedArray(value);
   return <>
@@ -184,7 +198,11 @@ interface JsonPreviewCanvasColors {
   success: string;
   warning: string;
   danger: string;
-  selection: string;
+  selectionRowBackground: string;
+  selectionRowText: string;
+  selectionRowAccent: string;
+  selectionTabText: string;
+  selectionTabUnderline: string;
 }
 
 interface JsonPreviewCanvasOptions {
@@ -218,19 +236,23 @@ function exportColors(preview: HTMLElement): JsonPreviewCanvasColors {
   const style = getComputedStyle(preview);
   return {
     background: cssToken(style, "--panel-background", style.backgroundColor || "#ffffff"),
-    codeBackground: cssToken(style, "--code-background", "#f4f7fb"),
-    surface: cssToken(style, "--surface-background", "#f8fafc"),
-    surfaceAlt: cssToken(style, "--surface-alt-background", "#f0f4f8"),
-    border: cssToken(style, "--border-default", "#d6dfeb"),
-    subtleBorder: cssToken(style, "--border-subtle", "#dbe3ed"),
-    bright: cssToken(style, "--text-bright", "#152033"),
-    text: cssToken(style, "--text-secondary", "#4e6078"),
-    muted: cssToken(style, "--text-muted", "#52647b"),
-    info: cssToken(style, "--info", "#256da8"),
-    success: cssToken(style, "--text-success", "#086b53"),
-    warning: cssToken(style, "--warning", "#8a5a00"),
-    danger: cssToken(style, "--danger-text", "#a93545"),
-    selection: cssToken(style, "--selection-background", "#d7eee7"),
+    codeBackground: cssToken(style, "--code-background", "#f6f8fa"),
+    surface: cssToken(style, "--surface-background", "#f6f8fa"),
+    surfaceAlt: cssToken(style, "--surface-alt-background", "#eff2f5"),
+    border: cssToken(style, "--border-default", "#d0d7de"),
+    subtleBorder: cssToken(style, "--border-subtle", "#d8dee4"),
+    bright: cssToken(style, "--text-bright", "#1f2328"),
+    text: cssToken(style, "--text-secondary", "#424a53"),
+    muted: cssToken(style, "--text-muted", "#59636e"),
+    info: cssToken(style, "--info", "#0969da"),
+    success: cssToken(style, "--text-success", "#1a7f37"),
+    warning: cssToken(style, "--warning", "#946300"),
+    danger: cssToken(style, "--danger-text", "#a40e26"),
+    selectionRowBackground: cssToken(style, "--selection-row-background", "#e7eef5"),
+    selectionRowText: cssToken(style, "--selection-row-text", "#1b3a57"),
+    selectionRowAccent: cssToken(style, "--selection-row-accent", "#5b7894"),
+    selectionTabText: cssToken(style, "--selection-tab-text", "#1b3a57"),
+    selectionTabUnderline: cssToken(style, "--selection-tab-underline", "#5b7894"),
   };
 }
 
@@ -255,7 +277,7 @@ function wrapCanvasText(context: CanvasRenderingContext2D, text: string, maxWidt
 }
 
 function canvasValueColor(type: JsonPreviewRow["type"], colors: JsonPreviewCanvasColors): string {
-  if (type === "string") return colors.success;
+  if (type === "string") return colors.info;
   if (type === "number") return colors.warning;
   if (type === "boolean") return colors.danger;
   if (type === "object" || type === "array") return colors.text;
@@ -282,13 +304,14 @@ function createJsonPreviewCanvas(options: JsonPreviewCanvasOptions): JsonPreview
 
   const tableColumnWidths = [contentWidth * 0.38, contentWidth * 0.47, contentWidth * 0.15];
   const tableLayouts = visibleRows.map((row) => {
+    const keyIndentation = row.depth * 18;
     measureContext.font = exportMonoFont;
-    const pathLines = wrapCanvasText(measureContext, row.path, tableColumnWidths[0] - 12);
+    const keyLines = wrapCanvasText(measureContext, row.key, tableColumnWidths[0] - keyIndentation - 12);
     measureContext.font = exportSansFont;
     const valueLines = wrapCanvasText(measureContext, displayValue(row.value), tableColumnWidths[1] - 12);
     measureContext.font = exportSmallFont;
     const typeLines = wrapCanvasText(measureContext, typeLabel(row.type), tableColumnWidths[2] - 12);
-    return { row, pathLines, valueLines, typeLines, height: Math.max(pathLines.length, valueLines.length, typeLines.length) * exportLineHeight + 12 };
+    return { row, keyLines, keyIndentation, valueLines, typeLines, height: Math.max(keyLines.length, valueLines.length, typeLines.length) * exportLineHeight + 12 };
   });
   measureContext.font = exportMonoFont;
   const rawLines = formatted.split(/\r?\n/).flatMap((line) => wrapCanvasText(measureContext, line, contentWidth - 20));
@@ -337,8 +360,12 @@ function createJsonPreviewCanvas(options: JsonPreviewCanvasOptions): JsonPreview
       context.fillRect(x, padding + headerHeight, 82, 28);
     }
     context.font = exportSmallFont;
-    context.fillStyle = view === activeView ? colors.success : colors.muted;
+    context.fillStyle = view === activeView ? colors.selectionTabText : colors.muted;
     context.fillText(label, x + 10, padding + headerHeight + 7);
+    if (view === activeView) {
+      context.fillStyle = colors.selectionTabUnderline;
+      context.fillRect(x, padding + headerHeight + 26, 82, 2);
+    }
   });
 
   const summary = [["根节点", stats.rootType], ["字段数", String(stats.fields)], ["数组", String(stats.arrays)], ["解析状态", "<1ms"]];
@@ -376,7 +403,7 @@ function createJsonPreviewCanvas(options: JsonPreviewCanvasOptions): JsonPreview
   if (activeView === "raw") {
     drawCanvasText(context, rawLines, padding + 10, dataTop + 12, colors.text, exportMonoFont);
   } else if (activeView === "table") {
-    const headerLabels = ["字段路径", "值", "类型"];
+    const headerLabels = ["字段 / 索引", "值", "类型"];
     let x = padding;
     context.fillStyle = colors.surfaceAlt;
     context.fillRect(padding, dataTop, contentWidth, 34);
@@ -388,13 +415,16 @@ function createJsonPreviewCanvas(options: JsonPreviewCanvasOptions): JsonPreview
     });
     let rowTop = dataTop + 34;
     tableLayouts.forEach((layout) => {
-      if (layout.row.path === selectedPath) {
-        context.fillStyle = colors.selection;
+      const selected = layout.row.path === selectedPath;
+      if (selected) {
+        context.fillStyle = colors.selectionRowBackground;
         context.fillRect(padding, rowTop, contentWidth, layout.height);
+        context.fillStyle = colors.selectionRowAccent;
+        context.fillRect(padding, rowTop, 3, layout.height);
       }
-      drawCanvasText(context, layout.pathLines, padding + 10, rowTop + 6, colors.info, exportMonoFont);
-      drawCanvasText(context, layout.valueLines, padding + tableColumnWidths[0] + 10, rowTop + 6, canvasValueColor(layout.row.type, colors), exportSansFont);
-      drawCanvasText(context, layout.typeLines, padding + tableColumnWidths[0] + tableColumnWidths[1] + 10, rowTop + 6, colors.muted, exportSmallFont);
+      drawCanvasText(context, layout.keyLines, padding + layout.keyIndentation + 10, rowTop + 6, selected ? colors.selectionRowText : colors.info, exportMonoFont);
+      drawCanvasText(context, layout.valueLines, padding + tableColumnWidths[0] + 10, rowTop + 6, selected ? colors.selectionRowText : canvasValueColor(layout.row.type, colors), exportSansFont);
+      drawCanvasText(context, layout.typeLines, padding + tableColumnWidths[0] + tableColumnWidths[1] + 10, rowTop + 6, selected ? colors.selectionRowText : colors.muted, exportSmallFont);
       context.strokeStyle = colors.subtleBorder;
       context.beginPath();
       context.moveTo(padding, rowTop + layout.height - 0.5);
@@ -406,14 +436,17 @@ function createJsonPreviewCanvas(options: JsonPreviewCanvasOptions): JsonPreview
     let rowTop = dataTop + 8;
     treeLayouts.forEach((layout) => {
       const x = padding + layout.row.depth * 18 + 10;
-      if (layout.row.path === selectedPath) {
-        context.fillStyle = colors.selection;
+      const selected = layout.row.path === selectedPath;
+      if (selected) {
+        context.fillStyle = colors.selectionRowBackground;
         context.fillRect(padding, rowTop - 2, contentWidth, layout.height);
+        context.fillStyle = colors.selectionRowAccent;
+        context.fillRect(padding, rowTop - 2, 3, layout.height);
       }
       context.font = exportMonoFont;
-      context.fillStyle = canvasValueColor(layout.row.type, colors);
+      context.fillStyle = selected ? colors.selectionRowText : canvasValueColor(layout.row.type, colors);
       context.fillText(`${layout.row.type === "object" || layout.row.type === "array" ? "⌄" : "·"} `, x - 10, rowTop);
-      drawCanvasText(context, layout.labelLines, x + 8, rowTop, canvasValueColor(layout.row.type, colors), exportMonoFont);
+      drawCanvasText(context, layout.labelLines, x + 8, rowTop, selected ? colors.selectionRowText : canvasValueColor(layout.row.type, colors), exportMonoFont);
       rowTop += layout.height;
     });
   }
@@ -450,8 +483,19 @@ export function JsonPreviewPage({ prefillText, onPrefillApplied }: { prefillText
     const next = parseJsonPreviewText(value);
     setParseResult(next);
     setSelectedPath("$");
-    setExpandedPaths(next.ok ? defaultExpandedPaths(next.value) : new Set(["$"]));
-    setTableExpandedPaths(new Set(["$"]));
+    const searchPaths = next.ok ? expandedPathsForSearch(next.value, search) : new Set<string>();
+    const nextExpandedPaths = next.ok ? defaultExpandedPaths(next.value) : new Set(["$"]);
+    searchPaths.forEach((path) => nextExpandedPaths.add(path));
+    setExpandedPaths(nextExpandedPaths);
+    setTableExpandedPaths(new Set(["$", ...searchPaths]));
+  };
+
+  const updateSearch = (value: string) => {
+    setSearch(value);
+    if (!parseResult.ok || value === "") return;
+    const searchPaths = expandedPathsForSearch(parseResult.value, value);
+    setExpandedPaths((current) => new Set([...current, ...searchPaths]));
+    setTableExpandedPaths((current) => new Set([...current, ...searchPaths]));
   };
 
   useEffect(() => {
@@ -519,7 +563,7 @@ export function JsonPreviewPage({ prefillText, onPrefillApplied }: { prefillText
         type: jsonPreviewType(parseResult.value),
         depth: 0,
       };
-      const rootExpanded = expandedPaths.has("$") || search !== "";
+      const rootExpanded = expandedPaths.has("$");
       const visibleRows = activeView === "tree"
         ? [rootRow, ...(rootExpanded ? visibleTableRows(rows, expandedPaths, search.toLocaleLowerCase()) : [])]
         : activeView === "table" ? tableVisibleRows : [];
@@ -585,9 +629,9 @@ export function JsonPreviewPage({ prefillText, onPrefillApplied }: { prefillText
           {([["tree", "树形视图"], ["table", "表格视图"], ["raw", "原始 JSON"]] as const).map(([view, label]) => <button key={view} className={activeView === view ? "active" : ""} type="button" role="tab" aria-selected={activeView === view} onClick={() => setActiveView(view)}>{label}</button>)}
         </div>
         {parseResult.ok && stats ? <div className="json-preview-summary"><div><span>根节点</span><strong>{stats.rootType}</strong></div><div><span>字段数</span><strong>{stats.fields}</strong></div><div><span>数组</span><strong>{stats.arrays}</strong></div><div><span>解析状态</span><strong className="good">&lt;1ms</strong></div></div> : <div className="json-preview-error-box"><strong>无法展示数据</strong><span>{parseError}</span></div>}
-        {parseResult.ok && activeView !== "raw" && <div className="json-preview-toolbar"><input aria-label="过滤字段或值" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="⌕ 过滤字段或值" /><div><button className="small-button" type="button" onClick={expandAll}>全部展开</button><button className="small-button" type="button" onClick={collapseAll}>全部收起</button></div></div>}
+        {parseResult.ok && activeView !== "raw" && <div className="json-preview-toolbar"><input aria-label="过滤字段或值" value={search} onChange={(event) => updateSearch(event.target.value)} placeholder="⌕ 过滤字段或值" /><div><button className="small-button" type="button" onClick={expandAll}>全部展开</button><button className="small-button" type="button" onClick={collapseAll}>全部收起</button></div></div>}
         {parseResult.ok && activeView === "tree" && <div className="json-preview-tree" role="tree"><TreeNode keyLabel="$" path="$" value={parseResult.value} depth={0} expandedPaths={expandedPaths} search={search} selectedPath={selectedPath} onSelect={setSelectedPath} onToggle={togglePath} /></div>}
-        {parseResult.ok && activeView === "table" && <div className="json-preview-table-wrap"><table className="json-preview-table"><thead><tr><th>字段路径</th><th>值</th><th>类型</th></tr></thead><tbody>{tableVisibleRows.map((row) => { const expandable = row.type === "object" || row.type === "array"; const expanded = tableExpandedPaths.has(row.path) || search !== ""; return <tr key={row.path} className={selectedPath === row.path ? "selected" : ""} aria-expanded={expandable ? expanded : undefined} onClick={() => { setSelectedPath(row.path); if (expandable) toggleTablePath(row.path); }}><td><div className="json-preview-table-path" style={{ paddingLeft: `${row.depth * 18}px` }}>{expandable ? <button className="json-preview-table-toggle" type="button" aria-label={expanded ? "收起对象" : "展开对象"} onClick={(event) => { event.stopPropagation(); toggleTablePath(row.path); }}>{expanded ? "⌄" : "›"}</button> : <span className="json-preview-table-toggle empty">·</span>}<span>{row.path}</span></div></td><td title={typeof row.value === "string" ? row.value : undefined}>{displayValue(row.value)}</td><td>{typeLabel(row.type)}</td></tr>; })}</tbody></table></div>}
+        {parseResult.ok && activeView === "table" && <div className="json-preview-table-wrap"><table className="json-preview-table"><thead><tr><th>字段 / 索引</th><th>值</th><th>类型</th></tr></thead><tbody>{tableVisibleRows.map((row) => { const expandable = row.type === "object" || row.type === "array"; const expanded = tableExpandedPaths.has(row.path); return <tr key={row.path} className={selectedPath === row.path ? "selected" : ""} aria-expanded={expandable ? expanded : undefined} onClick={() => { setSelectedPath(row.path); if (expandable) toggleTablePath(row.path); }}><td><div className="json-preview-table-path" style={{ paddingLeft: `${row.depth * 18}px` }}>{expandable ? <button className="json-preview-table-toggle" type="button" aria-label={expanded ? "收起对象" : "展开对象"} onClick={(event) => { event.stopPropagation(); toggleTablePath(row.path); }}>{expanded ? "⌄" : "›"}</button> : <span className="json-preview-table-toggle empty">·</span>}<span title={row.path}>{row.key}</span></div></td><td title={typeof row.value === "string" ? row.value : undefined}>{displayValue(row.value)}</td><td>{typeLabel(row.type)}</td></tr>; })}</tbody></table></div>}
         {parseResult.ok && activeView === "raw" && <pre className="json-preview-raw">{parseResult.formatted}</pre>}
         {parseResult.ok && <p className="json-preview-tip"><span>ⓘ</span>{activeView === "table" ? "点击对象或数组行可展开子字段；点击字段可查看当前节点。" : activeView === "tree" ? "点击字段可查看当前节点；长字符串默认截断，悬停可查看完整值。数组和对象会显示节点数量。" : "可在此查看格式化 JSON 原文。"}</p>}
       </section>

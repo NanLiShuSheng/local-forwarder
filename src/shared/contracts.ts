@@ -21,6 +21,7 @@ export interface ManualRequestResponse extends OperationResult {
   statusMessage?: string;
   body?: string;
   durationMs?: number;
+  loginSuccess?: boolean;
 }
 
 export type StringToolOperation = "replace" | "remove" | "uppercase" | "lowercase" | "url-encode" | "url-decode" | "json-format";
@@ -88,7 +89,7 @@ export interface LogEntry {
   ruleId?: string;
   statusCode?: number;
   durationMs?: number;
-  requestType?: "fetch" | "xhr";
+  requestType?: "fetch" | "xhr" | "http";
   requestPath?: string;
   requestParams?: string;
   responseData?: string;
@@ -149,6 +150,8 @@ export interface UpdateProgressSnapshot {
 export interface UpdateState {
   state: UpdateStateKind;
   currentVersion: string;
+  installMode?: "automatic" | "manual";
+  installerOpened?: boolean;
   update?: UpdateInfoSnapshot;
   progress?: UpdateProgressSnapshot;
   error?: string;
@@ -167,9 +170,10 @@ export interface EncryptionPreferences {
   outputDir: string;
   inputHistory: string[];
   outputHistory: string[];
+  lowercaseOutput: boolean;
 }
 
-export type EncryptionPreferencesPatch = Partial<Pick<EncryptionPreferences, "inputDir" | "outputDir">>;
+export type EncryptionPreferencesPatch = Partial<Pick<EncryptionPreferences, "inputDir" | "outputDir" | "lowercaseOutput">>;
 
 export interface EncryptionFileResult {
   relativePath: string;
@@ -178,6 +182,7 @@ export interface EncryptionFileResult {
 
 export interface EncryptionResult extends OperationResult {
   mode?: EncryptionMode;
+  canceled?: boolean;
   totalFiles?: number;
   processedFiles?: number;
   skippedFiles?: number;
@@ -201,6 +206,52 @@ export interface EncryptionProgress {
   relativePath?: string;
 }
 
+export type DecryptionDirectoryKind = "input" | "output";
+
+export interface DecryptionPreferences {
+  inputDir: string;
+  outputDir: string;
+  inputHistory: string[];
+  outputHistory: string[];
+}
+
+export type DecryptionPreferencesPatch = Partial<Pick<DecryptionPreferences, "inputDir" | "outputDir">>;
+
+export interface DecryptionFileResult {
+  relativePath: string;
+  outputPath: string;
+  hashVerified: boolean;
+}
+
+export interface DecryptionFailure {
+  relativePath: string;
+  error: string;
+}
+
+export interface DecryptionResult extends OperationResult {
+  totalFiles?: number;
+  processedFiles?: number;
+  failedFiles?: number;
+  skippedFiles?: number;
+  hashVerifiedFiles?: number;
+  files?: DecryptionFileResult[];
+  failures?: DecryptionFailure[];
+  logs?: string[];
+}
+
+export type DecryptionProgressPhase = "scanning" | "processing" | "completed";
+export type DecryptionProgressStatus = "decrypting" | "completed" | "failed";
+
+export interface DecryptionProgress {
+  phase: DecryptionProgressPhase;
+  status?: DecryptionProgressStatus;
+  current: number;
+  total: number;
+  processedFiles: number;
+  failedFiles: number;
+  relativePath?: string;
+}
+
 export interface ForwarderApi {
   getConfig(): Promise<AppConfig>;
   getAppVersion(): Promise<string>;
@@ -214,6 +265,8 @@ export interface ForwarderApi {
   saveSharedValues(values: Record<string, string>): Promise<OperationResult>;
   getLoginCache(): Promise<Record<string, string>>;
   saveLoginCache(values: Record<string, string>): Promise<OperationResult>;
+  getMapValues(id?: string): Promise<Record<string, string>>;
+  saveMapValues(values: Record<string, string>, id?: string): Promise<OperationResult>;
   listProxyInstances(): Promise<ProxyInstanceSummary[]>;
   selectProxyInstance(id: string): Promise<OperationResult & { instanceId?: string }>;
   createProxyInstance(): Promise<OperationResult & { instance?: ProxyInstanceSummary }>;
@@ -224,8 +277,14 @@ export interface ForwarderApi {
   selectEncryptionDirectory(kind: EncryptionDirectoryKind): Promise<OperationResult & { path?: string; canceled?: boolean; preferences?: EncryptionPreferences }>;
   getEncryptionPreferences(): Promise<EncryptionPreferences>;
   saveEncryptionPreferences(patch: EncryptionPreferencesPatch): Promise<OperationResult & { preferences?: EncryptionPreferences }>;
-  encryptDirectory(inputDir: string, outputDir: string, mode: EncryptionMode): Promise<EncryptionResult>;
+  encryptDirectory(inputDir: string, outputDir: string, mode: EncryptionMode, lowercaseOutput: boolean): Promise<EncryptionResult>;
+  cancelEncryption(): Promise<OperationResult>;
   onEncryptionProgress(listener: (progress: EncryptionProgress) => void): () => void;
+  selectDecryptionDirectory(kind: DecryptionDirectoryKind): Promise<OperationResult & { path?: string; canceled?: boolean; preferences?: DecryptionPreferences }>;
+  getDecryptionPreferences(): Promise<DecryptionPreferences>;
+  saveDecryptionPreferences(patch: DecryptionPreferencesPatch): Promise<OperationResult & { preferences?: DecryptionPreferences }>;
+  decryptDirectory(inputDir: string, outputDir: string): Promise<DecryptionResult>;
+  onDecryptionProgress(listener: (progress: DecryptionProgress) => void): () => void;
   sendRequest(request: ManualRequestConfig): Promise<ManualRequestResponse>;
   start(id?: string): Promise<RuntimeStatus>;
   stop(id?: string): Promise<RuntimeStatus>;
@@ -249,12 +308,20 @@ export const IPC_CHANNELS = {
   saveSharedValues: "values:shared:save",
   getLoginCache: "values:login:get",
   saveLoginCache: "values:login:save",
+  getMapValues: "values:map:get",
+  saveMapValues: "values:map:save",
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
   getEncryptionPreferences: "encryption:get-preferences",
   saveEncryptionPreferences: "encryption:save-preferences",
   encryptDirectory: "encryption:run",
+  cancelEncryption: "encryption:cancel",
   encryptionProgress: "encryption:progress",
+  selectDecryptionDirectory: "decryption:select-directory",
+  getDecryptionPreferences: "decryption:get-preferences",
+  saveDecryptionPreferences: "decryption:save-preferences",
+  decryptDirectory: "decryption:run",
+  decryptionProgress: "decryption:progress",
   sendRequest: "request:send",
   listProxyInstances: "proxy-instances:list",
   selectProxyInstance: "proxy-instances:select",

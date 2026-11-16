@@ -9,13 +9,14 @@ export type TztResponse = Record<string, unknown>;
 
 export interface TztCodec {
   rc4(data: Uint8Array, key: string): Buffer;
+  rc4Batch(data: Uint8Array[], key: string): Buffer[];
   encode(query: TztQuery, serial: number): Buffer;
   decode(frame: Uint8Array): TztResponse;
 }
 
 interface LegacyRequest {
-  method: "rc4" | "jsonltzt" | "tztljson";
-  data?: string;
+  method: "rc4" | "rc4batch" | "jsonltzt" | "tztljson";
+  data?: string | string[];
   key?: string;
   query?: TztQuery;
   handleSerialNo?: number;
@@ -23,15 +24,15 @@ interface LegacyRequest {
 }
 
 interface LegacyResponse {
-  data: string | unknown[];
+  data: string | string[] | unknown[];
 }
 
 const MAGIC = 0x07b7;
 const HEADER_SIZE = 6;
 const MAX_FRAME_SIZE = 1024 * 1024;
-const FIXED_FRAME = "b707250000006400000000020000003132009617e8f7adba12dc8067265b85505ab73a8b8040e9ccde05f0";
+const FIXED_FRAME = "b7072500000064000300000200000031320006416374696f6e0300000031303003666f6f03000000626172";
 const FIXED_FILE_RC4 = "7ad9f940a0c3d07a8f";
-const FIXED_X_RC4 = "c03aeaeaaaa119a7f4";
+const FIXED_X_RC4 = "32da9e2ceaea1a6e75";
 
 type LegacyRuntime = {
   invoke(request: LegacyRequest): LegacyResponse;
@@ -63,7 +64,11 @@ export function getNode16BinaryCandidates(
 ): string[] {
   const bundled = platform === "win32" && arch === "x64"
     ? [path.join(protocolDir, "node", "win-x64", "node.exe")]
-    : [];
+    : platform === "darwin" && arch === "x64"
+      ? [path.join(protocolDir, "node", "macos-x64", "node")]
+      : platform === "darwin" && arch === "arm64"
+        ? [path.join(protocolDir, "node", "macos-arm64", "node")]
+        : [];
   const external = [
     path.join(os.homedir(), ".nvm/versions/node/v16.13.0/bin/node"),
     env.NVM_BIN === undefined ? undefined : path.join(env.NVM_BIN, "node"),
@@ -98,7 +103,7 @@ function createLegacyRuntime(): LegacyRuntime {
         output = execFileSync(node, [helper], {
           input: JSON.stringify(request),
           encoding: "utf8",
-          maxBuffer: 10 * 1024 * 1024,
+          maxBuffer: 32 * 1024 * 1024,
           windowsHide: true,
         });
       } catch (error) {
@@ -123,6 +128,16 @@ function decodeBase64Response(response: LegacyResponse): Buffer {
   return Buffer.from(response.data, "base64");
 }
 
+function decodeBase64BatchResponse(response: LegacyResponse, expectedLength: number): Buffer[] {
+  if (!Array.isArray(response.data) || response.data.length !== expectedLength) {
+    throw new Error("TZT codec runtime incompatible: expected a base64 batch response");
+  }
+  return response.data.map((entry) => {
+    if (typeof entry !== "string") throw new Error("TZT codec runtime incompatible: expected a base64 batch response");
+    return Buffer.from(entry, "base64");
+  });
+}
+
 function assertFrameShape(frame: Uint8Array): Buffer {
   const bytes = Buffer.from(frame);
   if (bytes.length < HEADER_SIZE) throw new Error("Invalid TZT frame: truncated header");
@@ -136,8 +151,13 @@ function assertFrameShape(frame: Uint8Array): Buffer {
 function assertRuntimeCompatibility(runtime: LegacyRuntime): void {
   const fileResult = decodeBase64Response(runtime.invoke({ method: "rc4", data: Buffer.from("Plaintext").toString("base64"), key: "file" }));
   const xResult = decodeBase64Response(runtime.invoke({ method: "rc4", data: Buffer.from("Plaintext").toString("base64"), key: "x" }));
+  const batchResult = decodeBase64BatchResponse(runtime.invoke({
+    method: "rc4batch",
+    data: [Buffer.from("Plaintext").toString("base64")],
+    key: "file",
+  }), 1);
   const frame = decodeBase64Response(runtime.invoke({ method: "jsonltzt", query: { Action: "100", foo: "bar" }, handleSerialNo: 12 }));
-  if (fileResult.toString("hex") !== FIXED_FILE_RC4 || xResult.toString("hex") !== FIXED_X_RC4 || frame.toString("hex") !== FIXED_FRAME) {
+  if (fileResult.toString("hex") !== FIXED_FILE_RC4 || xResult.toString("hex") !== FIXED_X_RC4 || batchResult[0]?.toString("hex") !== FIXED_FILE_RC4 || frame.toString("hex") !== FIXED_FRAME) {
     throw new Error("TZT codec runtime incompatible: bundled legacy protocol failed its fixed regression vectors");
   }
 }
@@ -145,6 +165,8 @@ function assertRuntimeCompatibility(runtime: LegacyRuntime): void {
 function decodeLegacyResponse(value: unknown): TztResponse {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Invalid TZT response: expected an object");
   const result = { ...(value as Record<string, unknown>) };
+  delete result.zzkeyByte;
+  delete result.zzbytes;
   if (result.HandleSerialNo === undefined) throw new Error("Invalid TZT response: missing serial number");
   if (typeof result.HandleSerialNo !== "string" && typeof result.HandleSerialNo !== "number") throw new Error("Invalid TZT response: invalid serial number");
   return result;
@@ -160,6 +182,14 @@ export function createTztCodec(): TztCodec {
   return {
     rc4(data, key) {
       return decodeBase64Response(runtime.invoke({ method: "rc4", data: Buffer.from(data).toString("base64"), key }));
+    },
+    rc4Batch(data, key) {
+      if (data.length === 0) return [];
+      return decodeBase64BatchResponse(runtime.invoke({
+        method: "rc4batch",
+        data: data.map((entry) => Buffer.from(entry).toString("base64")),
+        key,
+      }), data.length);
     },
     encode(query, serial) {
       if (!Number.isSafeInteger(serial) || serial < 0 || serial > 0xffffffff) throw new Error(`Invalid TZT serial number: ${serial}`);

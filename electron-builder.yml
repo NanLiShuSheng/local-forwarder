@@ -11,12 +11,12 @@ extraResources:
     filter:
       - "**/*"
 publish:
-  provider: github
-  owner: NanLiShuSheng
-  repo: local-forwarder
-  releaseType: release
+  provider: generic
+  url: https://www.finbr.asia/local-forwarder/
 afterSign: scripts/notarize.mjs
+afterPack: scripts/trim-protocol-node-runtimes.mjs
 mac:
+  icon: resources/icon.icns
   target:
     - dmg
     - zip
@@ -28,4 +28,6 @@ win:
     - nsis
   icon: resources/icon.ico
 nsis:
+  oneClick: true
+  perMachine: false
   artifactName: Local-Forwarder-Setup-${version}.${ext}

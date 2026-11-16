@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>请求模块 · 登录缓存提醒原型</title>
+  <link rel="stylesheet" href="../../src/renderer/styles.css" />
+  <style>
+    * { box-sizing: border-box; }
+    html { color-scheme: dark; }
+    body {
+      margin: 0;
+      min-width: 1500px;
+      color: #e9eef7;
+      background:
+        radial-gradient(900px 380px at 78% -180px, rgb(36 60 97 / 36%), transparent 68%),
+        radial-gradient(780px 340px at 18% -220px, rgb(121 226 192 / 8%), transparent 62%),
+        #080d16;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    h1, h2, h3, p { margin: 0; }
+    .review { width: 1500px; margin: 0 auto; padding: 42px 40px 54px; }
+    .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; margin-bottom: 28px; }
+    .eyebrow { color: #8fc7ff; font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    .hero h1 { margin-top: 9px; color: #f4f8ff; font-size: 32px; line-height: 1.15; letter-spacing: -.035em; }
+    .lede { max-width: 900px; margin-top: 12px; color: #a8b9cf; font-size: 13px; line-height: 1.75; }
+    .lede strong { color: #e9eef7; }
+    .lede code, .option-copy code, .mock-app code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .lede code { border: 1px solid #2a3b55; border-radius: 5px; padding: 2px 6px; color: #b8dcff; background: #152840; }
+    .scope-card { width: 300px; flex: 0 0 300px; border: 1px solid #2a3b55; border-radius: 14px; padding: 13px 15px; background: rgb(17 29 48 / 78%); box-shadow: 0 18px 40px rgb(0 0 0 / 22%); }
+    .scope-card span { display: block; color: #91a5bf; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .scope-card strong { display: block; margin-top: 6px; color: #f4f8ff; font-size: 14px; }
+    .scope-card small { display: block; margin-top: 5px; color: #9fb2ca; font-size: 11px; line-height: 1.6; }
+    .options { display: grid; gap: 24px; }
+    .option-row { display: grid; grid-template-columns: 218px minmax(0, 1fr); gap: 22px; align-items: start; }
+    .option-copy { padding: 10px 0 0 2px; }
+    .option-index { display: flex; align-items: center; gap: 9px; color: #91a5bf; font: 700 11px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; }
+    .option-index::before { content: ""; width: 26px; height: 1px; background: #3b5471; }
+    .option-copy h2 { margin-top: 12px; color: #f4f8ff; font-size: 18px; letter-spacing: -.02em; }
+    .recommended-tag { display: inline-flex; margin-top: 10px; border: 1px solid #2f725f; border-radius: 99px; padding: 3px 9px; color: #8ae9cc; background: rgb(121 226 192 / 9%); font-size: 10px; font-weight: 800; }
+    .option-copy > p { margin-top: 11px; color: #9fb2ca; font-size: 12px; line-height: 1.72; }
+    .tradeoff { display: grid; gap: 7px; margin-top: 14px; padding-top: 13px; border-top: 1px solid #223146; }
+    .tradeoff span { display: flex; gap: 7px; color: #91a5bf; font-size: 11px; line-height: 1.6; }
+    .tradeoff b { color: #d5e1ef; font-weight: 700; }
+    .tradeoff .good { color: #79e2c0; }
+    .tradeoff .risk { color: #f3c67f; }
+    .mock-shell { overflow: hidden; border: 1px solid #26344b; border-radius: 16px; background: #0d1421; box-shadow: 0 20px 46px rgb(0 0 0 / 26%); }
+    .mock-bar { display: flex; height: 34px; align-items: center; gap: 7px; border-bottom: 1px solid #223146; padding: 0 12px; background: #101a2b; }
+    .mock-dot { width: 8px; height: 8px; border-radius: 50%; background: #40526b; }
+    .mock-dot:nth-child(1) { background: #7a4d59; }
+    .mock-dot:nth-child(2) { background: #75623f; }
+    .mock-dot:nth-child(3) { background: #356b60; }
+    .mock-title { margin-left: 5px; color: #657993; font-size: 10px; }
+    .mock-app { height: 470px; overflow: hidden; }
+    .mock-app .app-shell { height: 470px; min-height: 0; }
+    .mock-app .sidebar { width: 222px; flex-basis: 222px; height: 470px; padding: 17px 11px 14px; }
+    .mock-app .proxy-instance-sidebar-heading { margin: 0 2px 9px 5px; }
+    .mock-app .proxy-instance-sidebar-bulk-actions { gap: 4px; }
+    .mock-app .proxy-instance-sidebar-action { min-width: 0; height: 28px; gap: 3px; padding: 0 6px; font-size: 9px; }
+    .mock-app .proxy-instance-sidebar-list { grid-auto-rows: 58px; gap: 5px; max-height: 179px; }
+    .mock-app .proxy-instance-sidebar-card-main { padding: 8px 27px 8px 9px; }
+    .mock-app .proxy-instance-sidebar-name { font-size: 11px; }
+    .mock-app .proxy-instance-sidebar-title code { min-width: 30px; font-size: 9px; }
+    .mock-app .proxy-instance-sidebar-target { margin-top: 5px; }
+    .mock-app .proxy-instance-sidebar-target code { font-size: 8px; }
+    .mock-app .proxy-instance-sidebar-status { padding: 1px 4px; font-size: 8px; }
+    .mock-app .sidebar-nav { gap: 1px; margin-top: 10px; padding-top: 9px; }
+    .mock-app .sidebar-nav::before { height: 2px; }
+    .mock-app .sidebar-nav button { gap: 8px; padding: 7px 8px; font-size: 11px; }
+    .mock-app .sidebar-nav-icon { width: 14px; height: 14px; flex-basis: 14px; }
+    .mock-app .content { height: 470px; padding: 22px 28px 34px; overflow: hidden; }
+    .mock-app .request-panel { max-width: none; padding: 15px; }
+    .mock-app .request-endpoint { grid-template-columns: minmax(0, 1fr) 105px 190px; gap: 9px; margin-bottom: 12px; }
+    .mock-app .request-endpoint label { gap: 5px; font-size: 10px; }
+    .mock-app .request-endpoint input { border-radius: 6px; padding: 7px 8px; font-size: 11px; }
+    .mock-app .select-control { border-radius: 6px; padding: 7px 30px 7px 8px; font-size: 11px; }
+    .mock-app .request-url { grid-column: 1 / -1; min-height: 31px; border-radius: 6px; font-size: 10px; }
+    .mock-app .request-workspace { gap: 11px; }
+    .mock-app .request-card { border-radius: 10px; padding: 12px; }
+    .mock-app .request-card-heading { margin-bottom: 9px; }
+    .mock-app .request-card-heading h3 { font-size: 13px; }
+    .mock-app .eyebrow { margin-bottom: 4px; font-size: 8px; }
+    .mock-app .request-card-heading > span { font-size: 9px; }
+    .mock-app .request-input { min-height: 194px; padding: 9px 10px; border-radius: 8px; font-size: 10px; line-height: 1.65; }
+    .mock-app textarea.request-input { color: #b7c8dc; background: #111e32; border: 1px solid #344862; }
+    .mock-app .request-hint { margin-top: 7px; font-size: 9px; }
+    .mock-app .request-hint code { padding: 1px 4px; }
+    .mock-app .request-actions { margin-top: 9px; }
+    .mock-app .primary-button, .mock-app .secondary-button { border-radius: 6px; padding: 6px 9px; font-size: 10px; }
+    .mock-app .response-actions { gap: 8px; }
+    .mock-app .response-duration { font-size: 9px; }
+    .mock-app .response-copy-actions { gap: 5px; }
+    .mock-app .response-copy-actions small { font-size: 8px; }
+    .mock-app .response-code { margin-bottom: 7px; padding: 2px 5px; font-size: 9px; }
+    .mock-app .response-body { min-height: 194px; border-radius: 8px; padding: 9px 10px; font-size: 10px; line-height: 1.65; }
+
+    .login-cache-notice {
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr) auto;
+      align-items: start;
+      gap: 11px;
+      margin-bottom: 14px;
+      border: 1px solid #2f577d;
+      border-left: 3px solid #8fc7ff;
+      border-radius: 10px;
+      padding: 10px 12px 10px 10px;
+      background: linear-gradient(90deg, rgb(21 40 64 / 96%), rgb(17 31 50 / 84%));
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / 2%);
+    }
+    .login-cache-notice-icon {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      border: 1px solid rgb(143 199 255 / 28%);
+      border-radius: 9px;
+      color: #8fc7ff;
+      background: rgb(143 199 255 / 10%);
+    }
+    .login-cache-notice-icon svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+    .login-cache-notice strong { display: block; color: #e9f3ff; font-size: 11px; letter-spacing: .01em; }
+    .login-cache-notice p { margin-top: 3px; color: #a8bfd8; font-size: 9.5px; line-height: 1.6; }
+    .login-cache-notice p code { border: 1px solid #314b69; border-radius: 4px; padding: 0 4px; color: #b8dcff; background: rgb(143 199 255 / 7%); font: 8.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .login-cache-notice-tag { align-self: center; border: 1px solid #314b69; border-radius: 99px; padding: 3px 7px; color: #8fc7ff; background: rgb(143 199 255 / 7%); font-size: 8px; font-weight: 700; white-space: nowrap; }
+
+    .login-cache-inline { display: flex; align-items: flex-start; gap: 7px; margin-top: 8px; border-top: 1px solid #26374e; padding-top: 8px; color: #91a5bf; font-size: 9px; line-height: 1.6; }
+    .login-cache-inline-icon { flex: 0 0 auto; color: #8fc7ff; font-size: 10px; line-height: 1.4; }
+    .login-cache-inline strong { color: #c6ddf5; font-weight: 700; }
+    .login-cache-inline code { color: #b8dcff; font: 8.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .login-request-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #2f725f; border-radius: 99px; padding: 2px 7px; color: #8ae9cc; background: rgb(121 226 192 / 8%); font-size: 8px; font-weight: 700; white-space: nowrap; }
+    .login-request-chip::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: #79e2c0; box-shadow: 0 0 0 3px rgb(121 226 192 / 8%); }
+    .login-context-note { display: flex; align-items: center; gap: 7px; margin: 9px 0 0; color: #99d9c8; font-size: 9px; line-height: 1.5; }
+    .login-context-note span { display: grid; width: 15px; height: 15px; flex: 0 0 15px; place-items: center; border: 1px solid #2f725f; border-radius: 50%; color: #79e2c0; font-size: 8px; }
+    .request-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 9px; }
+    .request-card-actions .request-actions { margin-top: 0; }
+
+    .mock-app .login-cache-notice { margin-bottom: 10px; }
+    .mock-app .login-cache-notice-icon { width: 28px; height: 28px; }
+    .mock-app .login-cache-notice strong { font-size: 10px; }
+    .mock-app .login-cache-notice p { font-size: 8.5px; }
+    .mock-app .login-cache-notice-tag { font-size: 7.5px; padding: 2px 6px; }
+    .mock-app .login-cache-inline { font-size: 8px; }
+    .mock-app .login-cache-inline code { font-size: 7.5px; }
+    .mock-app .login-request-chip { font-size: 7.5px; padding: 1px 6px; }
+    .mock-app .login-context-note { margin-top: 6px; font-size: 8px; }
+    .mock-app .login-context-note span { width: 13px; height: 13px; flex-basis: 13px; }
+
+    .review-note { display: flex; align-items: flex-start; gap: 10px; margin-top: 26px; border: 1px solid #26344b; border-radius: 12px; padding: 13px 15px; color: #a8b9cf; background: rgb(17 29 48 / 66%); font-size: 11.5px; line-height: 1.7; }
+    .review-note > span { display: grid; width: 19px; height: 19px; flex: 0 0 19px; place-items: center; border: 1px solid #3b5471; border-radius: 50%; color: #8fc7ff; font-size: 11px; }
+    .review-note strong { color: #e9eef7; }
+    .review-note code { color: #b8dcff; font: 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .option-row.target-a .login-cache-notice { outline: 1px solid rgb(143 199 255 / 28%); outline-offset: 2px; }
+    .option-row.target-b .login-cache-inline { outline: 1px solid rgb(143 199 255 / 24%); outline-offset: 2px; border-radius: 4px; }
+    .option-row.target-c .login-request-chip { outline: 1px solid rgb(121 226 192 / 24%); outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <div class="review">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Request · Login Cache Reminder</p>
+        <h1>请求模块 · 登录缓存提醒原型</h1>
+        <p class="lede">提醒只针对登录请求：<code>Action=100 / 104 / 105</code> 成功后，应答键值会自动写入<strong>当前代理</strong>的「登录缓存」，普通请求不受影响。下面比较 3 种提示位置。</p>
+      </div>
+      <aside class="scope-card">
+        <span>提示文案</span>
+        <strong>登录应答会自动缓存</strong>
+        <small>信息提示，不使用警告色；不提供关闭按钮，避免关键行为被永久隐藏。</small>
+      </aside>
+    </header>
+
+    <div class="options">
+      <article class="option-row target-a">
+        <div class="option-copy">
+          <div class="option-index">01 / RECOMMENDED</div>
+          <h2>页面顶部提示条</h2>
+          <span class="recommended-tag">推荐</span>
+          <p>放在请求面板最上方，打开页面即可看到。信息层级清楚，最符合“主动告知用户”的目标。</p>
+          <div class="tradeoff">
+            <span><b class="good">优点</b> 可见性最高，和输入/发送没有耦合。</span>
+            <span><b class="risk">代价</b> 占用约 60px 首屏空间。</span>
+          </div>
+        </div>
+        <div class="mock-shell">
+          <div class="mock-bar"><i class="mock-dot"></i><i class="mock-dot"></i><i class="mock-dot"></i><span class="mock-title">Local Forwarder · 请求</span></div>
+          <div class="mock-app">
+            <main class="app-shell" data-theme="dark">
+              <aside class="sidebar">
+                <section class="proxy-instance-sidebar">
+                  <div class="proxy-instance-sidebar-heading">
+                    <div class="proxy-instance-sidebar-bulk-actions"><button class="proxy-instance-sidebar-action start">一键开启</button><button class="proxy-instance-sidebar-action stop">一键关闭</button></div>
+                    <button class="proxy-instance-sidebar-action create">＋ 新增</button>
+                  </div>
+                  <div class="proxy-instance-sidebar-list">
+                    <div class="proxy-instance-sidebar-card selected"><button class="proxy-instance-sidebar-card-main"><span class="proxy-instance-sidebar-title"><span class="status-dot running"></span><span class="proxy-instance-sidebar-name">默认代理</span><span class="proxy-instance-sidebar-status running">运行中</span><code>:18080</code></span><span class="proxy-instance-sidebar-target"><code>tcp://60.12.9.58:7778</code></span></button></div>
+                    <div class="proxy-instance-sidebar-card"><button class="proxy-instance-sidebar-card-main"><span class="proxy-instance-sidebar-title"><span class="status-dot"></span><span class="proxy-instance-sidebar-name">测试代理</span><span class="proxy-instance-sidebar-status">已停止</span><code>:18081</code></span><span class="proxy-instance-sidebar-target"><code>tcp://123.103.83.82:6064</code></span></button></div>
+                  </div>
+                </section>
+                <nav class="sidebar-nav" aria-label="功能导航">
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M4 13a8 8 0 1 1 16 0"/><path d="M12 13l3.5-3.5"/><path d="M7 17h10"/></svg><span>概览</span></button>
+                  <button class="active"><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M9 5h10v10"/></svg><span>请求</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3"/><path d="M5 10h14v10H5z"/><path d="M12 14v2"/></svg><span>加密</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M8 4c-2 0-3 1-3 3v2c0 2-1 3-2 3 1 0 2 1 2 3v2c0 2 1 3 3 3"/><path d="M16 4c2 0 3 1 3 3v2c0 2 1 3 2 3-1 0-2 1-2 3v2c0 2-1 3-3 3"/></svg><span>JSON 可视化</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M5 6h14"/><path d="M5 12h14"/><path d="M5 18h14"/></svg><span>日志</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h7"/></svg><span>字符串</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg><span>本地变量</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M5 6c0-1.1 3.1-2 7-2s7 .9 7 2-3.1 2-7 2-7-.9-7-2Z"/><path d="M5 6v6c0 1.1 3.1 2 7 2s7-.9 7-2V6"/><path d="M5 12v6c0 1.1 3.1 2 7 2s7-.9 7-2v-6"/></svg><span>登录缓存</span></button>
+                </nav>
+              </aside>
+              <section class="content request-page-content">
+                <section class="panel request-panel">
+                  <div class="login-cache-notice" role="note">
+                    <div class="login-cache-notice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 6c0-1.1 3.1-2 7-2s7 .9 7 2-3.1 2-7 2-7-.9-7-2Z"/><path d="M5 6v6c0 1.1 3.1 2 7 2s7-.9 7-2V6"/><path d="M5 12v6c0 1.1 3.1 2 7 2s7-.9 7-2v-6"/></svg></div>
+                    <div><strong>登录应答会自动缓存</strong><p><code>Action = 100 / 104 / 105</code> 的请求成功后，应答中的键值会自动写入当前代理的「登录缓存」，无需手动保存。普通请求不会触发缓存。</p></div>
+                    <span class="login-cache-notice-tag">当前代理</span>
+                  </div>
+                  <div class="request-endpoint">
+                    <label>目标 IP<input value="127.0.0.1" /></label>
+                    <label>端口<input value="8080" /></label>
+                    <label>协议<select class="select-control"><option>TZT TCP（原生协议）</option></select></label>
+                    <div class="request-url"><span>tcp://</span><strong>127.0.0.1:8080</strong></div>
+                  </div>
+                  <div class="request-workspace">
+                    <section class="request-card">
+                      <div class="request-card-heading"><div><p class="eyebrow">Request</p><h3>请求参数</h3></div><span>3 个参数</span></div>
+                      <textarea class="request-input" rows="8" aria-label="请求参数">Action=100
+account=600554432
+password=••••••••</textarea>
+                      <p class="request-hint"><code>键=值</code>，每行一个参数；分号开头的行是注释，重复键取最后一个值。</p>
+                      <div class="request-actions"><button class="primary-button">发送请求</button></div>
+                    </section>
+                    <section class="request-card response-card">
+                      <div class="request-card-heading"><div><p class="eyebrow">Response</p><h3>应答内容</h3></div><div class="response-actions"><span class="response-duration">耗时 48 ms</span><div class="response-copy-actions"><button class="secondary-button">复制应答数据</button></div></div></div>
+                      <div class="response-code">TZT TCP</div>
+                      <pre class="response-body">Action = 100
+ERRORNO = 0
+Token = 9fa2...c41e
+SessionNo = 20261116
+UserCode = 600554432</pre>
+                    </section>
+                  </div>
+                </section>
+              </section>
+            </main>
+          </div>
+        </div>
+      </article>
+
+      <article class="option-row target-b">
+        <div class="option-copy">
+          <div class="option-index">02 / INLINE</div>
+          <h2>请求卡片内提示</h2>
+          <p>放在请求参数说明下方，和“发送请求”这一动作直接关联，页面更紧凑。</p>
+          <div class="tradeoff">
+            <span><b class="good">优点</b> 不额外占用页面顶部空间，操作路径更连贯。</span>
+            <span><b class="risk">代价</b> 视觉权重低，用户可能直接滚到按钮而跳过。</span>
+          </div>
+        </div>
+        <div class="mock-shell">
+          <div class="mock-bar"><i class="mock-dot"></i><i class="mock-dot"></i><i class="mock-dot"></i><span class="mock-title">Local Forwarder · 请求</span></div>
+          <div class="mock-app">
+            <main class="app-shell" data-theme="dark">
+              <aside class="sidebar">
+                <section class="proxy-instance-sidebar">
+                  <div class="proxy-instance-sidebar-heading">
+                    <div class="proxy-instance-sidebar-bulk-actions"><button class="proxy-instance-sidebar-action start">一键开启</button><button class="proxy-instance-sidebar-action stop">一键关闭</button></div>
+                    <button class="proxy-instance-sidebar-action create">＋ 新增</button>
+                  </div>
+                  <div class="proxy-instance-sidebar-list">
+                    <div class="proxy-instance-sidebar-card selected"><button class="proxy-instance-sidebar-card-main"><span class="proxy-instance-sidebar-title"><span class="status-dot running"></span><span class="proxy-instance-sidebar-name">默认代理</span><span class="proxy-instance-sidebar-status running">运行中</span><code>:18080</code></span><span class="proxy-instance-sidebar-target"><code>tcp://60.12.9.58:7778</code></span></button></div>
+                    <div class="proxy-instance-sidebar-card"><button class="proxy-instance-sidebar-card-main"><span class="proxy-instance-sidebar-title"><span class="status-dot"></span><span class="proxy-instance-sidebar-name">测试代理</span><span class="proxy-instance-sidebar-status">已停止</span><code>:18081</code></span><span class="proxy-instance-sidebar-target"><code>tcp://123.103.83.82:6064</code></span></button></div>
+                  </div>
+                </section>
+                <nav class="sidebar-nav" aria-label="功能导航">
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M4 13a8 8 0 1 1 16 0"/><path d="M12 13l3.5-3.5"/><path d="M7 17h10"/></svg><span>概览</span></button>
+                  <button class="active"><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M9 5h10v10"/></svg><span>请求</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3"/><path d="M5 10h14v10H5z"/><path d="M12 14v2"/></svg><span>加密</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M8 4c-2 0-3 1-3 3v2c0 2-1 3-2 3 1 0 2 1 2 3v2c0 2 1 3 3 3"/><path d="M16 4c2 0 3 1 3 3v2c0 2 1 3 2 3-1 0-2 1-2 3v2c0 2-1 3-3 3"/></svg><span>JSON 可视化</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M5 6h14"/><path d="M5 12h14"/><path d="M5 18h14"/></svg><span>日志</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h7"/></svg><span>字符串</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg><span>本地变量</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M5 6c0-1.1 3.1-2 7-2s7 .9 7 2-3.1 2-7 2-7-.9-7-2Z"/><path d="M5 6v6c0 1.1 3.1 2 7 2s7-.9 7-2V6"/><path d="M5 12v6c0 1.1 3.1 2 7 2s7-.9 7-2v-6"/></svg><span>登录缓存</span></button>
+                </nav>
+              </aside>
+              <section class="content request-page-content">
+                <section class="panel request-panel">
+                  <div class="request-endpoint">
+                    <label>目标 IP<input value="127.0.0.1" /></label>
+                    <label>端口<input value="8080" /></label>
+                    <label>协议<select class="select-control"><option>TZT TCP（原生协议）</option></select></label>
+                    <div class="request-url"><span>tcp://</span><strong>127.0.0.1:8080</strong></div>
+                  </div>
+                  <div class="request-workspace">
+                    <section class="request-card">
+                      <div class="request-card-heading"><div><p class="eyebrow">Request</p><h3>请求参数</h3></div><span>3 个参数</span></div>
+                      <textarea class="request-input" rows="8" aria-label="请求参数">Action=100
+account=600554432
+password=••••••••</textarea>
+                      <p class="request-hint"><code>键=值</code>，每行一个参数；分号开头的行是注释，重复键取最后一个值。</p>
+                      <div class="login-cache-inline" role="note"><span class="login-cache-inline-icon">◉</span><span><strong>登录请求会自动缓存应答值：</strong><code>Action=100 / 104 / 105</code> 成功后，应答键值写入当前代理的「登录缓存」，无需手动保存。</span></div>
+                      <div class="request-actions"><button class="primary-button">发送请求</button></div>
+                    </section>
+                    <section class="request-card response-card">
+                      <div class="request-card-heading"><div><p class="eyebrow">Response</p><h3>应答内容</h3></div><div class="response-actions"><span class="response-duration">耗时 48 ms</span><div class="response-copy-actions"><button class="secondary-button">复制应答数据</button></div></div></div>
+                      <div class="response-code">TZT TCP</div>
+                      <pre class="response-body">Action = 100
+ERRORNO = 0
+Token = 9fa2...c41e
+SessionNo = 20261116
+UserCode = 600554432</pre>
+                    </section>
+                  </div>
+                </section>
+              </section>
+            </main>
+          </div>
+        </div>
+      </article>
+
+      <article class="option-row target-c">
+        <div class="option-copy">
+          <div class="option-index">03 / CONTEXTUAL</div>
+          <h2>智能触发提示</h2>
+          <p>检测到登录 Action 后才出现，并在发送按钮旁提示本次请求会更新缓存；噪音最低。</p>
+          <div class="tradeoff">
+            <span><b class="good">优点</b> 提示时机最贴近实际行为，不干扰普通请求。</span>
+            <span><b class="risk">代价</b> 首次使用无法预知；实现需新增 Action 识别逻辑。</span>
+          </div>
+        </div>
+        <div class="mock-shell">
+          <div class="mock-bar"><i class="mock-dot"></i><i class="mock-dot"></i><i class="mock-dot"></i><span class="mock-title">Local Forwarder · 请求</span></div>
+          <div class="mock-app">
+            <main class="app-shell" data-theme="dark">
+              <aside class="sidebar">
+                <section class="proxy-instance-sidebar">
+                  <div class="proxy-instance-sidebar-heading">
+                    <div class="proxy-instance-sidebar-bulk-actions"><button class="proxy-instance-sidebar-action start">一键开启</button><button class="proxy-instance-sidebar-action stop">一键关闭</button></div>
+                    <button class="proxy-instance-sidebar-action create">＋ 新增</button>
+                  </div>
+                  <div class="proxy-instance-sidebar-list">
+                    <div class="proxy-instance-sidebar-card selected"><button class="proxy-instance-sidebar-card-main"><span class="proxy-instance-sidebar-title"><span class="status-dot running"></span><span class="proxy-instance-sidebar-name">默认代理</span><span class="proxy-instance-sidebar-status running">运行中</span><code>:18080</code></span><span class="proxy-instance-sidebar-target"><code>tcp://60.12.9.58:7778</code></span></button></div>
+                    <div class="proxy-instance-sidebar-card"><button class="proxy-instance-sidebar-card-main"><span class="proxy-instance-sidebar-title"><span class="status-dot"></span><span class="proxy-instance-sidebar-name">测试代理</span><span class="proxy-instance-sidebar-status">已停止</span><code>:18081</code></span><span class="proxy-instance-sidebar-target"><code>tcp://123.103.83.82:6064</code></span></button></div>
+                  </div>
+                </section>
+                <nav class="sidebar-nav" aria-label="功能导航">
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M4 13a8 8 0 1 1 16 0"/><path d="M12 13l3.5-3.5"/><path d="M7 17h10"/></svg><span>概览</span></button>
+                  <button class="active"><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M5 19 19 5"/><path d="M9 5h10v10"/></svg><span>请求</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3"/><path d="M5 10h14v10H5z"/><path d="M12 14v2"/></svg><span>加密</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M8 4c-2 0-3 1-3 3v2c0 2-1 3-2 3 1 0 2 1 2 3v2c0 2 1 3 3 3"/><path d="M16 4c2 0 3 1 3 3v2c0 2 1 3 2 3-1 0-2 1-2 3v2c0 2-1 3-3 3"/></svg><span>JSON 可视化</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M5 6h14"/><path d="M5 12h14"/><path d="M5 18h14"/></svg><span>日志</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h7"/></svg><span>字符串</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8"/><path d="M8 12h8"/><path d="M8 16h5"/></svg><span>本地变量</span></button>
+                  <button><svg class="sidebar-nav-icon" viewBox="0 0 24 24"><path d="M5 6c0-1.1 3.1-2 7-2s7 .9 7 2-3.1 2-7 2-7-.9-7-2Z"/><path d="M5 6v6c0 1.1 3.1 2 7 2s7-.9 7-2V6"/><path d="M5 12v6c0 1.1 3.1 2 7 2s7-.9 7-2v-6"/></svg><span>登录缓存</span></button>
+                </nav>
+              </aside>
+              <section class="content request-page-content">
+                <section class="panel request-panel">
+                  <div class="request-endpoint">
+                    <label>目标 IP<input value="127.0.0.1" /></label>
+                    <label>端口<input value="8080" /></label>
+                    <label>协议<select class="select-control"><option>TZT TCP（原生协议）</option></select></label>
+                    <div class="request-url"><span>tcp://</span><strong>127.0.0.1:8080</strong></div>
+                  </div>
+                  <div class="request-workspace">
+                    <section class="request-card">
+                      <div class="request-card-heading"><div><p class="eyebrow">Request</p><h3>请求参数</h3></div><div class="request-card-heading-side"><span class="login-request-chip">登录请求 · 自动缓存</span></div></div>
+                      <textarea class="request-input" rows="8" aria-label="请求参数">Action=100
+account=600554432
+password=••••••••</textarea>
+                      <p class="request-hint"><code>键=值</code>，每行一个参数；分号开头的行是注释，重复键取最后一个值。</p>
+                      <div class="request-card-actions">
+                        <p class="login-context-note"><span>i</span>发送成功后，应答值将自动写入当前代理的「登录缓存」。</p>
+                        <div class="request-actions"><button class="primary-button">发送请求</button></div>
+                      </div>
+                    </section>
+                    <section class="request-card response-card">
+                      <div class="request-card-heading"><div><p class="eyebrow">Response</p><h3>应答内容</h3></div><div class="response-actions"><span class="response-duration">耗时 48 ms</span><div class="response-copy-actions"><button class="secondary-button">复制应答数据</button></div></div></div>
+                      <div class="response-code">TZT TCP</div>
+                      <pre class="response-body">Action = 100
+ERRORNO = 0
+Token = 9fa2...c41e
+SessionNo = 20261116
+UserCode = 600554432</pre>
+                    </section>
+                  </div>
+                </section>
+              </section>
+            </main>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <div class="review-note"><span>i</span><div><strong>行为说明：</strong>缓存仍由主进程在请求成功后执行，提示只负责告知用户，不新增“保存”按钮；登录缓存继续归属于当前选中的代理实例。推荐方案可补充 <code>role="note"</code>，并使用信息色而非警告色。</div></div>
+  </div>
+</body>
+</html>

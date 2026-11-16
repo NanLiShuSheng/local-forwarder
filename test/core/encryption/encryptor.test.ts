@@ -1,11 +1,24 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { collectFiles, encryptDirectory } from "../../../src/core/encryption/encryptor";
+import { collectFiles, encryptDirectory, planEncryptionOutputPaths } from "../../../src/core/encryption/encryptor";
 
 const expectedRelativePaths = ["app.js", path.join("dist", "bundle.js"), path.join("nested", "page.html")].sort();
+
+async function waitForFile(filePath: string): Promise<void> {
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    try {
+      await access(filePath);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw new Error(`Timed out waiting for ${filePath}`);
+}
 
 async function makeFixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-encryption-test-"));
@@ -64,6 +77,71 @@ test("encryptDirectory preserves relative paths and appends .d after encoding", 
   }
 });
 
+test("encryptDirectory lowercases every output directory and file segment when requested", async () => {
+  const fixture = await makeFixture();
+  try {
+    await mkdir(path.join(fixture.inputDir, "Assets", "Images"), { recursive: true });
+    await writeFile(path.join(fixture.inputDir, "Assets", "Images", "Logo.PNG"), "logo");
+
+    const result = await encryptDirectory({ ...fixture, lowercaseOutput: true });
+    const mixedCaseFile = result.files.find((file) => file.relativePath === path.join("Assets", "Images", "Logo.PNG"));
+
+    assert.equal(result.totalFiles, 4);
+    assert.notEqual(mixedCaseFile, undefined);
+    assert.ok(mixedCaseFile!.outputPath.endsWith(path.join("assets", "images", "logo.png.d")));
+    assert.equal(await readFile(mixedCaseFile!.outputPath, "utf8"), "logo");
+    assert.deepEqual(await readdir(path.join(fixture.outputDir, "assets", "images")), ["logo.png.d"]);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("lowercase output planning rejects directory and file paths that collide after lowercasing", () => {
+  assert.deepEqual(planEncryptionOutputPaths([path.join("Docs", "Guide", "ReadMe.TXT")], true), [{
+    relativePath: path.join("Docs", "Guide", "ReadMe.TXT"),
+    outputRelativePath: path.join("docs", "guide", "readme.txt"),
+  }]);
+  assert.throws(
+    () => planEncryptionOutputPaths([path.join("Docs", "ReadMe.TXT"), path.join("docs", "readme.txt")], true),
+    /小写文件输出路径冲突/,
+  );
+});
+
+test("encryptDirectory normalizes the actual casing of existing output directories", async () => {
+  const fixture = await makeFixture();
+  try {
+    await mkdir(path.join(fixture.inputDir, "Assets", "Images"), { recursive: true });
+    await mkdir(path.join(fixture.outputDir, "Assets", "Images"), { recursive: true });
+    await writeFile(path.join(fixture.inputDir, "Assets", "Images", "Logo.PNG"), "logo");
+
+    await encryptDirectory({ ...fixture, lowercaseOutput: true });
+
+    const outputEntries = await readdir(fixture.outputDir);
+    assert.ok(outputEntries.includes("assets"));
+    assert.ok(!outputEntries.includes("Assets"));
+    assert.deepEqual(await readdir(path.join(fixture.outputDir, "assets", "images")), ["logo.png.d"]);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("encryptDirectory normalizes the actual casing of existing output files", async () => {
+  const fixture = await makeFixture();
+  try {
+    await mkdir(path.join(fixture.inputDir, "Assets", "Images"), { recursive: true });
+    await mkdir(path.join(fixture.outputDir, "Assets", "Images"), { recursive: true });
+    await writeFile(path.join(fixture.inputDir, "Assets", "Images", "Logo.PNG"), "logo");
+    await writeFile(path.join(fixture.outputDir, "Assets", "Images", "Logo.PNG.d"), "old");
+
+    await encryptDirectory({ ...fixture, lowercaseOutput: true });
+
+    assert.deepEqual(await readdir(path.join(fixture.outputDir, "assets", "images")), ["logo.png.d"]);
+    assert.equal(await readFile(path.join(fixture.outputDir, "assets", "images", "logo.png.d"), "utf8"), "logo");
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("encryptDirectory reports scan and per-file progress while it runs", async () => {
   const fixture = await makeFixture();
   try {
@@ -86,6 +164,41 @@ test("encryptDirectory always processes every eligible file and cleans temporary
     await encryptDirectory({ ...fixture });
     await encryptDirectory({ ...fixture });
     assert.equal((await readFile(fixture.counterPath, "utf8")).trim().split("\n").length, 6);
+    assert.deepEqual(await readdir(fixture.tempRoot), []);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("encryptDirectory aborts the active encoder and stops processing remaining files", async () => {
+  const fixture = await makeFixture();
+  try {
+    const startedPath = path.join(fixture.root, "encoder-started");
+    const waitingEncoder = path.join(fixture.root, "waiting-encoder.mjs");
+    await writeFile(waitingEncoder, [
+      'import { appendFile, copyFile, writeFile } from "node:fs/promises";',
+      "const counterPath = process.argv[2];",
+      "const sourcePath = process.argv[3];",
+      'await appendFile(counterPath, "called\\n");',
+      `await writeFile(${JSON.stringify(startedPath)}, "started");`,
+      "await new Promise((resolve) => setTimeout(resolve, 5000));",
+      'await copyFile(sourcePath, sourcePath + ".d");',
+    ].join("\n"));
+    const controller = new AbortController();
+    const outcome = encryptDirectory({
+      ...fixture,
+      encoderPath: process.execPath,
+      encoderArgs: [waitingEncoder, fixture.counterPath],
+      signal: controller.signal,
+    }).then(() => undefined, (error: unknown) => error);
+
+    await waitForFile(startedPath);
+    controller.abort();
+    const error = await outcome;
+    assert.ok(error instanceof Error);
+    assert.equal(error.name, "AbortError");
+    assert.equal((await readFile(fixture.counterPath, "utf8")).trim(), "called");
+    assert.deepEqual(await readdir(fixture.outputDir), []);
     assert.deepEqual(await readdir(fixture.tempRoot), []);
   } finally {
     await rm(fixture.root, { recursive: true, force: true });

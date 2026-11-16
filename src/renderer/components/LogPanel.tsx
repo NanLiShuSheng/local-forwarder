@@ -1,10 +1,17 @@
 import { useMemo, useState } from "react";
 import type { LogEntry } from "../../shared/contracts";
-import { parseLogRequestParams } from "../../shared/log-details";
+import { parseLogRequestLabel, parseLogRequestParams } from "../../shared/log-details";
 import type { LogKeyValue } from "../../shared/log-details";
 import { ALL_LOG_TYPES, getLogTypeOptions, matchesLogType } from "../../shared/log-types";
 import { logLevelLabels } from "../labels";
-import { getLogTypeStorage, readLogType, writeLogType } from "../log-type-preference";
+import {
+  getLogTypeStorage,
+  persistLogRequestView,
+  readLogRequestView,
+  readLogType,
+  writeLogType,
+} from "../log-type-preference";
+import type { LogRequestView } from "../log-type-preference";
 import type { LogTypeStorage } from "../log-type-preference";
 
 export function createLogClearHandler(
@@ -57,6 +64,12 @@ function isSameLogEntry(entry: LogEntry, selected?: LogEntry): boolean {
   );
 }
 
+export function LogRowLabel({ message, requestParams }: { message: string; requestParams?: string }) {
+  const label = parseLogRequestLabel(message, requestParams);
+  if (label === null) return <>{message}</>;
+  return <>{`${label.path}/`}<span className="log-request-action">{label.action}</span>{label.serviceId === undefined ? null : `/${label.serviceId}`}</>;
+}
+
 export function resolveLogTypeSelection(selectedType: string, options: readonly string[]): string {
   return selectedType === ALL_LOG_TYPES || options.includes(selectedType) ? selectedType : ALL_LOG_TYPES;
 }
@@ -97,7 +110,8 @@ export function LogPanel({
   const [level, setLevel] = useState("all");
   const logTypeStorage = useMemo(() => getLogTypeStorage(), []);
   const [logType, setLogType] = useState(() => readLogType(logTypeStorage));
-  const [requestView, setRequestView] = useState<"source" | "parsed">("source");
+  const [requestView, setRequestViewState] = useState<LogRequestView>(() => readLogRequestView(logTypeStorage));
+  const setRequestView = (nextView: LogRequestView) => persistLogRequestView(nextView, logTypeStorage, setRequestViewState);
   const [isClearing, setIsClearing] = useState(false);
   const logTypeOptions = useMemo(() => getLogTypeOptions(logs), [logs]);
   const selectedLogType = resolveLogTypeSelection(logType, logTypeOptions);
@@ -109,5 +123,5 @@ export function LogPanel({
   return <section className="panel log-panel"><div className="log-toolbar"><span className="log-count">{visible.length} 条记录</span><div className="log-toolbar-actions"><div className="filters"><select className="select-control" aria-label="日志类型" value={selectedLogType} onChange={(event) => {
     const nextType = event.target.value;
     persistLogTypeSelection(nextType, logTypeStorage, setLogType);
-  }}><option value={ALL_LOG_TYPES}>全部</option>{logTypeOptions.map((option) => <option value={option} key={option}>{option}</option>)}</select><select className="select-control" aria-label="日志级别" value={level} onChange={(event) => setLevel(event.target.value)}><option value="all">全部级别</option><option value="info">{logLevelLabels.info}</option><option value="warn">{logLevelLabels.warn}</option><option value="error">{logLevelLabels.error}</option></select><input aria-label="筛选日志" placeholder="筛选" value={query} onChange={(event) => setQuery(event.target.value)} /></div><button type="button" className="secondary-button log-clear-button" disabled={logs.length === 0 || isClearing} onClick={() => void clearLogs()}>清空日志</button></div></div><div className="log-workspace"><div className="log-list">{visible.length === 0 ? <p className="empty">暂无日志。</p> : visible.map((entry, index) => <button className={`log-row${isSameLogEntry(entry, selected) ? " selected" : ""}`} aria-current={isSameLogEntry(entry, selected) ? "true" : undefined} type="button" key={`${entry.timestamp}-${index}`} onClick={() => onSelect(entry)}><time>{new Date(entry.timestamp).toLocaleTimeString(undefined, { hour12: false })}</time><span className={`log-level ${entry.level}`}>{logLevelLabels[entry.level]}</span><span className="log-message">{entry.message}</span></button>)}</div><section className="log-detail" aria-label="日志详情">{selected ? <><div className="log-detail-heading"><strong>日志详情</strong><button type="button" className="log-detail-close" aria-label="关闭日志详情" onClick={() => onSelect(undefined)}>×</button></div><dl className="log-detail-list"><div className="log-detail-section"><div className="log-detail-section-heading"><dt className="log-detail-section-title">请求参数</dt><div className="log-detail-tabs" role="tablist" aria-label="请求参数视图"><button type="button" role="tab" aria-selected={requestView === "source"} className={requestView === "source" ? "active" : ""} onClick={() => setRequestView("source")}>源码</button><button type="button" role="tab" aria-selected={requestView === "parsed"} className={requestView === "parsed" ? "active" : ""} onClick={() => setRequestView("parsed")}>解析结果</button></div></div><dd>{requestView === "source" ? <pre className="log-detail-body">{selected.requestParams ?? "无"}</pre> : <ParsedRequestDetails raw={selected.requestParams ?? ""} />}</dd></div><div className="log-detail-section"><div className="log-detail-section-heading"><dt className="log-detail-section-title">应答数据</dt>{typeof selected.responseData === "string" && selected.responseData.length > 0 && <button type="button" className="secondary-button log-detail-response-button" onClick={() => onFillJson(selected.responseData!)}>回填到 JSON 可视化</button>}</div><dd><pre className="log-detail-body">{selected.responseData ?? "无"}</pre></dd></div></dl></> : <p className="log-detail-empty">选择一条日志查看详情。</p>}</section></div></section>;
+  }}><option value={ALL_LOG_TYPES}>全部</option>{logTypeOptions.map((option) => <option value={option} key={option}>{option}</option>)}</select><select className="select-control" aria-label="日志级别" value={level} onChange={(event) => setLevel(event.target.value)}><option value="all">全部级别</option><option value="info">{logLevelLabels.info}</option><option value="warn">{logLevelLabels.warn}</option><option value="error">{logLevelLabels.error}</option></select><input aria-label="筛选日志" placeholder="筛选" value={query} onChange={(event) => setQuery(event.target.value)} /></div><button type="button" className="secondary-button log-clear-button" disabled={logs.length === 0 || isClearing} onClick={() => void clearLogs()}>清空日志</button></div></div><div className="log-workspace"><div className="log-list">{visible.length === 0 ? <p className="empty">暂无日志。</p> : visible.map((entry, index) => <button className={`log-row${isSameLogEntry(entry, selected) ? " selected" : ""}`} aria-current={isSameLogEntry(entry, selected) ? "true" : undefined} type="button" key={`${entry.timestamp}-${index}`} onClick={() => onSelect(entry)}><time>{new Date(entry.timestamp).toLocaleTimeString(undefined, { hour12: false })}</time><span className={`log-level ${entry.level}`}>{logLevelLabels[entry.level]}</span><span className="log-message"><LogRowLabel message={entry.message} requestParams={entry.requestParams} /></span></button>)}</div><section className="log-detail" aria-label="日志详情">{selected ? <><div className="log-detail-heading"><strong>日志详情</strong><button type="button" className="log-detail-close" aria-label="关闭日志详情" onClick={() => onSelect(undefined)}>×</button></div><dl className="log-detail-list"><div className="log-detail-section"><div className="log-detail-section-heading"><dt className="log-detail-section-title">请求参数</dt><div className="log-detail-tabs" role="tablist" aria-label="请求参数视图"><button type="button" role="tab" aria-selected={requestView === "source"} className={requestView === "source" ? "active" : ""} onClick={() => setRequestView("source")}>源码</button><button type="button" role="tab" aria-selected={requestView === "parsed"} className={requestView === "parsed" ? "active" : ""} onClick={() => setRequestView("parsed")}>解析结果</button></div></div><dd>{requestView === "source" ? <pre className="log-detail-body">{selected.requestParams ?? "无"}</pre> : <ParsedRequestDetails raw={selected.requestParams ?? ""} />}</dd></div><div className="log-detail-section"><div className="log-detail-section-heading"><dt className="log-detail-section-title">应答数据</dt>{typeof selected.responseData === "string" && selected.responseData.length > 0 && <button type="button" className="secondary-button log-detail-response-button" onClick={() => onFillJson(selected.responseData!)}>回填到 JSON 可视化</button>}</div><dd><pre className="log-detail-body">{selected.responseData ?? "无"}</pre></dd></div></dl></> : <p className="log-detail-empty">选择一条日志查看详情。</p>}</section></div></section>;
 }

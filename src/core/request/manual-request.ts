@@ -1,6 +1,6 @@
 import http from "node:http";
 import { parseManualRequestParams, serializeManualRequestParams } from "../../shared/manual-request";
-import { parseLocalCacheText } from "../../shared/local-cache";
+import { hasSuccessfulLoginErrorNo, parseLocalCacheText } from "../../shared/local-cache";
 import { TcpBridgePool } from "../tcp/tcp-bridge";
 
 const MAX_RESPONSE_SIZE = 16 * 1024 * 1024;
@@ -39,13 +39,14 @@ export function extractManualLoginValues(paramsText: string, responseBody: strin
   try {
     const parsed = JSON.parse(responseBody) as unknown;
     const values = scalarResponseValues(parsed);
-    if (values !== undefined) return values;
+    if (values !== undefined) return hasSuccessfulLoginErrorNo(values) ? values : undefined;
   } catch {
     // Native TZT responses use the readable key=value format below.
   }
   try {
     const values = parseLocalCacheText(responseBody);
-    return Object.keys(values).length === 0 ? undefined : values;
+    if (Object.keys(values).length === 0 || !hasSuccessfulLoginErrorNo(values)) return undefined;
+    return values;
   } catch {
     return undefined;
   }

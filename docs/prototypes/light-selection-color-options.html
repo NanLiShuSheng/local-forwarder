@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>浅色主题 · 默认代理与 JSON 选中色方案</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --page: #f6f8fa;
+      --panel: #ffffff;
+      --panel-soft: #f6f8fa;
+      --border: #d0d7de;
+      --border-strong: #afb8c1;
+      --text: #1f2328;
+      --text-2: #424a53;
+      --muted: #59636e;
+      --subtle: #6e7781;
+      --accent: #0969da;
+      --shadow: 0 16px 40px rgb(31 35 40 / 6%);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 1180px;
+      color: var(--text);
+      background:
+        radial-gradient(1000px 380px at 12% -160px, rgb(9 105 218 / 5%), transparent 62%),
+        linear-gradient(180deg, #fbfcfd 0%, var(--page) 48%, #f1f4f7 100%);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    button { font: inherit; cursor: pointer; }
+    h1, h2, h3, p { margin: 0; }
+    .review { width: min(1480px, calc(100% - 56px)); margin: 0 auto; padding: 40px 0 46px; }
+    .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; margin-bottom: 22px; }
+    .eyebrow { margin-bottom: 9px; color: #0550ae; font-size: 10px; font-weight: 800; letter-spacing: .18em; }
+    h1 { font-size: 33px; line-height: 1.12; letter-spacing: -.035em; }
+    .lede { max-width: 880px; margin-top: 10px; color: var(--text-2); font-size: 14px; line-height: 1.7; }
+    .lede strong { color: var(--text); font-weight: 700; }
+    .target-card { width: 310px; flex: 0 0 310px; border: 1px solid var(--border); border-radius: 14px; padding: 13px 15px; background: rgb(255 255 255 / 86%); box-shadow: var(--shadow); }
+    .target-card span { display: block; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+    .target-card strong { display: block; margin-top: 5px; font-size: 15px; }
+    .target-card small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .scheme { overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--panel); box-shadow: 0 12px 30px rgb(31 35 40 / 5%); }
+    .scheme.recommended { border-color: color-mix(in srgb, #7c93a8 52%, var(--border)); box-shadow: 0 16px 38px rgb(48 74 99 / 10%); }
+    .scheme-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 16px 18px 13px; }
+    .scheme-title { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
+    .index { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border: 1px solid var(--border); border-radius: 9px; color: var(--muted); background: var(--panel-soft); font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; }
+    .scheme h2 { font-size: 17px; letter-spacing: -.02em; }
+    .scheme-head p { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .tag { flex: 0 0 auto; border: 1px solid color-mix(in srgb, #7c93a8 34%, var(--border)); border-radius: 99px; padding: 3px 8px; color: #1b3a57; background: #e7eef5; font-size: 10px; font-weight: 800; }
+    .swatches { display: flex; flex: 0 0 auto; gap: 5px; padding-top: 2px; }
+    .swatches i { display: block; width: 24px; height: 24px; border: 1px solid rgb(31 35 40 / 12%); border-radius: 7px; background: var(--c); }
+    .preview { display: grid; grid-template-columns: 192px minmax(0, 1fr); min-height: 230px; margin: 0 18px; overflow: hidden; border: 1px solid var(--border); border-radius: 11px; background: var(--panel); }
+    .mini-sidebar { padding: 12px 10px; border-right: 1px solid var(--border); background: var(--panel-soft); }
+    .mini-sidebar-label { margin: 0 2px 9px; color: var(--subtle); font-size: 9px; font-weight: 800; letter-spacing: .1em; }
+    .mini-proxy { border: 1px solid var(--sel-border); border-radius: 9px; padding: 9px 10px; color: var(--sel-title); background: var(--sel); box-shadow: var(--sel-shadow, none); }
+    .mini-proxy-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .mini-proxy-head strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    .mini-status { flex: 0 0 auto; border: 1px solid var(--sel-chip-border, var(--border)); border-radius: 99px; padding: 1px 5px; color: var(--sel-chip-text, var(--muted)); background: var(--sel-chip, #fff); font-size: 9px; font-weight: 600; }
+    .mini-proxy-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; color: var(--sel-meta, var(--muted)); font-size: 10px; }
+    .mini-proxy-meta code { font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .mini-json { min-width: 0; padding: 12px 14px 14px; }
+    .mini-json-title { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+    .mini-json-title strong { font-size: 13px; }
+    .mini-valid { color: #1a7f37; font-size: 10px; font-weight: 700; }
+    .mini-tabs { display: flex; gap: 16px; border-bottom: 1px solid var(--border); margin-bottom: 9px; }
+    .mini-tabs button { border: 0; border-bottom: 2px solid transparent; padding: 0 2px 7px; color: var(--muted); background: transparent; font-size: 10px; }
+    .mini-tabs button.active { border-bottom-color: var(--sel-underline); color: var(--sel-text); font-weight: 700; }
+    .mini-tree { overflow: hidden; border: 1px solid var(--border); border-radius: 8px; padding: 4px 0; background: #f8fafc; font: 10px/1.9 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .tree-row { display: flex; align-items: baseline; gap: 4px; padding: 2px 8px; color: var(--text-2); white-space: nowrap; }
+    .tree-row.child { padding-left: 25px; }
+    .tree-row.selected { border-left: 3px solid var(--sel-underline); padding-left: 5px; color: var(--sel-row-text); background: var(--sel-row); }
+    .tree-row.selected.child { padding-left: 22px; }
+    .tree-key { color: var(--info, #0550ae); }
+    .tree-row.selected .tree-key { color: var(--sel-row-text); }
+    .tree-count { margin-left: 4px; border: 1px solid var(--sel-border); border-radius: 4px; padding: 0 4px; color: var(--sel-text); background: rgb(255 255 255 / 58%); font: 9px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; }
+    .scheme-foot { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 13px 18px 16px; }
+    .scheme-foot p { color: var(--muted); font-size: 12px; line-height: 1.65; }
+    .scheme-foot p b { color: var(--text-2); font-weight: 800; }
+    .values { flex: 0 0 auto; color: var(--subtle); font: 9px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
+    .values span { display: block; }
+    .footer { display: flex; justify-content: space-between; gap: 24px; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 14px; color: var(--subtle); font-size: 11px; }
+    .footer b { color: var(--text-2); font-weight: 700; }
+    .v-slate {
+      --sel: #dfe8f1;
+      --sel-border: #7c93a8;
+      --sel-title: #1b3a57;
+      --sel-text: #1b3a57;
+      --sel-underline: #5b7894;
+      --sel-row: #e7eef5;
+      --sel-row-text: #1b3a57;
+      --sel-chip: #f5f8fb;
+      --sel-chip-text: #526b84;
+      --sel-chip-border: #b6c8d7;
+      --sel-meta: #526b84;
+    }
+    .v-graphite {
+      --sel: #e7eaee;
+      --sel-border: #9aa4af;
+      --sel-title: #24292f;
+      --sel-text: #24292f;
+      --sel-underline: #57606a;
+      --sel-row: #eceff2;
+      --sel-row-text: #24292f;
+      --sel-chip: #f7f8f9;
+      --sel-chip-text: #57606a;
+      --sel-chip-border: #c9d1d9;
+      --sel-meta: #57606a;
+    }
+    .v-indigo {
+      --sel: #e9eafe;
+      --sel-border: #818cf8;
+      --sel-title: #3730a3;
+      --sel-text: #3730a3;
+      --sel-underline: #4f46e5;
+      --sel-row: #eef0ff;
+      --sel-row-text: #3730a3;
+      --sel-chip: #f8f8ff;
+      --sel-chip-text: #5b55c9;
+      --sel-chip-border: #c7ccfb;
+      --sel-meta: #5b55c9;
+    }
+    .v-outline {
+      --sel: #ffffff;
+      --sel-border: #0b3a66;
+      --sel-title: #1f2328;
+      --sel-text: #0b3a66;
+      --sel-underline: #0b3a66;
+      --sel-row: #f6f8fa;
+      --sel-row-text: #0b3a66;
+      --sel-chip: #f6f8fa;
+      --sel-chip-text: #59636e;
+      --sel-chip-border: #d0d7de;
+      --sel-meta: #59636e;
+      --sel-shadow: inset 3px 0 #0b3a66;
+    }
+  </style>
+</head>
+<body>
+  <main class="review">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">LIGHT THEME / SELECTION COLOR</p>
+        <h1>浅色主题 · 默认代理与 JSON 选中色</h1>
+        <p class="lede">这次按你截图的真实场景来做：<strong>默认代理卡片</strong>、<strong>JSON 可视化页签</strong>和<strong>树形数据选中行</strong>。四套方案都保留现有结构，只替换选中背景、边框、文字和下划线颜色。</p>
+      </div>
+      <aside class="target-card">
+        <span>本次对比范围</span>
+        <strong>代理卡片 · JSON 页签 · JSON 选中行</strong>
+        <small>每套色板会同步落到这三个位置，避免局部换色后仍然不协调。</small>
+      </aside>
+    </header>
+
+    <section class="grid">
+      <article class="scheme v-slate recommended">
+        <header class="scheme-head">
+          <div class="scheme-title">
+            <span class="index">01</span>
+            <div><h2>雾蓝灰</h2><p>把蓝色压灰、压深，保留专业感但不再“发浅发亮”。</p></div>
+          </div>
+          <div class="swatches"><i style="--c:#dfe8f1"></i><i style="--c:#7c93a8"></i><i style="--c:#1b3a57"></i></div>
+        </header>
+        <div class="preview">
+          <aside class="mini-sidebar">
+            <p class="mini-sidebar-label">代理实例</p>
+            <div class="mini-proxy">
+              <div class="mini-proxy-head"><strong>默认代理</strong><span class="mini-status">已停止</span></div>
+              <div class="mini-proxy-meta"><span>未配置</span><code>:8080</code></div>
+            </div>
+          </aside>
+          <section class="mini-json">
+            <div class="mini-json-title"><strong>数据预览</strong><span class="mini-valid">● 有效 JSON</span></div>
+            <div class="mini-tabs"><button class="active" type="button">树形视图</button><button type="button">表格视图</button><button type="button">原始 JSON</button></div>
+            <div class="mini-tree">
+              <div class="tree-row selected"><span>▾</span><span class="tree-key">$:</span> {10 个字段}<span class="tree-count">10 字段</span></div>
+              <div class="tree-row child"><span>•</span><span class="tree-key">duration:</span> 7ms</div>
+              <div class="tree-row child"><span>•</span><span class="tree-key">note:</span> 查询成功</div>
+              <div class="tree-row child"><span>•</span><span class="tree-key">code:</span> 1</div>
+            </div>
+          </section>
+        </div>
+        <footer class="scheme-foot">
+          <p><b>推荐</b> · 比现在的浅蓝更稳、更耐看，和白色面板的层次也最自然。</p>
+          <div class="values"><span>fill #DFE8F1</span><span>border #7C93A8</span><span>text #1B3A57</span></div>
+        </footer>
+      </article>
+
+      <article class="scheme v-graphite">
+        <header class="scheme-head">
+          <div class="scheme-title">
+            <span class="index">02</span>
+            <div><h2>冷石墨</h2><p>完全去掉蓝色填充，用中性灰黑表达选中，最克制。</p></div>
+          </div>
+          <div class="swatches"><i style="--c:#e7eaee"></i><i style="--c:#9aa4af"></i><i style="--c:#24292f"></i></div>
+        </header>
+        <div class="preview">
+          <aside class="mini-sidebar">
+            <p class="mini-sidebar-label">代理实例</p>
+            <div class="mini-proxy">
+              <div class="mini-proxy-head"><strong>默认代理</strong><span class="mini-status">已停止</span></div>
+              <div class="mini-proxy-meta"><span>未配置</span><code>:8080</code></div>
+            </div>
+          </aside>
+          <section class="mini-json">
+            <div class="mini-json-title"><strong>数据预览</strong><span class="mini-valid">● 有效 JSON</span></div>
+            <div class="mini-tabs"><button class="active" type="button">树形视图</button><button type="button">表格视图</button><button type="button">原始 JSON</button></div>
+            <div class="mini-tree">
+              <div class="tree-row selected"><span>▾</span><span class="tree-key">$:</span> {10 个字段}<span class="tree-count">10 字段</span></div>
+              <div class="tree-row child"><span>•</span><span class="tree-key">duration:</span> 7ms</div>
+              <div class="tree-row child"><span>•</span><span class="tree-key">note:</span> 查询成功</div>
+              <div class="tree-row child"><span>•</span><span class="tree-key">code:</span> 1</div>
+            </div>
+          </section>
+        </div>
+        <footer class="scheme-foot">
+          <p><b>中性</b> · 不会和页面里其他蓝色元素打架，适合希望界面更安静的方向。</p>
+          <div class="values"><span>fill #E7EAEE</span><span>border #9AA4AF</span><span>text #24292F</span></div>
+        </footer>
+      </article>
+
+      <article class="scheme v-indigo">
+        <header class="scheme-head">
+          <div class="scheme-title">
+            <span class="index">03</span>
+            <div><h2>靛蓝</h2><p>保留彩色选中，但把色相从标准蓝移到更柔和的靛蓝。</p></div>
+          </div>
+          <div class="swatches"><i style="--c:#e9eafe"></i><i style="--c:#818cf8"></i><i style="--c:#3730a3"></i></div>
+        </header>
+        <div class="preview">
+          <aside class="mini-sidebar">
+            <p class="mini-sidebar-label">代理实例</p>
+            <div class="mini-proxy">
+              <div class="mini-proxy-head"><strong>默认代理</strong><span class="mini-status">已停止</span></div>
+              <div class="mini-proxy-meta"><span>未配置</span><code>:8080</code></div>
+            </div>
+          </aside>
+          <section class="mini-json">
+            <div class="mini-json-title"><strong>数据预览</strong><span class="mini-valid">● 有效 JSON</span></div>
+            <div class="mini-tabs"><button class="active" type="button">树形视图</button><button type="button">表格视图</button><button type="button">原始 JSON</button></div>
+            <div class="mini-tree">
+              <div class="tree-row selected"><span>▾</span><span class="tree-key">$:</span> {10 个字段}<span class="tree-count">10 字段</span></div>
+              <div class="tree-row child"><span>•</span><span class="tree-key">duration:</span> 7ms</div>
+              <div class="tree-row child"><span>•</span><span class="tree-key">note:</span> 查询成功</div>
+              <div class="tree-row child"><span>•</span><span class="tree-key">code:</span> 1</div>
+            </div>
+          </section>
+        </div>
+        <footer class="scheme-foot">
+          <p><b>彩色</b> · 比标准蓝更有辨识度，适合希望选中态仍有品牌感的方向。</p>
+          <div class="values"><span>fill #E9EAFE</span><span>border #818CF8</span><span>text #3730A3</span></div>
+        </footer>
+      </article>
+
+      <article class="scheme v-outline">
+        <header class="scheme-head">
+          <div class="scheme-title">
+            <span class="index">04</span>
+            <div><h2>墨蓝描边</h2><p>选中不再靠大面积填充，而是白底 + 墨蓝边框 + 左侧色条。</p></div>
+          </div>
+          <div class="swatches"><i style="--c:#ffffff"></i><i style="--c:#0b3a66"></i><i style="--c:#f6f8fa"></i></div>
+        </header>
+        <div class="preview">
+          <aside class="mini-sidebar">
+            <p class="mini-sidebar-label">代理实例</p>
+            <div class="mini-proxy">
+              <div class="mini-proxy-head"><strong>默认代理</strong><span class="mini-status">已停止</span></div>
+              <div class="mini-proxy-meta"><span>未配置</span><code>:8080</code></div>
+            </div>
+          </aside>
+          <section class="mini-json">
+            <div class="mini-json-title"><strong>数据预览</strong><span class="mini-valid">● 有效 JSON</span></div>
+            <div class="mini-tabs"><button class="active" type="button">树形视图</button><button type="button">表格视图</button><button type="button">原始 JSON</button></div>
+            <div class="mini-tree">
+              <div class="tree-row selected"><span>▾</span><span class="tree-key">$:</span> {10 个字段}<span class="tree-count">10 字段</span></div>
+              <div class="tree-row child"><span>•</span><span class="tree-key">duration:</span> 7ms</div>
+              <div class="tree-row child"><span>•</span><span class="tree-key">note:</span> 查询成功</div>
+              <div class="tree-row child"><span>•</span><span class="tree-key">code:</span> 1</div>
+            </div>
+          </section>
+        </div>
+        <footer class="scheme-foot">
+          <p><b>轻量</b> · 没有整块色底，最不压抑；选中边界靠边框和左色条表达。</p>
+          <div class="values"><span>outline #0B3A66</span><span>row #F6F8FA</span><span>tab #0B3A66</span></div>
+        </footer>
+      </article>
+    </section>
+
+    <footer class="footer">
+      <span><b>说明</b> · 四套方案都会同步应用到默认代理卡片、JSON 页签、树形/表格选中行；确定后再改实际样式。</span>
+      <span>Local Forwarder · Selection Color Review</span>
+    </footer>
+  </main>
+</body>
+</html>

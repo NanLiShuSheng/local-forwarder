@@ -6,6 +6,7 @@ import path from "node:path";
 import { createDefaultConfig } from "../../../src/core/config/model";
 import { ProxyWorkspaceStore } from "../../../src/core/runtime/proxy-workspace-store";
 import type { ProxyWorkspace } from "../../../src/shared/contracts";
+import { DEFAULT_LOCAL_VALUES } from "../../../src/shared/local-values";
 
 test("migrates a legacy config into a default proxy instance", async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), "proxy-workspace-") );
@@ -19,7 +20,7 @@ test("migrates a legacy config into a default proxy instance", async () => {
   assert.equal(workspace.selectedInstanceId, "default");
   assert.deepEqual(workspace.instances.map((instance) => instance.name), ["默认代理"]);
   assert.equal(workspace.instances[0]?.config.server.port, 8080);
-  assert.deepEqual((workspace as any).sharedValues, {});
+  assert.deepEqual((workspace as any).sharedValues, DEFAULT_LOCAL_VALUES);
   assert.deepEqual((workspace.instances[0] as any)?.loginCache, {});
   assert.equal((await readFile(workspacePath, "utf8")).includes("默认代理"), true);
 });
@@ -36,7 +37,7 @@ test("migrates legacy instance local values into its login cache", async () => {
 
   const workspace = await new ProxyWorkspaceStore(workspacePath).load(async () => { throw new Error("fallback should not run"); });
 
-  assert.deepEqual((workspace as any).sharedValues, {});
+  assert.deepEqual((workspace as any).sharedValues, DEFAULT_LOCAL_VALUES);
   assert.deepEqual((workspace.instances[0] as any)?.loginCache, { TOKEN: "old-token" });
   assert.deepEqual(workspace.instances[0]?.config.localValues, {});
 });
@@ -67,7 +68,7 @@ test("saves and reloads multiple proxy instances", async () => {
   const workspace: ProxyWorkspace = {
     version: 1,
     selectedInstanceId: "second",
-    sharedValues: {},
+    sharedValues: { ACCOUNT: "shared-account" },
     instances: [
       { id: "first", name: "行情代理", config: first, loginCache: {} },
       { id: "second", name: "业务办理代理", config: second, loginCache: {} },
@@ -78,6 +79,23 @@ test("saves and reloads multiple proxy instances", async () => {
   const loaded = await store.load(async () => { throw new Error("fallback should not run"); });
 
   assert.deepEqual(loaded, workspace);
+});
+
+test("does not replace existing shared values with defaults", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "proxy-workspace-"));
+  const workspacePath = path.join(directory, "instances.json");
+  const store = new ProxyWorkspaceStore(workspacePath);
+  const workspace: ProxyWorkspace = {
+    version: 1,
+    selectedInstanceId: "first",
+    sharedValues: { CUSTOM: "kept" },
+    instances: [{ id: "first", name: "行情代理", config: createDefaultConfig(), loginCache: {} }],
+  };
+
+  await store.save(workspace);
+  const loaded = await store.load(async () => { throw new Error("fallback should not run"); });
+
+  assert.deepEqual(loaded.sharedValues, { CUSTOM: "kept" });
 });
 
 test("rejects an invalid workspace file", async () => {

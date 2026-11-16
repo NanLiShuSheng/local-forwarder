@@ -38,6 +38,8 @@ function fakeFactory() {
       getConfig: () => structuredClone(current),
       saveConfig: async (next) => { current = structuredClone(next); await persistence.save(current); },
       mergeLocalValues: (values) => { current.localValues = { ...current.localValues, ...values }; void persistence.save(current); },
+      getMapValues: () => ({ ...current.mapValues }),
+      setMapValues: (values) => { current.mapValues = { ...values }; },
     };
   };
 }
@@ -173,6 +175,24 @@ test("does not copy login cache when duplicating a proxy", async () => {
   const manager = new ForwardingServiceManager({ workspace: workspaceWithTwoInstances(), workspaceStore: { save: async () => undefined }, serviceFactory: fakeFactory() });
   const duplicate = await manager.duplicate();
   assert.deepEqual(manager.getLoginCache(duplicate.id), {});
+});
+
+test("views and edits map cache on the selected proxy without affecting another proxy", async () => {
+  const workspace = workspaceWithTwoInstances();
+  workspace.instances[0]!.config.mapValues = { INITIAL: "first-value" };
+  let savedWorkspace: ProxyWorkspace | undefined;
+  const manager = new ForwardingServiceManager({
+    workspace,
+    workspaceStore: { save: async (next) => { savedWorkspace = next; } },
+    serviceFactory: fakeFactory(),
+  });
+
+  assert.deepEqual(manager.getMapValues("first"), { INITIAL: "first-value" });
+  await manager.saveMapValues({ UPDATED: "second-value" }, "first");
+
+  assert.deepEqual(manager.getMapValues("first"), { UPDATED: "second-value" });
+  assert.deepEqual(manager.getMapValues("second"), {});
+  assert.deepEqual(savedWorkspace?.instances.find((instance) => instance.id === "first")?.config.mapValues, { UPDATED: "second-value" });
 });
 
 test("routes automatic login capture into the selected proxy cache", async () => {

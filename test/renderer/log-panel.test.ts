@@ -124,7 +124,7 @@ test("log panel fills the available page height while keeping its columns scroll
 
   assert.match(appSource, /page === "logs" \? "log-page-content" : ""/);
   assert.match(styleSource, /\.log-page-content[^\{]*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column/);
-  assert.match(styleSource, /\.log-page-content > \.log-panel[^\{]*\{[^}]*flex:\s*1[^}]*min-height:\s*0/);
+  assert.match(styleSource, /\.log-page-content \.log-panel[^\{]*\{[^}]*flex:\s*1[^}]*min-height:\s*0/);
   assert.match(styleSource, /\.log-page-content \.log-list[^\{]*\{[^}]*max-height:\s*none/);
   assert.match(styleSource, /\.log-page-content \.log-detail[^\{]*\{[^}]*max-height:\s*none[^}]*min-height:\s*0/);
 });
@@ -139,7 +139,9 @@ test("log panel marks the selected log row with an accessible selected state", a
   assert.match(markup, /aria-current="true"/);
   assert.match(panelSource, /toLocaleTimeString\(undefined, \{ hour12: false \}\)/);
   assert.match(styles, /\.log-row\s*\{[^}]*padding:\s*9px 0 9px 8px;/);
-  assert.match(styles, /\.log-row:hover, \.log-row\.selected\s*\{[^}]*background:\s*var\(--selection-background\)/);
+  assert.match(styles, /\.log-row:hover\s*\{[^}]*background:\s*var\(--selection-row-hover-background\)/);
+  assert.match(styles, /\.log-row\.selected\s*\{[^}]*color:\s*var\(--selection-row-text\)/);
+  assert.match(styles, /\.log-row\.selected\s*\{[^}]*background:\s*var\(--selection-row-background\)/);
   assert.doesNotMatch(styles, /\.log-row\.selected\s*\{[^}]*box-shadow:/);
 });
 
@@ -400,4 +402,60 @@ test("App keeps the selected log while navigating to JSON preview", async () => 
   assert.match(appSource, /<LogPanel logs=\{logs\} selected=\{selectedLog\} onSelect=\{setSelectedLog\}/);
   assert.match(panelSource, /onSelect\(entry\)/);
   assert.match(panelSource, /onCleared: \(\) => onSelect\(undefined\)/);
+});
+
+test("log panel labels reqxml rows with the action number", async () => {
+  const panelSource = await readFile("src/renderer/components/LogPanel.tsx", "utf8");
+  assert.match(panelSource, /import \{ parseLogRequestLabel, parseLogRequestParams \} from "\.\.\/\.\.\/shared\/log-details"/);
+  assert.match(panelSource, /<LogRowLabel message=\{entry\.message\} requestParams=\{entry\.requestParams\} \/>/);
+});
+
+test("log panel renders the reqxml action number in the list row without the request method", () => {
+  const entry: LogEntry = {
+    timestamp: "2026-11-16T06:02:12.000Z",
+    level: "info",
+    message: "POST /reqxml",
+    requestPath: "/reqxml",
+    requestParams: "POST /reqxml\n\nintactToServer=(%24IntactToServer)&action=49055&serviceId=esb.wwygt.zhcx.cxzjzhxx",
+  };
+  const markup = renderToStaticMarkup(createElement(LogPanel, {
+    logs: [entry],
+    selected: undefined,
+    onSelect: () => undefined,
+    onClear: async () => true,
+    onFillJson: () => undefined,
+  }));
+  assert.match(markup, /reqxml\/<span class="log-request-action">49055<\/span>\/esb\.wwygt\.zhcx\.cxzjzhxx/);
+  assert.doesNotMatch(markup, /POST \/reqxml<\/span>/);
+});
+
+test("log panel keeps the request method inside the log detail", () => {
+  const entry: LogEntry = {
+    timestamp: "2026-11-16T06:02:12.000Z",
+    level: "info",
+    message: "POST /reqxml",
+    requestPath: "/reqxml",
+    requestParams: "POST /reqxml\n\naction=49055",
+  };
+  const markup = renderToStaticMarkup(createElement(LogPanel, {
+    logs: [entry],
+    selected: entry,
+    onSelect: () => undefined,
+    onClear: async () => true,
+    onFillJson: () => undefined,
+  }));
+  assert.match(markup, /POST \/reqxml/);
+});
+
+test("log panel styles the reqxml action number in both themes", async () => {
+  const styles = await readFile("src/renderer/styles.css", "utf8");
+  assert.match(styles, /\.log-request-action\s*\{[^}]*color:\s*var\(--log-request-action-text\);/);
+  assert.match(styles, /--log-request-action-text:\s*#79c0ff;/);
+  assert.match(styles, /\.app-shell\[data-theme="light"\][\s\S]*?--log-request-action-text:\s*#0969da;/);
+});
+
+test("log rows sit flush against their dividers so the selection has no blank strip", async () => {
+  const styles = await readFile("src/renderer/styles.css", "utf8");
+  assert.match(styles, /\.log-list\s*\{[^}]*align-content:\s*start;/);
+  assert.doesNotMatch(styles, /\.rule-list, \.log-list/);
 });

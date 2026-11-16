@@ -119,7 +119,7 @@ test("JSON preview accepts and consumes one-time prefills", async () => {
 test("JSON preview stays mounted so its data survives navigation", async () => {
   const source = await readFile("src/renderer/App.tsx", "utf8");
 
-  assert.match(source, /<div hidden=\{page !== "json"\}><JsonPreviewPage prefillText=\{jsonPrefill\} onPrefillApplied=\{\(\) => setJsonPrefill\(undefined\)\} \/><\/div>/);
+  assert.match(source, /<PagePane active=\{page === "json"\}><JsonPreviewPage prefillText=\{jsonPrefill\} onPrefillApplied=\{\(\) => setJsonPrefill\(undefined\)\} \/><\/PagePane>/);
   assert.doesNotMatch(source, /\{page === "json" && <JsonPreviewPage/);
 });
 
@@ -127,7 +127,10 @@ test("JSON preview keeps invalid prefill text while showing its parse error", as
   const source = await readFile("src/renderer/components/JsonPreviewPage.tsx", "utf8");
 
   assert.match(source, /setInputText\(value\);[\s\S]*?const next = parseJsonPreviewText\(value\);[\s\S]*?setParseResult\(next\);/);
-  assert.match(source, /setExpandedPaths\(next\.ok \? defaultExpandedPaths\(next\.value\) : new Set\(\["\$"\]\)\);/);
+  assert.match(source, /const searchPaths = next\.ok \? expandedPathsForSearch\(next\.value, search\) : new Set<string>\(\);/);
+  assert.match(source, /const nextExpandedPaths = next\.ok \? defaultExpandedPaths\(next\.value\) : new Set\(\["\$"\]\);/);
+  assert.match(source, /searchPaths\.forEach\(\(path\) => nextExpandedPaths\.add\(path\)\);/);
+  assert.match(source, /setExpandedPaths\(nextExpandedPaths\);/);
   assert.match(source, /JSON 解析失败/);
   assert.match(source, /parseResult\.error/);
 });

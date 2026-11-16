@@ -13,6 +13,7 @@ interface HttpRuntime extends TcpBridgeLike {
   stop(): Promise<void>;
   getStats(): HttpProxyStats;
   getValues(): { localValues: Record<string, string>; mapValues: Record<string, string>; fileValues: Record<string, string> };
+  setMapValues?(values: Record<string, string>): void;
 }
 
 export interface ForwardingServiceOptions {
@@ -165,6 +166,15 @@ export class ForwardingService {
       if (this.config.legacy !== undefined) this.config.legacy.files = values.fileValues;
     }
     return cloneConfig(this.config);
+  }
+
+  public getMapValues(): Record<string, string> {
+    return { ...(this.http?.getValues().mapValues ?? this.config.mapValues) };
+  }
+
+  public setMapValues(values: Record<string, string>): void {
+    this.config.mapValues = { ...values };
+    this.http?.setMapValues?.(values);
   }
 
   public async saveConfig(config: AppConfig): Promise<void> {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseLocalCacheText } from "../../src/shared/local-cache";
+import { hasSuccessfulLoginErrorNo, parseLocalCacheText } from "../../src/shared/local-cache";
 
 test("parses pasted login cache while preserving values after the first equals sign", () => {
   assert.deepEqual(parseLocalCacheText(`
@@ -25,4 +25,12 @@ test("keeps continuation lines in multiline login cache values", () => {
     GRID: "A|B|\n| | | |",
     TOKEN: "ok",
   });
+});
+
+test("treats only ErrorNo values greater than zero as successful login responses", () => {
+  assert.equal(hasSuccessfulLoginErrorNo({ ERRORNO: "100015" }), true);
+  assert.equal(hasSuccessfulLoginErrorNo({ ERRORNO: "1" }), true);
+  assert.equal(hasSuccessfulLoginErrorNo({ ERRORNO: "0" }), false);
+  assert.equal(hasSuccessfulLoginErrorNo({ ERRORNO: "-1" }), false);
+  assert.equal(hasSuccessfulLoginErrorNo({}), false);
 });

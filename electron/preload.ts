@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferencesPatch, EncryptionProgress, ForwarderApi, UpdateState } from "../src/shared/contracts";
+import type { AppConfig, DecryptionDirectoryKind, DecryptionPreferencesPatch, DecryptionProgress, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferencesPatch, EncryptionProgress, ForwarderApi, UpdateState } from "../src/shared/contracts";
 
 const IPC_CHANNELS = {
   getConfig: "config:get",
@@ -14,12 +14,20 @@ const IPC_CHANNELS = {
   saveSharedValues: "values:shared:save",
   getLoginCache: "values:login:get",
   saveLoginCache: "values:login:save",
+  getMapValues: "values:map:get",
+  saveMapValues: "values:map:save",
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
   getEncryptionPreferences: "encryption:get-preferences",
   saveEncryptionPreferences: "encryption:save-preferences",
   encryptDirectory: "encryption:run",
+  cancelEncryption: "encryption:cancel",
   encryptionProgress: "encryption:progress",
+  selectDecryptionDirectory: "decryption:select-directory",
+  getDecryptionPreferences: "decryption:get-preferences",
+  saveDecryptionPreferences: "decryption:save-preferences",
+  decryptDirectory: "decryption:run",
+  decryptionProgress: "decryption:progress",
   sendRequest: "request:send",
   listProxyInstances: "proxy-instances:list",
   selectProxyInstance: "proxy-instances:select",
@@ -53,6 +61,8 @@ const api: ForwarderApi = {
   saveSharedValues: (values) => ipcRenderer.invoke(IPC_CHANNELS.saveSharedValues, values),
   getLoginCache: () => ipcRenderer.invoke(IPC_CHANNELS.getLoginCache),
   saveLoginCache: (values) => ipcRenderer.invoke(IPC_CHANNELS.saveLoginCache, values),
+  getMapValues: (id?: string) => ipcRenderer.invoke(IPC_CHANNELS.getMapValues, id),
+  saveMapValues: (values, id?: string) => ipcRenderer.invoke(IPC_CHANNELS.saveMapValues, values, id),
   listProxyInstances: () => ipcRenderer.invoke(IPC_CHANNELS.listProxyInstances),
   selectProxyInstance: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.selectProxyInstance, id),
   createProxyInstance: () => ipcRenderer.invoke(IPC_CHANNELS.createProxyInstance),
@@ -63,11 +73,21 @@ const api: ForwarderApi = {
   selectEncryptionDirectory: (kind: EncryptionDirectoryKind) => ipcRenderer.invoke(IPC_CHANNELS.selectEncryptionDirectory, kind),
   getEncryptionPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.getEncryptionPreferences),
   saveEncryptionPreferences: (patch: EncryptionPreferencesPatch) => ipcRenderer.invoke(IPC_CHANNELS.saveEncryptionPreferences, patch),
-  encryptDirectory: (inputDir: string, outputDir: string, mode: EncryptionMode) => ipcRenderer.invoke(IPC_CHANNELS.encryptDirectory, inputDir, outputDir, mode),
+  encryptDirectory: (inputDir: string, outputDir: string, mode: EncryptionMode, lowercaseOutput: boolean) => ipcRenderer.invoke(IPC_CHANNELS.encryptDirectory, inputDir, outputDir, mode, lowercaseOutput),
+  cancelEncryption: () => ipcRenderer.invoke(IPC_CHANNELS.cancelEncryption),
   onEncryptionProgress: (listener: (progress: EncryptionProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: EncryptionProgress) => listener(progress);
     ipcRenderer.on(IPC_CHANNELS.encryptionProgress, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.encryptionProgress, handler);
+  },
+  selectDecryptionDirectory: (kind: DecryptionDirectoryKind) => ipcRenderer.invoke(IPC_CHANNELS.selectDecryptionDirectory, kind),
+  getDecryptionPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.getDecryptionPreferences),
+  saveDecryptionPreferences: (patch: DecryptionPreferencesPatch) => ipcRenderer.invoke(IPC_CHANNELS.saveDecryptionPreferences, patch),
+  decryptDirectory: (inputDir: string, outputDir: string) => ipcRenderer.invoke(IPC_CHANNELS.decryptDirectory, inputDir, outputDir),
+  onDecryptionProgress: (listener: (progress: DecryptionProgress) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: DecryptionProgress) => listener(progress);
+    ipcRenderer.on(IPC_CHANNELS.decryptionProgress, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.decryptionProgress, handler);
   },
   sendRequest: (request) => ipcRenderer.invoke(IPC_CHANNELS.sendRequest, request),
   start: (id?: string) => ipcRenderer.invoke(IPC_CHANNELS.start, id),

@@ -41,20 +41,29 @@ test("formats TZT responses as readable key-value lines and expands Grid0", () =
   }), "Action = 100\nGrid = 银行代码|银行名称|币种代码|币种类别|\n | | | |\nAccountList = HKSZACCOUNT|0252592877|深HK|HKACCOUNT|A344661738|沪HK|\nIntacttoserver = value");
 });
 
-test("caches responses for login actions 100, 104, and 105", () => {
-  assert.deepEqual(extractManualLoginValues("action=100", "Action = 100\nToken = token-100"), {
+test("caches successful login actions 100, 104, and 105 when ErrorNo is greater than zero", () => {
+  assert.deepEqual(extractManualLoginValues("action=100", "Action = 100\nErrorNo = 100015\nToken = token-100"), {
     ACTION: "100",
+    ERRORNO: "100015",
     TOKEN: "token-100",
   });
-  assert.deepEqual(extractManualLoginValues("Action = 104", JSON.stringify({ Action: "104", SessionNo: 7 })), {
+  assert.deepEqual(extractManualLoginValues("Action = 104", JSON.stringify({ Action: "104", ErrorNo: 7, SessionNo: 7 })), {
     ACTION: "104",
+    ERRORNO: "7",
     SESSIONNO: "7",
   });
-  assert.deepEqual(extractManualLoginValues("ACTION=105", "Action = 105\nUserCode = user-105"), {
+  assert.deepEqual(extractManualLoginValues("ACTION=105", "Action = 105\nErrorNo = 2\nUserCode = user-105"), {
     ACTION: "105",
+    ERRORNO: "2",
     USERCODE: "user-105",
   });
   assert.equal(extractManualLoginValues("Action=101", "Action = 101\nToken = not-login"), undefined);
+});
+
+test("ignores login responses when ErrorNo is zero, negative, or missing", () => {
+  assert.equal(extractManualLoginValues("Action=100", "Action = 100\nErrorNo = 0\nToken = failed-token"), undefined);
+  assert.equal(extractManualLoginValues("Action=104", JSON.stringify({ Action: "104", ErrorNo: -1, SessionNo: 9 })), undefined);
+  assert.equal(extractManualLoginValues("Action=100", "Action = 100\nToken = missing-error-no"), undefined);
 });
 
 test("sends pasted request parameters to the reqxml endpoint and returns the response", async () => {

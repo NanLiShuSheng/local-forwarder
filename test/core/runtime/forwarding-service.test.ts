@@ -124,6 +124,28 @@ test("merges manually captured login values into the active service and config",
   assert.deepEqual(service.getConfig().localValues, { OLD: "value", TOKEN: "captured-token" });
 });
 
+test("reads and replaces map values before and during runtime", async () => {
+  const config = createDefaultConfig();
+  config.server.port = await freePort();
+  config.cache.rootDir = await mkdtemp(path.join(os.tmpdir(), "forwarder-map-values-"));
+  config.mapValues = { INITIAL: "first-value" };
+  const service = new ForwardingService({ config });
+
+  try {
+    assert.deepEqual(service.getMapValues(), { INITIAL: "first-value" });
+    service.setMapValues({ UPDATED: "second-value" });
+    assert.deepEqual(service.getMapValues(), { UPDATED: "second-value" });
+
+    await service.start();
+    assert.deepEqual(service.getMapValues(), { UPDATED: "second-value" });
+    service.setMapValues({ RUNTIME: "third-value" });
+    assert.deepEqual(service.getMapValues(), { RUNTIME: "third-value" });
+    assert.deepEqual(service.getConfig().mapValues, { RUNTIME: "third-value" });
+  } finally {
+    await service.stop();
+  }
+});
+
 test("clears captured logs and accepts new entries afterward", async () => {
   const config = createDefaultConfig();
   let onLog: ((entry: LogEntry) => void) | undefined;

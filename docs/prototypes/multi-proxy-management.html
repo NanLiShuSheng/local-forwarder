@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>多代理实例管理原型</title>
+  <style>
+    :root { color-scheme: dark; --bg:#0e1a2d; --sidebar:#101d31; --panel:#172841; --panel-2:#203653; --line:#2a405d; --text:#eef5ff; --soft:#b9c8dc; --muted:#8396b2; --green:#79e2c0; --danger:#f2a99b; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-width:1100px; background:linear-gradient(135deg,#0e1a2d,#111f34); color:var(--text); font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif; }
+    button { font:inherit; cursor:pointer; }
+    .topbar { height:68px; display:flex; align-items:center; padding:0 30px; background:#101e33; border-bottom:1px solid var(--line); }
+    .brand { display:flex; align-items:center; gap:12px; }
+    .brand-mark { width:32px; height:32px; display:grid; place-items:center; border-radius:50%; background:linear-gradient(135deg,#82e8c5,#54cda9); color:#092019; font-size:21px; font-weight:800; }
+    .brand strong,.brand small { display:block; }
+    .brand strong { font-size:17px; }
+    .brand small { color:var(--muted); font-size:11px; }
+    .total { margin-left:auto; display:flex; align-items:center; gap:9px; color:var(--muted); }
+    .dot { width:9px; height:9px; border-radius:50%; background:var(--green); box-shadow:0 0 0 4px rgba(121,226,192,.12); }
+    .total b { color:var(--green); }
+    .layout { display:grid; grid-template-columns:330px minmax(700px,1fr); min-height:832px; }
+    aside { padding:30px 20px; background:var(--sidebar); border-right:1px solid var(--line); }
+    .side-heading { display:flex; justify-content:space-between; align-items:start; margin:0 10px 24px; }
+    h1,h2,h3,p { margin:0; }
+    .side-heading h1 { font-size:20px; }
+    .side-heading p { margin-top:5px; color:var(--muted); font-size:12px; }
+    .add { border:0; border-radius:8px; padding:8px 11px; color:#092019; background:var(--green); font-weight:700; }
+    .proxy-card { width:100%; margin-bottom:14px; padding:16px; border:1px solid var(--line); border-radius:12px; color:var(--text); text-align:left; background:var(--panel); }
+    .proxy-card:hover { border-color:#5f7897; }
+    .proxy-card.selected { border-color:var(--green); background:var(--panel-2); box-shadow:0 10px 25px rgba(0,0,0,.16); }
+    .proxy-title { display:flex; align-items:center; gap:9px; font-weight:700; }
+    .proxy-title .port { margin-left:auto; color:var(--muted); font:11px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .proxy-card small { display:block; margin-top:14px; color:var(--muted); }
+    .proxy-card code { display:block; margin-top:4px; color:var(--soft); font:11px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .proxy-status { display:block; margin-top:10px; color:var(--green); font-size:11px; }
+    .proxy-status.stopped { color:var(--muted); }
+    .quick { margin:35px 10px 0; padding-top:24px; border-top:1px solid var(--line); }
+    .quick p { margin-bottom:13px; color:var(--muted); font-size:11px; }
+    .quick button { display:block; margin:14px 0; padding:0; border:0; color:var(--soft); background:transparent; }
+    main { padding:45px 48px 60px; max-width:1200px; width:100%; }
+    .crumb { color:var(--muted); font-size:12px; }
+    .hero { display:flex; align-items:end; gap:18px; margin-top:22px; }
+    .hero h2 { font-size:28px; }
+    .badge { display:inline-flex; align-items:center; gap:7px; margin-bottom:4px; padding:5px 11px; border-radius:14px; color:var(--green); background:#173c3a; font-size:11px; font-weight:700; }
+    .badge.stopped { color:var(--muted); background:#243246; }
+    .endpoint { margin-bottom:5px; color:var(--muted); font-size:12px; }
+    .hero-actions { margin-left:auto; display:flex; gap:10px; }
+    .secondary,.stop { border:1px solid #3b5471; border-radius:8px; padding:9px 14px; color:var(--soft); background:#243b57; }
+    .stop { color:var(--danger); border-color:#7d504d; background:#263647; }
+    .metrics { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:34px; }
+    .metric,.section { border:1px solid var(--line); border-radius:14px; background:var(--panel); box-shadow:0 10px 25px rgba(0,0,0,.12); }
+    .metric { min-height:105px; padding:23px; }
+    .label { color:var(--muted); font-size:12px; }
+    .value { margin-top:14px; font-size:25px; font-weight:750; }
+    .value code { font:15px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .value em { margin-left:8px; color:var(--green); font-size:11px; font-style:normal; font-weight:500; }
+    .section { margin-top:26px; padding:25px; }
+    .section-head { display:flex; justify-content:space-between; align-items:start; padding-bottom:18px; border-bottom:1px solid var(--line); }
+    .section h3 { font-size:16px; }
+    .section-head p { margin-top:4px; color:var(--muted); font-size:11px; }
+    .config-grid { display:grid; grid-template-columns:1fr 1fr; gap:24px 70px; padding-top:24px; }
+    .config-row { display:grid; grid-template-columns:130px 1fr; gap:14px; margin:13px 0; }
+    .config-row span { color:var(--muted); font-size:12px; }
+    .config-row code,.config-row strong { color:var(--soft); font:12px ui-monospace,SFMono-Regular,Menlo,monospace; font-weight:400; }
+    .config-footer { display:flex; justify-content:flex-end; margin-top:5px; }
+    .logs { min-height:216px; }
+    .log { display:grid; grid-template-columns:88px 62px 1fr; gap:12px; margin:14px 0; color:var(--soft); font:11px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .log time { color:var(--muted); }
+    .log .info { color:var(--green); }
+    .log .http,.log .tcp { color:#8fc7ff; }
+    @media (max-width:1200px) { main { padding-left:32px; padding-right:32px; } .metrics { grid-template-columns:repeat(2,1fr); } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">↗</span><div><strong>本地转发工具</strong><small>多代理实例管理</small></div></div>
+    <div class="total"><span>服务总状态</span><i class="dot"></i><b id="running-count">2 个运行中</b></div>
+  </header>
+  <div class="layout">
+    <aside>
+      <div class="side-heading"><div><h1>代理实例</h1><p>每个实例可使用独立端口和转发地址</p></div><button class="add" onclick="addProxy()">＋ 新增</button></div>
+      <div id="proxy-list"></div>
+      <div class="quick"><p>快捷操作</p><button onclick="addProxy()">＋ 新增代理实例</button><button onclick="copyProxy()">⧉ 复制当前实例</button><button>⚙ 全局设置</button></div>
+    </aside>
+    <main>
+      <div class="crumb">代理实例 / 详情</div>
+      <div class="hero"><div><h2 id="detail-name">行情代理</h2><div class="endpoint"><span id="detail-endpoint">监听 127.0.0.1:8080</span></div></div><span id="detail-badge" class="badge"><i class="dot"></i>运行中</span><div class="hero-actions"><button class="secondary">编辑配置</button><button id="toggle-button" class="stop" onclick="toggleSelected()">停止代理</button></div></div>
+      <div class="metrics"><div class="metric"><div class="label">本地监听端口</div><div class="value"><span id="metric-port">8080</span><em>可访问</em></div></div><div class="metric"><div class="label">上游转发地址</div><div class="value"><code id="metric-target">60.12.9.58:7778</code></div><div class="label">TCP / TZT</div></div><div class="metric"><div class="label">累计请求</div><div class="value" id="metric-requests">1,284</div></div><div class="metric"><div class="label">缓存状态</div><div class="value">已启用</div><div class="label">命中率 87.2%</div></div></div>
+      <section class="section"><div class="section-head"><div><h3>转发配置</h3><p>此配置仅作用于当前代理实例</p></div><button class="secondary">查看配置</button></div><div class="config-grid"><div><div class="config-row"><span>本地访问地址</span><code id="config-local">http://127.0.0.1:8080</code></div><div class="config-row"><span>上游地址</span><code id="config-target">tcp://60.12.9.58:7778</code></div></div><div><div class="config-row"><span>项目目录</span><strong>/Users/hdw/Desktop/market-h5</strong></div><div class="config-row"><span>缓存目录</span><strong>实例独立缓存</strong></div></div></div></section>
+      <section class="section logs"><div class="section-head"><h3>运行日志</h3><p>仅显示当前实例</p></div><div id="logs"></div></section>
+    </main>
+  </div>
+  <script>
+    const proxies = [
+      { name:'行情代理', port:8080, target:'60.12.9.58:7778', requests:'1,284', running:true, type:'TCP / TZT' },
+      { name:'业务办理代理', port:8081, target:'123.103.83.86:7779', requests:'426', running:true, type:'HTTP / HTTPS' },
+      { name:'测试代理', port:8082, target:'test.example.com:7778', requests:'0', running:false, type:'TCP / TZT' }
+    ];
+    let selected = 0;
+    function renderList() {
+      document.querySelector('#proxy-list').innerHTML = proxies.map((proxy, index) => `<button class="proxy-card ${selected === index ? 'selected' : ''}" onclick="selectProxy(${index})"><span class="proxy-title"><i class="dot" style="background:${proxy.running ? 'var(--green)' : 'var(--muted)'}"></i>${proxy.name}<span class="port">:${proxy.port}</span></span><small>上游地址</small><code>${proxy.target}</code><span class="proxy-status ${proxy.running ? '' : 'stopped'}">${proxy.running ? `运行中 · ${proxy.requests} 请求` : '已停止'}</span></button>`).join('');
+      document.querySelector('#running-count').textContent = `${proxies.filter(proxy => proxy.running).length} 个运行中`;
+    }
+    function renderDetail() {
+      const proxy = proxies[selected];
+      document.querySelector('#detail-name').textContent = proxy.name;
+      document.querySelector('#detail-endpoint').textContent = `监听 127.0.0.1:${proxy.port}`;
+      document.querySelector('#metric-port').textContent = proxy.port;
+      document.querySelector('#metric-target').textContent = proxy.target;
+      document.querySelector('#metric-requests').textContent = proxy.requests;
+      document.querySelector('#config-local').textContent = `http://127.0.0.1:${proxy.port}`;
+      document.querySelector('#config-target').textContent = `${proxy.type === 'TCP / TZT' ? 'tcp' : 'https'}://${proxy.target}`;
+      const badge = document.querySelector('#detail-badge');
+      badge.className = `badge ${proxy.running ? '' : 'stopped'}`;
+      badge.innerHTML = `<i class="dot" style="background:${proxy.running ? 'var(--green)' : 'var(--muted)'}"></i>${proxy.running ? '运行中' : '已停止'}`;
+      const toggle = document.querySelector('#toggle-button');
+      toggle.textContent = proxy.running ? '停止代理' : '启动代理';
+      toggle.className = proxy.running ? 'stop' : 'secondary';
+      document.querySelector('#logs').innerHTML = proxy.running ? `<div class="log"><time>10:24:31</time><span class="info">INFO</span><span>Forwarding service started on 127.0.0.1:${proxy.port}</span></div><div class="log"><time>10:24:36</time><span class="http">HTTP</span><span>GET /index.html → 200 · 42ms</span></div><div class="log"><time>10:24:39</time><span class="tcp">TCP</span><span>reqxml → ${proxy.target} · 86ms</span></div>` : '<div class="log"><time>--:--:--</time><span>INFO</span><span>当前代理未运行</span></div>';
+    }
+    function selectProxy(index) { selected = index; renderList(); renderDetail(); }
+    function toggleSelected() { proxies[selected].running = !proxies[selected].running; renderList(); renderDetail(); }
+    function addProxy() { proxies.push({ name:`新代理 ${proxies.length + 1}`, port:8080 + proxies.length, target:'待配置', requests:'0', running:false, type:'TCP / TZT' }); selected = proxies.length - 1; renderList(); renderDetail(); }
+    function copyProxy() { const source = proxies[selected]; proxies.push({ ...source, name:`${source.name} 副本`, port:8080 + proxies.length, running:false, requests:'0' }); selected = proxies.length - 1; renderList(); renderDetail(); }
+    renderList(); renderDetail();
+  </script>
+</body>
+</html>

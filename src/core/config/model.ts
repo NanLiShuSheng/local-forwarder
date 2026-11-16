@@ -1,5 +1,7 @@
 import type { AppConfig, LegacyData, ProxyInstance, ProxyWorkspace } from "../../shared/contracts";
+import { createDefaultForwardingTargets, DEFAULT_REQUEST_HOST, DEFAULT_REQUEST_PARAMS_TEXT, DEFAULT_REQUEST_PORT } from "../../shared/config-defaults";
 import { parseLocalCacheText } from "../../shared/local-cache";
+import { ensureDefaultLocalValues } from "../../shared/local-values";
 
 export type InternalConfig = AppConfig & { legacy: LegacyData };
 
@@ -12,7 +14,7 @@ export function createDefaultConfig(): InternalConfig {
       loggingEnabled: true,
     },
     httpRules: [],
-    tcpTargets: [],
+    tcpTargets: createDefaultForwardingTargets(),
     forwardingAddressHistory: { hq: [], jy: [], zx: [] },
     localValues: {},
     mapValues: {},
@@ -24,9 +26,9 @@ export function createDefaultConfig(): InternalConfig {
       autoDownload: false,
     },
     request: {
-      host: "127.0.0.1",
-      port: 8080,
-      paramsText: "",
+      host: DEFAULT_REQUEST_HOST,
+      port: DEFAULT_REQUEST_PORT,
+      paramsText: DEFAULT_REQUEST_PARAMS_TEXT,
     },
     stringTool: {
       inputText: "",
@@ -51,5 +53,5 @@ export function createDefaultWorkspace(config: AppConfig = createDefaultConfig()
   const instance = createDefaultProxyInstance(config);
   let sharedValues: Record<string, string> = {};
   try { sharedValues = parseLocalCacheText(config.localText ?? ""); } catch { /* malformed legacy text remains in the legacy config only */ }
-  return { version: 1, selectedInstanceId: instance.id, sharedValues, instances: [instance] };
+  return { version: 1, selectedInstanceId: instance.id, sharedValues: ensureDefaultLocalValues(sharedValues), instances: [instance] };
 }

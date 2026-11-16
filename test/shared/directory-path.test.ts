@@ -10,6 +10,13 @@ test("keeps an absolute directory path unchanged", () => {
   assert.equal(parseDirectoryInput("/Users/test/project"), "/Users/test/project");
 });
 
+test("accepts Windows drive and UNC paths for the Windows package", () => {
+  assert.equal(parseDirectoryInput("C:\\work\\project"), "C:\\work\\project");
+  assert.equal(parseDirectoryInput("D:/work/project"), "D:/work/project");
+  assert.equal(parseDirectoryInput("\\\\server\\share\\project"), "\\\\server\\share\\project");
+  assert.equal(parseDirectoryInput("file:///C:/work/My%20Project"), "C:/work/My Project");
+});
+
 test("rejects remote URLs, relative paths, and empty input", () => {
   assert.throws(() => parseDirectoryInput("https://example.test/project"), /本地 file URL/);
   assert.throws(() => parseDirectoryInput("project"), /目录路径无效/);
