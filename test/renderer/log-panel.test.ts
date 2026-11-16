@@ -406,11 +406,11 @@ test("App keeps the selected log while navigating to JSON preview", async () => 
 
 test("log panel labels reqxml rows with the action number", async () => {
   const panelSource = await readFile("src/renderer/components/LogPanel.tsx", "utf8");
-  assert.match(panelSource, /import \{ formatLogRequestLabel, parseLogRequestParams \} from "\.\.\/\.\.\/shared\/log-details"/);
-  assert.match(panelSource, /formatLogRequestLabel\(entry\.message, entry\.requestParams\)/);
+  assert.match(panelSource, /import \{ parseLogRequestLabel, parseLogRequestParams \} from "\.\.\/\.\.\/shared\/log-details"/);
+  assert.match(panelSource, /<LogRowLabel message=\{entry\.message\} requestParams=\{entry\.requestParams\} \/>/);
 });
 
-test("log panel renders the reqxml action number in the list row", () => {
+test("log panel renders the reqxml action number in the list row without the request method", () => {
   const entry: LogEntry = {
     timestamp: "2026-11-16T06:02:12.000Z",
     level: "info",
@@ -425,8 +425,33 @@ test("log panel renders the reqxml action number in the list row", () => {
     onClear: async () => true,
     onFillJson: () => undefined,
   }));
-  assert.match(markup, /POST \/reqxml\/49055\/esb\.wwygt\.zhcx\.cxzjzhxx/);
-  assert.doesNotMatch(markup, />POST \/reqxml</);
+  assert.match(markup, /reqxml\/<span class="log-request-action">49055<\/span>\/esb\.wwygt\.zhcx\.cxzjzhxx/);
+  assert.doesNotMatch(markup, /POST \/reqxml<\/span>/);
+});
+
+test("log panel keeps the request method inside the log detail", () => {
+  const entry: LogEntry = {
+    timestamp: "2026-11-16T06:02:12.000Z",
+    level: "info",
+    message: "POST /reqxml",
+    requestPath: "/reqxml",
+    requestParams: "POST /reqxml\n\naction=49055",
+  };
+  const markup = renderToStaticMarkup(createElement(LogPanel, {
+    logs: [entry],
+    selected: entry,
+    onSelect: () => undefined,
+    onClear: async () => true,
+    onFillJson: () => undefined,
+  }));
+  assert.match(markup, /POST \/reqxml/);
+});
+
+test("log panel styles the reqxml action number in both themes", async () => {
+  const styles = await readFile("src/renderer/styles.css", "utf8");
+  assert.match(styles, /\.log-request-action\s*\{[^}]*color:\s*var\(--log-request-action-text\);/);
+  assert.match(styles, /--log-request-action-text:\s*#79c0ff;/);
+  assert.match(styles, /\.app-shell\[data-theme="light"\][\s\S]*?--log-request-action-text:\s*#0969da;/);
 });
 
 test("log rows sit flush against their dividers so the selection has no blank strip", async () => {

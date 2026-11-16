@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatLogRequestLabel, parseLogRequestParams } from "../../src/shared/log-details";
+import { formatLogRequestLabel, parseLogRequestLabel, parseLogRequestParams } from "../../src/shared/log-details";
 
 test("parses the request line, duplicate query keys, and form body", () => {
   const result = parseLogRequestParams(
@@ -84,21 +84,34 @@ test("parses placeholder form parameters with empty separators without decoding 
   assert.equal(result.rawBody, undefined);
 });
 
-test("appends the reqxml action number to the log label", () => {
-  assert.equal(formatLogRequestLabel("POST /reqxml", "POST /reqxml\n\nAction=49055&account=600554432"), "POST /reqxml/49055");
-  assert.equal(formatLogRequestLabel("GET /reqxml?Action=100", "GET /reqxml?Action=100"), "GET /reqxml/100");
-  assert.equal(formatLogRequestLabel("POST /ant/reqxml?REQLINKTYPE=0", "POST /ant/reqxml?REQLINKTYPE=0\n\naction=3010"), "POST /ant/reqxml/3010");
-  assert.equal(formatLogRequestLabel("GET /reqxml?Action=100&Action=101", "GET /reqxml?Action=100&Action=101"), "GET /reqxml/101");
+test("appends the reqxml action number to the log label without the request method", () => {
+  assert.equal(formatLogRequestLabel("POST /reqxml", "POST /reqxml\n\nAction=49055&account=600554432"), "reqxml/49055");
+  assert.equal(formatLogRequestLabel("GET /reqxml?Action=100", "GET /reqxml?Action=100"), "reqxml/100");
+  assert.equal(formatLogRequestLabel("POST /ant/reqxml?REQLINKTYPE=0", "POST /ant/reqxml?REQLINKTYPE=0\n\naction=3010"), "ant/reqxml/3010");
+  assert.equal(formatLogRequestLabel("GET /reqxml?Action=100&Action=101", "GET /reqxml?Action=100&Action=101"), "reqxml/101");
 });
 
 test("appends the reqxml serviceId value after the action number", () => {
   assert.equal(
     formatLogRequestLabel("POST /reqxml", "POST /reqxml\n\nintactToServer=(%24IntactToServer)&action=49055&serviceId=esb.wwygt.zhcx.cxzjzhxx&ReqLinkType=1"),
-    "POST /reqxml/49055/esb.wwygt.zhcx.cxzjzhxx",
+    "reqxml/49055/esb.wwygt.zhcx.cxzjzhxx",
   );
-  assert.equal(formatLogRequestLabel("GET /reqxml?Action=100&serviceId=esb.one.two", "GET /reqxml?Action=100&serviceId=esb.one.two"), "GET /reqxml/100/esb.one.two");
+  assert.equal(formatLogRequestLabel("GET /reqxml?Action=100&serviceId=esb.one.two", "GET /reqxml?Action=100&serviceId=esb.one.two"), "reqxml/100/esb.one.two");
   assert.equal(formatLogRequestLabel("POST /reqxml", "POST /reqxml\n\nserviceId=esb.one.two"), "POST /reqxml");
-  assert.equal(formatLogRequestLabel("POST /reqxml", "POST /reqxml\n\naction=49055&serviceId="), "POST /reqxml/49055");
+  assert.equal(formatLogRequestLabel("POST /reqxml", "POST /reqxml\n\naction=49055&serviceId="), "reqxml/49055");
+});
+
+test("parses the reqxml log row label into the path, action, and serviceId parts", () => {
+  assert.deepEqual(
+    parseLogRequestLabel("POST /reqxml", "POST /reqxml\n\naction=49055&serviceId=esb.wwygt.zhcx.cxzjzhxx"),
+    { path: "reqxml", action: "49055", serviceId: "esb.wwygt.zhcx.cxzjzhxx" },
+  );
+  assert.deepEqual(
+    parseLogRequestLabel("GET /ant/reqxml?Action=100", "GET /ant/reqxml?Action=100"),
+    { path: "ant/reqxml", action: "100" },
+  );
+  assert.equal(parseLogRequestLabel("POST /api", "POST /api\n\nAction=49055"), null);
+  assert.equal(parseLogRequestLabel("服务已启动"), null);
 });
 
 test("keeps log labels unchanged without a reqxml action", () => {

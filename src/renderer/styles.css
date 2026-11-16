@@ -72,6 +72,7 @@ button { cursor: pointer; }
   --accent-faint: rgb(56 139 253 / 20%);
   --text-accent: #58a6ff;
   --text-selected: #58a6ff;
+  --log-request-action-text: #79c0ff;
   --success: #3fb950;
   --text-success: #3fb950;
   --text-description: #949ca6;
@@ -203,6 +204,7 @@ button { cursor: pointer; }
   --accent-faint: #b6e3ff;
   --text-accent: #0969da;
   --text-selected: #1b3a57;
+  --log-request-action-text: #0969da;
   --success: #1a7f37;
   --text-success: #1a7f37;
   --text-description: #59636e;
@@ -676,6 +678,7 @@ h2 { font-size: 1.35rem; }
 .log-row:hover { background: var(--selection-row-hover-background); }
 .log-row.selected { color: var(--selection-row-text); background: var(--selection-row-background); }
 .log-message { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.log-request-action { color: var(--log-request-action-text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .log-detail { min-width: 0; max-height: 660px; min-height: 260px; overflow-y: auto; margin-top: 0; border: 1px solid var(--border-default); border-radius: 12px; padding: 15px; background: var(--surface-code-background); scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); scrollbar-width: thin; }
 .log-detail-empty { margin: 0; color: var(--text-muted); font-size: 0.8rem; }
 .log-detail-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--text-primary); }

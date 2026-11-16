@@ -88,17 +88,32 @@ function lastParamValue(entries: readonly LogKeyValue[], key: string): string | 
   return found;
 }
 
-export function formatLogRequestLabel(message: string, requestParams?: string): string {
+export interface LogRequestLabel {
+  path: string;
+  action: string;
+  serviceId?: string;
+}
+
+export function parseLogRequestLabel(message: string, requestParams?: string): LogRequestLabel | null {
   const requestLine = message.split(/\r?\n/, 1)[0]?.trim() ?? "";
   const match = REQUEST_LINE_PATTERN.exec(requestLine);
-  if (match === null) return message;
+  if (match === null) return null;
   const [, method, target] = match;
   const parsed = parseLogRequestParams(requestParams === undefined || requestParams.trim() === "" ? `${method} ${target}` : requestParams);
-  if (!REQXML_PATH_PATTERN.test(parsed.path)) return message;
+  if (!REQXML_PATH_PATTERN.test(parsed.path)) return null;
   const action = (lastParamValue(parsed.body, "action") ?? lastParamValue(parsed.query, "action"))?.trim();
-  if (action === undefined || action === "") return message;
+  if (action === undefined || action === "") return null;
   const serviceId = (lastParamValue(parsed.body, "serviceId") ?? lastParamValue(parsed.query, "serviceId"))?.trim();
-  const segments = [parsed.path, action];
-  if (serviceId !== undefined && serviceId !== "") segments.push(serviceId);
-  return `${method} ${segments.join("/")}`;
+  const path = parsed.path.replace(/^\/+/, "");
+  return serviceId === undefined || serviceId === ""
+    ? { path, action }
+    : { path, action, serviceId };
+}
+
+export function formatLogRequestLabel(message: string, requestParams?: string): string {
+  const label = parseLogRequestLabel(message, requestParams);
+  if (label === null) return message;
+  const segments = [label.path, label.action];
+  if (label.serviceId !== undefined) segments.push(label.serviceId);
+  return segments.join("/");
 }
