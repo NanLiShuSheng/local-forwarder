@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#061018">
+  <meta name="description" content="Local Forwarder 是一款为开发与测试打造的本地 HTTP / HTTPS / TCP 转发工具，支持多环境实例、请求调试、JSON 可视化、本地缓存与自动更新。">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Local Forwarder — 本地转发工作台">
+  <meta property="og:description" content="多环境实例、请求调试、JSON 可视化与本地缓存，集中在一个窗口完成。">
+  <meta property="og:url" content="https://www.finbr.asia/">
+  <link rel="canonical" href="https://www.finbr.asia/">
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32.png">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <meta name="msapplication-TileColor" content="#71f6cf">
+  <link rel="stylesheet" href="./styles.css">
+  <title>Local Forwarder — 本地 HTTP / HTTPS / TCP 转发工作台</title>
+  <script src="./main.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+  <div class="ambient-grid" aria-hidden="true"></div>
+
+  <header class="site-nav" data-nav>
+    <div class="nav-inner">
+      <a class="brand" href="#" aria-label="Local Forwarder 首页">
+        <img class="brand-mark" src="./favicon.svg" alt="" width="34" height="34">
+        <span class="brand-copy">
+          <strong>Local Forwarder</strong>
+          <small>本地转发工具</small>
+        </span>
+      </a>
+
+      <nav class="nav-links" aria-label="主导航">
+        <a href="#features">功能</a>
+        <a href="#workflow">使用方式</a>
+        <a href="#scenes">适用场景</a>
+        <a href="#download">下载</a>
+      </nav>
+
+      <div class="nav-actions">
+        <span class="version-pill" data-version>读取中</span>
+        <a class="button button-primary button-compact" href="#download">下载最新版</a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero shell" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="status-dot"></span> 本地转发工作台 · Windows + macOS</div>
+        <h1 id="hero-title"><span>让每一次接口转发，</span><em>都在掌控之中。</em></h1>
+        <p class="hero-lead">为开发与测试打造的本地 HTTP / HTTPS / TCP 转发工具。多环境实例、请求调试、JSON 可视化与本地缓存，全部集中在一个窗口完成。</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#download">
+            下载最新版
+            <svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="M10 3.25v10.5m0 0 4.25-4.25M10 13.75 5.75 9.5M4 16.75h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <a class="button button-ghost" href="#features">查看功能</a>
+        </div>
+        <ul class="platform-list" aria-label="支持平台">
+          <li>Windows x64</li>
+          <li>macOS Intel</li>
+          <li>Apple Silicon</li>
+          <li>自动更新</li>
+        </ul>
+      </div>
+
+      <div class="hero-visual">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <div class="product-frame">
+          <div class="browser-bar">
+            <span class="traffic-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="browser-title"><img src="./favicon.svg" alt="" width="16" height="16"> Local Forwarder</span>
+            <span class="browser-state"><i></i> 已就绪</span>
+          </div>
+          <div class="product-screen">
+            <img src="./assets/app-overview.png" alt="Local Forwarder 概览界面，展示代理运行状态和多环境实例" width="2880" height="1864">
+          </div>
+        </div>
+        <div class="float-card float-live">
+          <small>Runtime</small>
+          <strong><span class="status-dot"></span> 代理运行中</strong>
+        </div>
+        <div class="float-card float-release">
+          <small>Update channel</small>
+          <strong><span data-version>读取中</span><span class="version-separator">·</span>已是最新版本</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="trust-strip shell" aria-label="产品特点">
+      <div class="trust-item"><strong>本地优先</strong><span>配置与日志保存在本机</span></div>
+      <div class="trust-item"><strong>一窗完成</strong><span>转发、请求、响应同步查看</span></div>
+      <div class="trust-item"><strong>双平台</strong><span>Windows 与 macOS 原生体验</span></div>
+      <div class="trust-item"><strong>直连更新</strong><span>通过 finbr.asia 获取最新版</span></div>
+    </section>
+
+    <section class="section shell" id="features">
+      <div class="section-heading">
+        <div>
+          <div class="kicker">Core capabilities</div>
+          <h2>开发调试需要的能力，<br>一次配齐。</h2>
+        </div>
+        <p>不是把多个工具拼在一起，而是围绕本地转发链路重新组织工作流。</p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature-card">
+          <span class="feature-index">01</span>
+          <span class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4" width="17" height="5.5" rx="1.75" stroke="currentColor" stroke-width="1.5"/><rect x="3.5" y="14.5" width="17" height="5.5" rx="1.75" stroke="currentColor" stroke-width="1.5"/><path d="M7 6.75h.01M7 17.25h.01" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg>
+          </span>
+          <h3>多环境实例</h3>
+          <p>生产、测试、本地联调独立配置，一键启动或关闭，不再反复修改参数。</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-index">02</span>
+          <span class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.5"/><path d="M3.75 9.25h16.5M3.75 14.75h16.5M12 3.5c2.1 2.25 3.25 5.1 3.25 8.5S14.1 18.25 12 20.5M12 3.5C9.9 5.75 8.75 8.6 8.75 12s1.15 6.25 3.25 8.5" stroke="currentColor" stroke-width="1.25"/></svg>
+          </span>
+          <h3>HTTP / HTTPS / TCP</h3>
+          <p>覆盖常见转发协议，并兼容 reqxml 与 TZT 原生协议场景。</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-index">03</span>
+          <span class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><rect x="3.25" y="4.25" width="17.5" height="15.5" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="m7 9 2.5 2.5L7 14m5 0h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <h3>请求工作台</h3>
+          <p>参数、响应、耗时同屏呈现，定位问题不必在多个窗口之间来回跳转。</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-index">04</span>
+          <span class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M8.25 4.25C6.45 4.25 5 5.6 5 7.25v1.1c0 1.1-.75 2.15-1.75 2.65v2c1 .5 1.75 1.55 1.75 2.65v1.1c0 1.65 1.45 3 3.25 3M15.75 4.25c1.8 0 3.25 1.35 3.25 3v1.1c0 1.1.75 2.15 1.75 2.65v2c-1 .5-1.75 1.55-1.75 2.65v1.1c0 1.65-1.45 3-3.25 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12 8v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </span>
+          <h3>JSON 可视化</h3>
+          <p>树形结构、字段路径与类型一目了然，复杂响应也能快速读完。</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-index">05</span>
+          <span class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="6" rx="7.5" ry="2.75" stroke="currentColor" stroke-width="1.5"/><path d="M4.5 6v6c0 1.52 3.36 2.75 7.5 2.75s7.5-1.23 7.5-2.75V6M4.5 12v6c0 1.52 3.36 2.75 7.5 2.75s7.5-1.23 7.5-2.75v-6" stroke="currentColor" stroke-width="1.5"/></svg>
+          </span>
+          <h3>本地变量与缓存</h3>
+          <p>本地变量、登录缓存与常用配置随实例管理，切换环境更轻。</p>
+        </article>
+        <article class="feature-card">
+          <span class="feature-index">06</span>
+          <span class="feature-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><rect x="4.25" y="10" width="15.5" height="10.25" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M8 10V7.5a4 4 0 1 1 8 0V10M12 14v2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </span>
+          <h3>加密与解密</h3>
+          <p>把请求链路中的加密、解密与响应内容放在同一处排查。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section shell" id="workflow">
+      <div class="section-heading">
+        <div>
+          <div class="kicker">Workflow</div>
+          <h2>从启动到定位，<br>只要三步。</h2>
+        </div>
+        <p>把高频操作压缩到最短路径，让注意力回到接口本身。</p>
+      </div>
+
+      <div class="workflow-grid">
+        <article class="workflow-step">
+          <span class="step-number">STEP / 01</span>
+          <h3>选择环境</h3>
+          <p>为不同项目建立独立代理实例，配置自动保存，随时切换。</p>
+        </article>
+        <article class="workflow-step">
+          <span class="step-number">STEP / 02</span>
+          <h3>一键启动</h3>
+          <p>监听本机端口，把请求准确转发到目标地址，状态实时可见。</p>
+        </article>
+        <article class="workflow-step">
+          <span class="step-number">STEP / 03</span>
+          <h3>查看与排查</h3>
+          <p>请求、响应、日志和结构化数据在同一个工作区完成检查。</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section shell" id="scenes">
+      <div class="section-heading">
+        <div>
+          <div class="kicker">Built for real work</div>
+          <h2>为真实调试场景设计。</h2>
+        </div>
+        <p>从接口联调到多环境切换，常用链路都在一个窗口里保持上下文。</p>
+      </div>
+
+      <div class="scene-grid">
+        <article class="scene-card scene-workbench">
+          <div class="scene-copy">
+            <div class="kicker">Interface debugging</div>
+            <h3>接口联调，不再手忙脚乱</h3>
+            <p>请求和响应并排查看，复杂 JSON 直接展开，复制与比较都更顺手。</p>
+            <div class="tag-list"><span>HTTP</span><span>JSON</span><span>Response</span></div>
+          </div>
+          <div class="scene-window" aria-hidden="true">
+            <div class="scene-window-bar"><i></i><i></i><i></i></div>
+            <img src="./assets/app-request.png" alt="" width="2880" height="1864">
+          </div>
+        </article>
+
+        <article class="scene-card scene-instances">
+          <div class="scene-copy">
+            <div class="kicker">Multi environment</div>
+            <h3>环境切换，保持上下文</h3>
+            <p>生产、测试、本地联调各自独立，切换实例不会打乱已有配置。</p>
+            <div class="tag-list"><span>Instances</span><span>Profiles</span><span>Local</span></div>
+          </div>
+          <div class="instance-stack" aria-hidden="true">
+            <div class="instance-row is-active">
+              <span class="instance-status"></span>
+              <span class="instance-name"><strong>华东生产环境</strong><small>127.0.0.1:8080</small></span>
+              <span class="instance-badge">运行中</span>
+            </div>
+            <div class="instance-row">
+              <span class="instance-status"></span>
+              <span class="instance-name"><strong>客户测试环境</strong><small>127.0.0.1:8081</small></span>
+              <span class="instance-badge">已停止</span>
+            </div>
+            <div class="instance-row">
+              <span class="instance-status"></span>
+              <span class="instance-name"><strong>本地联调</strong><small>127.0.0.1:8082</small></span>
+              <span class="instance-badge">已停止</span>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="download-section shell" id="download">
+      <div class="download-copy">
+        <div class="kicker">Latest release · <span data-version>读取中</span></div>
+        <h2>现在开始，<br>把转发变简单。</h2>
+        <p>仅提供最新版本。安装后，客户端会通过 finbr.asia 直连检查后续更新。</p>
+        <div class="download-proof">
+          <span><i></i>腾讯云直连</span>
+          <span>Windows + macOS</span>
+          <span>不保留历史版本</span>
+        </div>
+      </div>
+
+      <div class="download-panel">
+        <div class="download-platform">
+          <span class="platform-label">Windows x64</span>
+          <a class="button button-primary download-button is-loading" href="#download" data-download="windows" aria-disabled="true">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none"><path d="M3.5 5.8 10.9 4.8v6.35H3.5V5.8Zm0 6.25h7.4v6.35L3.5 17.4v-5.35Zm8.35-7.4L20.5 3.5v7.65h-8.65V4.65Zm0 7.4h8.65v7.65l-8.65-1.2V12.05Z" fill="currentColor"/></svg>
+            <span data-download-label>正在读取最新版本</span>
+          </a>
+        </div>
+
+        <div class="download-platform">
+          <span class="platform-label">macOS · 暂不可用</span>
+          <div class="mac-actions">
+            <span class="mac-link is-unavailable" aria-disabled="true" title="macOS 安装包暂不可用">
+              <span>Intel</span><small>DMG · 暂不可用</small>
+            </span>
+            <span class="mac-link is-unavailable" aria-disabled="true" title="macOS 安装包暂不可用">
+              <span>Apple Silicon</span><small>DMG · 暂不可用</small>
+            </span>
+          </div>
+        </div>
+
+        <p class="download-status" data-download-status aria-live="polite"><span class="status-dot"></span> 正在从 finbr.asia 读取最新版本信息…</p>
+        <noscript><p class="download-status is-error">需要启用 JavaScript 才能读取最新版本。你也可以直接访问 <a href="/local-forwarder/latest.yml">最新版本清单</a>。</p></noscript>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer shell">
+    <div class="footer-brand">
+      <img src="./favicon.svg" alt="" width="28" height="28">
+      <span><strong>Local Forwarder</strong><small>本地转发，保持专注。</small></span>
+    </div>
+    <nav class="footer-links" aria-label="页脚导航">
+      <a href="#features">功能</a>
+      <a href="#workflow">使用方式</a>
+      <a href="#download">下载</a>
+    </nav>
+    <p>© 2026 Local Forwarder <span>·</span> <a href="https://www.finbr.asia/">finbr.asia</a></p>
+  </footer>
+</body>
+</html>
