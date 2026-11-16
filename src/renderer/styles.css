@@ -650,9 +650,9 @@ h2 { font-size: 1.35rem; }
 .log-panel .log-workspace { flex: 1 1 auto; }
 .log-page-content .log-list { max-height: none; }
 .log-page-content .log-detail { max-height: none; min-height: 0; }
-.rule-list, .log-list { display: grid; gap: 8px; }
+.rule-list { display: grid; gap: 8px; }
 .log-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 1.05fr); gap: 16px; min-height: 0; }
-.log-list { max-height: 520px; min-height: 0; overflow-y: auto; padding-right: 6px; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); scrollbar-width: thin; }
+.log-list { display: grid; align-content: start; max-height: 520px; min-height: 0; overflow-y: auto; padding-right: 6px; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); scrollbar-width: thin; }
 .log-list::-webkit-scrollbar { width: 6px; }
 .log-list::-webkit-scrollbar-track { border-radius: 99px; background: var(--scrollbar-track); }
 .log-list::-webkit-scrollbar-thumb { border-radius: 99px; background: var(--scrollbar-thumb); }

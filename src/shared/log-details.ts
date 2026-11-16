@@ -75,3 +75,30 @@ export function parseLogRequestParams(raw: string): ParsedLogRequest {
     ...(body.length === 0 && rawBody.length > 0 ? { rawBody } : {}),
   };
 }
+
+const REQXML_PATH_PATTERN = /(?:^|\/)reqxml$/i;
+const REQUEST_LINE_PATTERN = /^([A-Z][A-Z0-9-]*)\s+(\S+)$/;
+
+function lastParamValue(entries: readonly LogKeyValue[], key: string): string | undefined {
+  const normalized = key.toLowerCase();
+  let found: string | undefined;
+  for (const entry of entries) {
+    if (entry.key.toLowerCase() === normalized) found = entry.value;
+  }
+  return found;
+}
+
+export function formatLogRequestLabel(message: string, requestParams?: string): string {
+  const requestLine = message.split(/\r?\n/, 1)[0]?.trim() ?? "";
+  const match = REQUEST_LINE_PATTERN.exec(requestLine);
+  if (match === null) return message;
+  const [, method, target] = match;
+  const parsed = parseLogRequestParams(requestParams === undefined || requestParams.trim() === "" ? `${method} ${target}` : requestParams);
+  if (!REQXML_PATH_PATTERN.test(parsed.path)) return message;
+  const action = (lastParamValue(parsed.body, "action") ?? lastParamValue(parsed.query, "action"))?.trim();
+  if (action === undefined || action === "") return message;
+  const serviceId = (lastParamValue(parsed.body, "serviceId") ?? lastParamValue(parsed.query, "serviceId"))?.trim();
+  const segments = [parsed.path, action];
+  if (serviceId !== undefined && serviceId !== "") segments.push(serviceId);
+  return `${method} ${segments.join("/")}`;
+}

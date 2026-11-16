@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseLogRequestParams } from "../../src/shared/log-details";
+import { formatLogRequestLabel, parseLogRequestParams } from "../../src/shared/log-details";
 
 test("parses the request line, duplicate query keys, and form body", () => {
   const result = parseLogRequestParams(
@@ -82,4 +82,29 @@ test("parses placeholder form parameters with empty separators without decoding 
   assert.equal(result.body.length, 12);
   assert.equal(result.body.at(-1)?.value, "/newzt/fengmian/ywbl_fengmian.html");
   assert.equal(result.rawBody, undefined);
+});
+
+test("appends the reqxml action number to the log label", () => {
+  assert.equal(formatLogRequestLabel("POST /reqxml", "POST /reqxml\n\nAction=49055&account=600554432"), "POST /reqxml/49055");
+  assert.equal(formatLogRequestLabel("GET /reqxml?Action=100", "GET /reqxml?Action=100"), "GET /reqxml/100");
+  assert.equal(formatLogRequestLabel("POST /ant/reqxml?REQLINKTYPE=0", "POST /ant/reqxml?REQLINKTYPE=0\n\naction=3010"), "POST /ant/reqxml/3010");
+  assert.equal(formatLogRequestLabel("GET /reqxml?Action=100&Action=101", "GET /reqxml?Action=100&Action=101"), "GET /reqxml/101");
+});
+
+test("appends the reqxml serviceId value after the action number", () => {
+  assert.equal(
+    formatLogRequestLabel("POST /reqxml", "POST /reqxml\n\nintactToServer=(%24IntactToServer)&action=49055&serviceId=esb.wwygt.zhcx.cxzjzhxx&ReqLinkType=1"),
+    "POST /reqxml/49055/esb.wwygt.zhcx.cxzjzhxx",
+  );
+  assert.equal(formatLogRequestLabel("GET /reqxml?Action=100&serviceId=esb.one.two", "GET /reqxml?Action=100&serviceId=esb.one.two"), "GET /reqxml/100/esb.one.two");
+  assert.equal(formatLogRequestLabel("POST /reqxml", "POST /reqxml\n\nserviceId=esb.one.two"), "POST /reqxml");
+  assert.equal(formatLogRequestLabel("POST /reqxml", "POST /reqxml\n\naction=49055&serviceId="), "POST /reqxml/49055");
+});
+
+test("keeps log labels unchanged without a reqxml action", () => {
+  assert.equal(formatLogRequestLabel("POST /reqxml", "POST /reqxml\n\naccount=600554432"), "POST /reqxml");
+  assert.equal(formatLogRequestLabel("POST /api", "POST /api\n\nAction=49055"), "POST /api");
+  assert.equal(formatLogRequestLabel("POST /reqxml", "POST /reqxml\n\nAction="), "POST /reqxml");
+  assert.equal(formatLogRequestLabel("服务已启动"), "服务已启动");
+  assert.equal(formatLogRequestLabel("POST /reqxml\n\nAction=1"), "POST /reqxml\n\nAction=1");
 });

@@ -403,3 +403,34 @@ test("App keeps the selected log while navigating to JSON preview", async () => 
   assert.match(panelSource, /onSelect\(entry\)/);
   assert.match(panelSource, /onCleared: \(\) => onSelect\(undefined\)/);
 });
+
+test("log panel labels reqxml rows with the action number", async () => {
+  const panelSource = await readFile("src/renderer/components/LogPanel.tsx", "utf8");
+  assert.match(panelSource, /import \{ formatLogRequestLabel, parseLogRequestParams \} from "\.\.\/\.\.\/shared\/log-details"/);
+  assert.match(panelSource, /formatLogRequestLabel\(entry\.message, entry\.requestParams\)/);
+});
+
+test("log panel renders the reqxml action number in the list row", () => {
+  const entry: LogEntry = {
+    timestamp: "2026-11-16T06:02:12.000Z",
+    level: "info",
+    message: "POST /reqxml",
+    requestPath: "/reqxml",
+    requestParams: "POST /reqxml\n\nintactToServer=(%24IntactToServer)&action=49055&serviceId=esb.wwygt.zhcx.cxzjzhxx",
+  };
+  const markup = renderToStaticMarkup(createElement(LogPanel, {
+    logs: [entry],
+    selected: undefined,
+    onSelect: () => undefined,
+    onClear: async () => true,
+    onFillJson: () => undefined,
+  }));
+  assert.match(markup, /POST \/reqxml\/49055\/esb\.wwygt\.zhcx\.cxzjzhxx/);
+  assert.doesNotMatch(markup, />POST \/reqxml</);
+});
+
+test("log rows sit flush against their dividers so the selection has no blank strip", async () => {
+  const styles = await readFile("src/renderer/styles.css", "utf8");
+  assert.match(styles, /\.log-list\s*\{[^}]*align-content:\s*start;/);
+  assert.doesNotMatch(styles, /\.rule-list, \.log-list/);
+});
