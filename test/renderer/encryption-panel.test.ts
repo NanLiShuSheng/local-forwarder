@@ -86,7 +86,7 @@ test("history shell boundaries and running state keep menus safe", async () => {
   assert.match(component, /className="encryption-input-shell" data-encryption-kind=\{kind\}/);
   assert.match(component, /const encryptionShell = target instanceof Element \? target\.closest\("\.encryption-input-shell"\) : null;/);
   assert.match(component, /if \(encryptionShell !== null\) \{\s*setOpenHistoryIndex\(undefined\);\s*const encryptionKind = encryptionShell\.getAttribute\("data-encryption-kind"\);\s*if \(encryptionKind !== openEncryptionHistoryKind\) \{\s*setOpenEncryptionHistoryKind\(undefined\);\s*\}\s*return;\s*\}/);
-  assert.match(component, /setEncryptionRunning\(true\);\s*setOpenEncryptionHistoryKind\(undefined\);/);
+  assert.match(component, /setEncryptionRunning\(true\);\s*setEncryptionCancelling\(false\);\s*setOpenEncryptionHistoryKind\(undefined\);/);
   assert.match(component, /className="address-history-option encryption-history-option"[^>]*disabled=\{encryptionRunning\}/);
 });
 
@@ -96,6 +96,22 @@ test("full encryption is primary and incremental encryption is outlined", async 
   assert.match(component, /className="primary"[\s\S]{0,500}?开始加密/);
   assert.match(component, /className="encryption-incremental-button"[\s\S]{0,300}增量加密/);
   assert.match(styles, /\.encryption-incremental-button\s*\{/);
+});
+
+test("encryption page exposes cancellation while a task is running", async () => {
+  const [component, styles, app] = await Promise.all([
+    readFile("src/renderer/components/ConfigPages.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+    readFile("src/renderer/App.tsx", "utf8"),
+  ]);
+  for (const label of ["取消加密", "正在取消…", "已取消：", "未完成部分不会写入加密状态"]) assert.match(component, new RegExp(label));
+  assert.match(component, /onCancelEncryption/);
+  assert.match(component, /encryptionCancelling/);
+  assert.match(component, /result\.canceled/);
+  assert.match(component, /encryptionRunning && <button type="button" className="encryption-cancel-button"/);
+  assert.match(styles, /\.encryption-cancel-button\s*\{/);
+  assert.match(app, /const cancelEncryption = async \(\) => \{[\s\S]*?window\.forwarder\.cancelEncryption\(\)[\s\S]*?notifyError\(result\.error \?\? "取消加密失败", "取消加密失败"\);/);
+  assert.match(app, /!result\.ok && !result\.canceled/);
 });
 
 test("encryption page does not show the recursive processing description", async () => {

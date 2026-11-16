@@ -21,6 +21,7 @@ const IPC_CHANNELS = {
   getEncryptionPreferences: "encryption:get-preferences",
   saveEncryptionPreferences: "encryption:save-preferences",
   encryptDirectory: "encryption:run",
+  cancelEncryption: "encryption:cancel",
   encryptionProgress: "encryption:progress",
   selectDecryptionDirectory: "decryption:select-directory",
   getDecryptionPreferences: "decryption:get-preferences",
@@ -73,6 +74,7 @@ const api: ForwarderApi = {
   getEncryptionPreferences: () => ipcRenderer.invoke(IPC_CHANNELS.getEncryptionPreferences),
   saveEncryptionPreferences: (patch: EncryptionPreferencesPatch) => ipcRenderer.invoke(IPC_CHANNELS.saveEncryptionPreferences, patch),
   encryptDirectory: (inputDir: string, outputDir: string, mode: EncryptionMode, lowercaseOutput: boolean) => ipcRenderer.invoke(IPC_CHANNELS.encryptDirectory, inputDir, outputDir, mode, lowercaseOutput),
+  cancelEncryption: () => ipcRenderer.invoke(IPC_CHANNELS.cancelEncryption),
   onEncryptionProgress: (listener: (progress: EncryptionProgress) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, progress: EncryptionProgress) => listener(progress);
     ipcRenderer.on(IPC_CHANNELS.encryptionProgress, handler);

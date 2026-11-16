@@ -48,6 +48,7 @@ export interface EncryptDirectoryOptions {
   lowercaseOutput?: boolean;
   statePath?: string;
   tempRoot?: string;
+  signal?: AbortSignal;
   onProgress?: (progress: EncryptionProgress) => void;
 }
 
@@ -76,14 +77,16 @@ function shouldIgnoreEntry(entry: { name: string; isDirectory(): boolean; isFile
   return false;
 }
 
-export async function collectFiles(rootDir: string): Promise<string[]> {
+export async function collectFiles(rootDir: string, signal?: AbortSignal): Promise<string[]> {
+  signal?.throwIfAborted();
   const entries = await readdir(rootDir, { withFileTypes: true });
   const files: string[] = [];
   for (const entry of entries) {
+    signal?.throwIfAborted();
     if (shouldIgnoreEntry(entry)) continue;
     const fullPath = path.join(rootDir, entry.name);
     if (entry.isDirectory()) {
-      files.push(...await collectFiles(fullPath));
+      files.push(...await collectFiles(fullPath, signal));
     } else if (entry.isFile()) {
       files.push(fullPath);
     }
@@ -128,19 +131,23 @@ export async function runEncoder({
   sourcePath,
   outputPath,
   tempRoot = os.tmpdir(),
+  signal,
 }: {
   encoderPath: string;
   encoderArgs?: string[];
   sourcePath: string;
   outputPath: string;
   tempRoot?: string;
+  signal?: AbortSignal;
 }): Promise<void> {
+  signal?.throwIfAborted();
   const tempDir = await mkdtemp(path.join(tempRoot, "encode-work-"));
   const tempInputPath = path.join(tempDir, path.basename(sourcePath));
   const tempOutputPath = `${tempInputPath}.d`;
   try {
     await copyFile(sourcePath, tempInputPath);
-    await execFileAsync(encoderPath, [...encoderArgs, tempInputPath], { windowsHide: true });
+    await execFileAsync(encoderPath, [...encoderArgs, tempInputPath], { windowsHide: true, signal });
+    signal?.throwIfAborted();
     try {
       await access(tempOutputPath);
     } catch {
@@ -149,6 +156,7 @@ export async function runEncoder({
     await mkdir(path.dirname(outputPath), { recursive: true });
     await copyFile(tempOutputPath, outputPath);
   } catch (error) {
+    if (signal?.aborted) throw error;
     throw new Error(`Failed to encrypt "${sourcePath}": ${errorDetails(error)}`);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
@@ -288,12 +296,14 @@ export async function encryptDirectory({
   lowercaseOutput = false,
   statePath = getDefaultEncryptStatePath(outputDir),
   tempRoot = os.tmpdir(),
+  signal,
   onProgress,
 }: EncryptDirectoryOptions): Promise<EncryptionResult> {
   if (!inputDir || !outputDir) throw new Error("inputDir and outputDir are required");
   if (!encoderPath) throw new Error("encoderPath is required");
   if (mode !== "full" && mode !== "incremental") throw new Error(`Unsupported encryption mode: ${mode}`);
 
+  signal?.throwIfAborted();
   await assertInputAndOutputAreSafe(inputDir, outputDir);
   try {
     await access(encoderPath, constants.X_OK);
@@ -303,7 +313,8 @@ export async function encryptDirectory({
   await mkdir(outputDir, { recursive: true });
 
   onProgress?.({ mode, phase: "scanning", current: 0, total: 0, processedFiles: 0, skippedFiles: 0, removedFiles: 0 });
-  const files = await collectFiles(inputDir);
+  const files = await collectFiles(inputDir, signal);
+  signal?.throwIfAborted();
   const resolvedInputDir = await resolveForSafety(inputDir);
   const resolvedOutputDir = await resolveForSafety(outputDir);
   const encoderHash = await hashEncoder(encoderPath, encoderArgs);
@@ -324,6 +335,7 @@ export async function encryptDirectory({
 
   if (previousState?.inputDir === resolvedInputDir && previousState.outputDir === resolvedOutputDir) {
     for (const relativePath of Object.keys(previousState.files)) {
+      signal?.throwIfAborted();
       const previousOutputRelativePath = previousLowercaseOutput ? relativePath.toLowerCase() : relativePath;
       if (currentOutputPaths.get(relativePath) === previousOutputRelativePath) continue;
       const staleOutputPath = safeOutputPath(resolvedOutputDir, previousOutputRelativePath);
@@ -341,11 +353,13 @@ export async function encryptDirectory({
   }
 
   for (const [index, outputPlan] of outputPlans.entries()) {
+    signal?.throwIfAborted();
     const filePath = files[index]!;
     const { relativePath, outputRelativePath } = outputPlan;
     const outputPath = safeOutputPath(resolvedOutputDir, outputRelativePath);
     if (lowercaseOutput) await normalizeOutputFilePath(resolvedOutputDir, `${outputRelativePath}.d`);
     const sourceHash = await hashFile(filePath);
+    signal?.throwIfAborted();
     nextState.files[relativePath] = sourceHash;
     const canSkip = mode === "incremental" && stateMatches && previousFiles[relativePath] === sourceHash && await outputExists(outputPath);
     if (canSkip) {
@@ -353,13 +367,15 @@ export async function encryptDirectory({
       onProgress?.({ mode, phase: "processing", status: "skipping", current: processedFiles + skippedFiles, total: files.length, processedFiles, skippedFiles, removedFiles, relativePath });
     } else {
       logs.push(`Encrypting ${relativePath}`);
-      await runEncoder({ encoderPath, encoderArgs, sourcePath: filePath, outputPath, tempRoot });
+      await runEncoder({ encoderPath, encoderArgs, sourcePath: filePath, outputPath, tempRoot, signal });
+      signal?.throwIfAborted();
       processedFiles += 1;
       onProgress?.({ mode, phase: "processing", status: "encrypting", current: processedFiles + skippedFiles, total: files.length, processedFiles, skippedFiles, removedFiles, relativePath });
     }
     resultFiles.push({ relativePath, outputPath });
   }
 
+  signal?.throwIfAborted();
   await writeEncryptState(statePath, nextState);
   onProgress?.({ mode, phase: "completed", status: "completed", current: files.length, total: files.length, processedFiles, skippedFiles, removedFiles });
   return { mode, totalFiles: resultFiles.length, processedFiles, skippedFiles, removedFiles, files: resultFiles, logs };

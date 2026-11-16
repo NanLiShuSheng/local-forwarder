@@ -5,7 +5,7 @@ import { encryptDirectory } from "../src/core/encryption/encryptor";
 import { readEncryptionPreferences, saveEncryptionPreferences } from "../src/core/encryption/preferences";
 import { decryptDirectory as decryptDirectoryTree } from "../src/core/decryption/decryptor";
 import { readDecryptionPreferences, saveDecryptionPreferences } from "../src/core/decryption/preferences";
-import type { AppConfig, EncryptionMode, LogEntry, ProxyInstanceSummary, UpdateState } from "../src/shared/contracts";
+import type { AppConfig, EncryptionMode, EncryptionProgress, LogEntry, ProxyInstanceSummary, UpdateState } from "../src/shared/contracts";
 import { ConfigStore } from "../src/core/config/config-store";
 import { createDefaultConfig } from "../src/core/config/model";
 import { ForwardingServiceManager } from "../src/core/runtime/forwarding-service-manager";
@@ -39,6 +39,7 @@ const IPC_CHANNELS = {
   getEncryptionPreferences: "encryption:get-preferences",
   saveEncryptionPreferences: "encryption:save-preferences",
   encryptDirectory: "encryption:run",
+  cancelEncryption: "encryption:cancel",
   encryptionProgress: "encryption:progress",
   selectDecryptionDirectory: "decryption:select-directory",
   getDecryptionPreferences: "decryption:get-preferences",
@@ -68,6 +69,7 @@ let configStore: ConfigStore;
 let workspaceStore: ProxyWorkspaceStore;
 let updateService: UpdateService | undefined;
 let updateInstallInProgress = false;
+let encryptionAbortController: AbortController | undefined;
 const updateLifecycle = createUpdateLifecycleGate();
 let quitting = false;
 
@@ -234,12 +236,21 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       return { ok: false, error: error instanceof Error ? error.message : "保存加密目录失败" };
     }
   });
+  registerIpcHandler(policy, IPC_CHANNELS.cancelEncryption, () => {
+    if (encryptionAbortController === undefined) return { ok: false, error: "当前没有正在执行的加密任务" };
+    encryptionAbortController.abort();
+    return { ok: true };
+  });
   registerIpcHandler(policy, IPC_CHANNELS.encryptDirectory, async (_event, inputDir, outputDir, mode, lowercaseOutput) => {
     if (typeof inputDir !== "string" || typeof outputDir !== "string" || !inputDir || !outputDir) {
       return { ok: false, error: "请选择加密前和加密后文件夹目录" };
     }
     if (mode !== "full" && mode !== "incremental") return { ok: false, error: "加密模式无效" };
     if (lowercaseOutput !== undefined && typeof lowercaseOutput !== "boolean") return { ok: false, error: "小写文件输出参数无效" };
+    if (encryptionAbortController !== undefined) return { ok: false, error: "已有加密任务正在执行" };
+    const controller = new AbortController();
+    let latestProgress: EncryptionProgress | undefined;
+    encryptionAbortController = controller;
     try {
       const result = await encryptDirectory({
         inputDir,
@@ -247,13 +258,27 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
         mode: mode as EncryptionMode,
         lowercaseOutput: lowercaseOutput === true,
         encoderPath: getEncryptionEncoderPath(__dirname, app.isPackaged, process.resourcesPath),
+        signal: controller.signal,
         onProgress: (progress) => {
+          latestProgress = progress;
           for (const window of BrowserWindow.getAllWindows()) window.webContents.send(IPC_CHANNELS.encryptionProgress, progress);
         },
       });
       return { ok: true, ...result };
     } catch (error) {
+      if (controller.signal.aborted) {
+        return {
+          ok: false,
+          canceled: true,
+          totalFiles: latestProgress?.total ?? 0,
+          processedFiles: latestProgress?.processedFiles ?? 0,
+          skippedFiles: latestProgress?.skippedFiles ?? 0,
+          removedFiles: latestProgress?.removedFiles ?? 0,
+        };
+      }
       return { ok: false, error: error instanceof Error ? error.message : "加密失败" };
+    } finally {
+      if (encryptionAbortController === controller) encryptionAbortController = undefined;
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.selectDecryptionDirectory, async (_event, kind) => {

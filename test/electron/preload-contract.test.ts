@@ -17,6 +17,7 @@ test("compiled sandbox preload has no runtime dependency on shared contracts", (
   assert.match(preload, /selectEncryptionDirectory/);
   assert.match(preload, /saveEncryptionPreferences/);
   assert.match(preload, /encryptDirectory/);
+  assert.match(preload, /cancelEncryption/);
   assert.match(preload, /onEncryptionProgress/);
   assert.match(preload, /selectDecryptionDirectory/);
   assert.match(preload, /saveDecryptionPreferences/);

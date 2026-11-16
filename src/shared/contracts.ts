@@ -182,6 +182,7 @@ export interface EncryptionFileResult {
 
 export interface EncryptionResult extends OperationResult {
   mode?: EncryptionMode;
+  canceled?: boolean;
   totalFiles?: number;
   processedFiles?: number;
   skippedFiles?: number;
@@ -277,6 +278,7 @@ export interface ForwarderApi {
   getEncryptionPreferences(): Promise<EncryptionPreferences>;
   saveEncryptionPreferences(patch: EncryptionPreferencesPatch): Promise<OperationResult & { preferences?: EncryptionPreferences }>;
   encryptDirectory(inputDir: string, outputDir: string, mode: EncryptionMode, lowercaseOutput: boolean): Promise<EncryptionResult>;
+  cancelEncryption(): Promise<OperationResult>;
   onEncryptionProgress(listener: (progress: EncryptionProgress) => void): () => void;
   selectDecryptionDirectory(kind: DecryptionDirectoryKind): Promise<OperationResult & { path?: string; canceled?: boolean; preferences?: DecryptionPreferences }>;
   getDecryptionPreferences(): Promise<DecryptionPreferences>;
@@ -313,6 +315,7 @@ export const IPC_CHANNELS = {
   getEncryptionPreferences: "encryption:get-preferences",
   saveEncryptionPreferences: "encryption:save-preferences",
   encryptDirectory: "encryption:run",
+  cancelEncryption: "encryption:cancel",
   encryptionProgress: "encryption:progress",
   selectDecryptionDirectory: "decryption:select-directory",
   getDecryptionPreferences: "decryption:get-preferences",

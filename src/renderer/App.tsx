@@ -427,7 +427,13 @@ function AppContent() {
 
   const encryptDirectory = async (inputDir: string, outputDir: string, mode: EncryptionMode, lowercaseOutput: boolean): Promise<EncryptionResult> => {
     const result = await window.forwarder.encryptDirectory(inputDir, outputDir, mode, lowercaseOutput);
-    if (!result.ok) notifyError(result.error ?? "加密失败", "加密失败");
+    if (!result.ok && !result.canceled) notifyError(result.error ?? "加密失败", "加密失败");
+    return result;
+  };
+
+  const cancelEncryption = async () => {
+    const result = await window.forwarder.cancelEncryption();
+    if (!result.ok) notifyError(result.error ?? "取消加密失败", "取消加密失败");
     return result;
   };
 
@@ -457,7 +463,7 @@ function AppContent() {
   };
 
   const selectedInstance = instances.find((instance) => instance.selected) ?? instances[0];
-  const pageProps = { config, logs, onChange: save, encryptionPreferences, onSelectEncryptionDirectory: selectEncryptionDirectory, onSaveEncryptionPreferences: saveEncryptionPreferences, onEncryptDirectory: encryptDirectory, onEncryptionProgress: window.forwarder.onEncryptionProgress, loginCache, onSaveLoginCache: saveLoginCache };
+  const pageProps = { config, logs, onChange: save, encryptionPreferences, onSelectEncryptionDirectory: selectEncryptionDirectory, onSaveEncryptionPreferences: saveEncryptionPreferences, onEncryptDirectory: encryptDirectory, onCancelEncryption: cancelEncryption, onEncryptionProgress: window.forwarder.onEncryptionProgress, loginCache, onSaveLoginCache: saveLoginCache };
 
   return <main className="app-shell" data-theme={theme}>
     <aside className="sidebar">

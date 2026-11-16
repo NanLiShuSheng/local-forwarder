@@ -25,6 +25,14 @@ test("request page keeps IP, port, and pasted parameters and sends the request",
   assert.match(source, /onBlur/);
   assert.match(source, /onSendRequest/);
   assert.match(source, /parseManualRequestParams/);
+  assert.match(source, /className="login-cache-notice" role="note" aria-labelledby="login-cache-notice-title"/);
+  assert.match(source, /登录请求会自动缓存应答值/);
+  assert.match(source, /Action = 100 \/ 104 \/ 105/);
+  assert.match(source, /普通请求不会触发缓存/);
+  assert.match(source, /<span className="login-cache-notice-tag">当前代理<\/span>/);
+  assert.match(styles, /\.login-cache-notice\s*\{[^}]*border-left:\s*3px solid var\(--info\);/);
+  assert.match(styles, /\.login-cache-notice\s*\{[^}]*background:\s*var\(--info-background\);/);
+  assert.match(styles, /\.login-cache-notice-tag\s*\{[^}]*white-space:\s*nowrap;/);
   assert.match(source, /<div className="response-actions">/);
   const responseActions = source.match(/<div className="response-actions">([\s\S]*?)<\/div>\s*<\/div>\s*<div className="response-code">/);
   assert.ok(responseActions, "response-actions should wrap the response metadata controls");

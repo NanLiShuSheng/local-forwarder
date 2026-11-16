@@ -97,6 +97,11 @@ export function RequestPage({ config, onChange, onSendRequest }: RequestPageProp
   };
 
   return <section className="panel request-panel">
+    <div className="login-cache-notice" role="note" aria-labelledby="login-cache-notice-title">
+      <span className="login-cache-notice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="7" ry="3" /><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" /><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" /></svg></span>
+      <div className="login-cache-notice-copy"><strong id="login-cache-notice-title">登录请求会自动缓存应答值</strong><p><code>Action = 100 / 104 / 105</code> 的请求成功后，应答中的键值会自动写入当前代理的「登录缓存」，无需手动保存。普通请求不会触发缓存。</p></div>
+      <span className="login-cache-notice-tag">当前代理</span>
+    </div>
     <div className="request-endpoint">
       <label>目标 IP<input value={draft.host} placeholder="例如 127.0.0.1" onChange={(event) => setDraft((current) => ({ ...current, host: event.target.value }))} onBlur={() => void saveDraft(draft)} /></label>
       <label>端口<input type="number" value={portText} placeholder="端口" onChange={(event) => setPortText(event.target.value)} onBlur={() => void savePort()} /></label>

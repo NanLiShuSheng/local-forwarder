@@ -24,6 +24,7 @@ test("IPC channels expose stable runtime commands", () => {
     getEncryptionPreferences: "encryption:get-preferences",
     saveEncryptionPreferences: "encryption:save-preferences",
     encryptDirectory: "encryption:run",
+    cancelEncryption: "encryption:cancel",
     encryptionProgress: "encryption:progress",
     selectDecryptionDirectory: "decryption:select-directory",
     getDecryptionPreferences: "decryption:get-preferences",

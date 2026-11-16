@@ -10,13 +10,16 @@ test("IPC contracts expose directory selection and encryption execution", async 
   assert.equal(IPC_CHANNELS.selectEncryptionDirectory, "encryption:select-directory");
   assert.equal(IPC_CHANNELS.getEncryptionPreferences, "encryption:get-preferences");
   assert.equal(IPC_CHANNELS.encryptDirectory, "encryption:run");
+  assert.equal(IPC_CHANNELS.cancelEncryption, "encryption:cancel");
   const preload = await readFile("electron/preload.ts", "utf8");
   const main = await readFile("electron/main.ts", "utf8");
   assert.match(preload, /selectEncryptionDirectory/);
   assert.match(preload, /getEncryptionPreferences/);
   assert.match(preload, /encryptDirectory/);
+  assert.match(preload, /cancelEncryption/);
   assert.match(main, /selectEncryptionDirectory/);
   assert.match(main, /encryptDirectory/);
+  assert.match(main, /cancelEncryption/);
 });
 
 test("shared encryption contracts preserve history and restrict writable patches", async () => {
@@ -26,6 +29,8 @@ test("shared encryption contracts preserve history and restrict writable patches
   assert.match(contracts, /export type EncryptionPreferencesPatch\s*=\s*Partial<Pick<EncryptionPreferences,\s*"inputDir"\s*\|\s*"outputDir"\s*\|\s*"lowercaseOutput">>;/);
   assert.match(contracts, /selectEncryptionDirectory\(kind: EncryptionDirectoryKind\): Promise<OperationResult & \{[\s\S]*preferences\?: EncryptionPreferences\s*;?\s*\}>/);
   assert.match(contracts, /saveEncryptionPreferences\(patch: EncryptionPreferencesPatch\)/);
+  assert.match(contracts, /cancelEncryption\(\): Promise<OperationResult>;/);
+  assert.match(contracts, /export interface EncryptionResult extends OperationResult \{[\s\S]*canceled\?: boolean;/);
   assert.match(preload, /EncryptionPreferencesPatch/);
   assert.match(preload, /saveEncryptionPreferences: \(patch: EncryptionPreferencesPatch\)/);
   assert.doesNotMatch(preload, /Partial<EncryptionPreferences>/);

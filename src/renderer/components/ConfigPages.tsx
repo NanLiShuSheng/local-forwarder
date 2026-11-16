@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, ForwardingAddressHistory, LogEntry } from "../../shared/contracts";
+import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, ForwardingAddressHistory, LogEntry, OperationResult } from "../../shared/contracts";
 import { createDefaultForwardingTargets } from "../../shared/config-defaults";
 import { parseDirectoryInput } from "../../shared/directory-path";
 import { formatLocalCacheText, parseLocalCacheText } from "../../shared/local-cache";
@@ -15,6 +15,7 @@ interface ConfigPagesProps {
   onSelectEncryptionDirectory: (kind: EncryptionDirectoryKind) => Promise<string | undefined>;
   onSaveEncryptionPreferences: (patch: EncryptionPreferencesPatch) => Promise<boolean>;
   onEncryptDirectory: (inputDir: string, outputDir: string, mode: EncryptionMode, lowercaseOutput: boolean) => Promise<EncryptionResult>;
+  onCancelEncryption: () => Promise<OperationResult>;
   onEncryptionProgress: (listener: (progress: EncryptionProgress) => void) => () => void;
   loginCache: Record<string, string>;
   onSaveLoginCache: (values: Record<string, string>) => Promise<boolean>;
@@ -159,7 +160,7 @@ export function targetFromDraft(draft: AddressDraft, index: number): AppConfig["
   };
 }
 
-export function ConfigPages({ page, config, logs, onChange, encryptionPreferences, onSelectEncryptionDirectory, onSaveEncryptionPreferences, onEncryptDirectory, onEncryptionProgress, loginCache, onSaveLoginCache }: ConfigPagesProps) {
+export function ConfigPages({ page, config, logs, onChange, encryptionPreferences, onSelectEncryptionDirectory, onSaveEncryptionPreferences, onEncryptDirectory, onCancelEncryption, onEncryptionProgress, loginCache, onSaveLoginCache }: ConfigPagesProps) {
   const { notifyError } = useToast();
   const [addressDrafts, setAddressDrafts] = useState(() => draftsForTargets(config.tcpTargets));
   const [openHistoryIndex, setOpenHistoryIndex] = useState<number>();
@@ -169,6 +170,7 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
   const [encryptionOutputDir, setEncryptionOutputDir] = useState(() => encryptionPreferences.outputDir);
   const [encryptionLowercaseOutput, setEncryptionLowercaseOutput] = useState(() => encryptionPreferences.lowercaseOutput);
   const [encryptionRunning, setEncryptionRunning] = useState(false);
+  const [encryptionCancelling, setEncryptionCancelling] = useState(false);
   const [encryptionLogs, setEncryptionLogs] = useState<string[]>([]);
   const [encryptionProgress, setEncryptionProgress] = useState<EncryptionProgressView>({ phase: "idle", current: 0, total: 0, processedFiles: 0, processingStartedAt: null });
   const encryptionProcessingStartedAt = useRef<number | null>(null);
@@ -323,6 +325,7 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
       return;
     }
     setEncryptionRunning(true);
+    setEncryptionCancelling(false);
     setOpenEncryptionHistoryKind(undefined);
     setEncryptionLogs(["开始执行加密任务…"]);
     encryptionProcessingStartedAt.current = null;
@@ -330,15 +333,21 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     setEncryptionProgress({ phase: "scanning", current: 0, total: 0, processedFiles: 0, processingStartedAt: null });
     try {
       const result = await onEncryptDirectory(encryptionInputDir, encryptionOutputDir, mode, encryptionLowercaseOutput);
-      if (!result.ok) {
+      if (!result.ok && !result.canceled) {
         encryptionProcessingStartedAt.current = null;
         setEncryptionProgress((current) => ({ ...current, phase: "idle", processingStartedAt: null }));
         return;
       }
       const total = result.totalFiles ?? 0;
-      const processed = result.processedFiles ?? total;
+      const processed = result.processedFiles ?? (result.ok ? total : 0);
       const skipped = result.skippedFiles ?? 0;
       const removed = result.removedFiles ?? 0;
+      if (result.canceled) {
+        encryptionProcessingStartedAt.current = null;
+        setEncryptionProgress({ phase: "idle", current: Math.min(total, processed + skipped), total, processedFiles: processed, processingStartedAt: null });
+        setEncryptionLogs((current) => [...current, "", `已取消：处理 ${processed} 个，跳过 ${skipped} 个，删除 ${removed} 个（共 ${total} 个）。未完成部分不会写入加密状态。`].slice(-200));
+        return;
+      }
       setEncryptionProgress({ phase: "completed", current: total, total, processedFiles: processed, processingStartedAt: null });
       const completedAt = formatEncryptionLocalTime(Date.now());
       setEncryptionLogs((current) => [...current, "", `完成：处理 ${processed} 个，跳过 ${skipped} 个，删除 ${removed} 个（共 ${total} 个） ${completedAt}`].slice(-200));
@@ -348,6 +357,23 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
       notifyError(error, "加密失败");
     } finally {
       setEncryptionRunning(false);
+      setEncryptionCancelling(false);
+    }
+  };
+
+  const cancelEncryption = async () => {
+    if (!encryptionRunning || encryptionCancelling) return;
+    setEncryptionCancelling(true);
+    setEncryptionLogs((current) => [...current, "正在取消加密…"].slice(-200));
+    try {
+      const result = await onCancelEncryption();
+      if (!result.ok) {
+        setEncryptionCancelling(false);
+        setEncryptionLogs((current) => [...current, "取消请求未生效，任务可能已结束。"].slice(-200));
+      }
+    } catch (error) {
+      setEncryptionCancelling(false);
+      notifyError(error, "取消加密失败");
     }
   };
 
@@ -428,6 +454,7 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
     <div className="encryption-actions">
       <button type="button" className="primary" aria-busy={encryptionRunning} disabled={encryptionRunning || !encryptionInputDir || !encryptionOutputDir} onClick={() => void startEncryption("full")}>{encryptionRunning && <span className="encryption-spinner" aria-hidden="true" />}{encryptionRunning ? "正在加密…" : "开始加密"}</button>
       <button type="button" className="encryption-incremental-button" disabled={encryptionRunning || !encryptionInputDir || !encryptionOutputDir} onClick={() => void startEncryption("incremental")}>增量加密</button>
+      {encryptionRunning && <button type="button" className="encryption-cancel-button" disabled={encryptionCancelling} onClick={() => void cancelEncryption()}>{encryptionCancelling ? "正在取消…" : "取消加密"}</button>}
       <p>增量模式会跳过未变化的文件</p>
     </div>
     <p className="encryption-footnote">加密时自动跳过隐藏文件、node_modules 和 .map；输出目录中的同名 .d 文件会被覆盖。小写文件输出启用后，若多个源路径转小写后发生冲突，将停止执行并提示。</p>
