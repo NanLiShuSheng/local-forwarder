@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>黑色主题 · 代理列表配色优化方案</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --page: #080c12;
+      --panel: #0f151d;
+      --panel-soft: #121a24;
+      --border: #263241;
+      --border-strong: #35465a;
+      --text: #e6edf3;
+      --text-2: #b7c2ce;
+      --muted: #8794a3;
+      --subtle: #667384;
+      --accent: #58a6ff;
+      --blue: #1f6feb;
+      --success: #3fb950;
+      --danger: #f85149;
+      --shadow: 0 18px 44px rgb(0 0 0 / 34%);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 1600px;
+      color: var(--text);
+      background:
+        radial-gradient(1100px 420px at 16% -180px, rgb(31 111 235 / 13%), transparent 64%),
+        radial-gradient(900px 360px at 88% -220px, rgb(88 166 255 / 7%), transparent 62%),
+        linear-gradient(180deg, #090e15 0%, var(--page) 48%, #06090d 100%);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    button { font: inherit; cursor: pointer; }
+    h1, h2, h3, p { margin: 0; }
+    .review { width: min(1580px, calc(100% - 56px)); margin: 0 auto; padding: 38px 0 44px; }
+    .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; margin-bottom: 22px; }
+    .eyebrow { margin-bottom: 9px; color: #79c0ff; font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    h1 { font-size: 32px; line-height: 1.12; letter-spacing: -.035em; }
+    .lede { max-width: 930px; margin-top: 10px; color: var(--text-2); font-size: 13px; line-height: 1.7; }
+    .lede strong { color: var(--text); font-weight: 700; }
+    .scope-card { width: 340px; flex: 0 0 340px; border: 1px solid var(--border); border-radius: 14px; padding: 13px 15px; background: rgb(18 26 36 / 82%); box-shadow: var(--shadow); }
+    .scope-card span { display: block; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .1em; }
+    .scope-card strong { display: block; margin-top: 5px; font-size: 14px; }
+    .scope-card small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .scheme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+    .scheme { overflow: hidden; border: 1px solid var(--border); border-radius: 17px; background: linear-gradient(180deg, rgb(17 24 33 / 96%), rgb(11 17 24 / 96%)); box-shadow: 0 14px 36px rgb(0 0 0 / 22%); }
+    .scheme.recommended { border-color: #365f8c; box-shadow: 0 0 0 1px rgb(88 166 255 / 8%), 0 18px 42px rgb(0 0 0 / 30%); }
+    .scheme-head { min-height: 105px; display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 16px 17px 13px; }
+    .scheme-title { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+    .index { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border: 1px solid var(--border-strong); border-radius: 9px; color: #9fb5cb; background: #111a24; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; }
+    .scheme h2 { font-size: 16px; letter-spacing: -.02em; }
+    .scheme-head p { margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+    .tag { flex: 0 0 auto; border: 1px solid #3e6995; border-radius: 99px; padding: 3px 8px; color: #c7e2ff; background: rgb(31 111 235 / 18%); font-size: 9px; font-weight: 800; white-space: nowrap; }
+    .tag.neutral { border-color: var(--border-strong); color: var(--muted); background: rgb(53 70 90 / 20%); }
+    .preview-wrap { margin: 0 15px; border: 1px solid #202c3a; border-radius: 12px; padding: 13px; background: #070b10; }
+    .preview-label { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 9px; color: var(--subtle); font-size: 9px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    .preview-label span:last-child { color: #6f8499; font-weight: 600; letter-spacing: 0; text-transform: none; }
+    .sidebar-demo { width: 100%; border: 1px solid #1d2733; border-radius: 11px; padding: 12px 11px; background: #010409; }
+    .sidebar-head { display: flex; gap: 5px; margin-bottom: 10px; }
+    .mini-action { display: inline-flex; height: 27px; align-items: center; justify-content: center; border-radius: 6px; padding: 0 8px; font-size: 9px; font-weight: 800; }
+    .mini-action.start { border: 1px solid #1f6feb; color: #fff; background: #1f6feb; }
+    .mini-action.stop { border: 1px solid #8f3a3a; color: #ffb4ad; background: #321719; }
+    .mini-action.create { margin-left: auto; border: 1px solid transparent; color: #99a7b6; background: transparent; }
+    .proxy-list { display: grid; gap: 7px; }
+    .proxy-card { position: relative; min-width: 0; overflow: hidden; border-radius: 9px; padding: 9px 30px 9px 11px; }
+    .proxy-title { display: flex; min-width: 0; align-items: center; gap: 6px; }
+    .proxy-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; }
+    .proxy-name { min-width: 0; flex: 0 1 auto; overflow: hidden; font-size: 12px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+    .proxy-status { flex: 0 0 auto; border-radius: 99px; padding: 1px 6px; font-size: 9px; font-weight: 650; }
+    .proxy-port { flex: 0 0 auto; min-width: 42px; margin-left: auto; border-radius: 5px; padding: 1px 5px; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
+    .proxy-target { display: block; margin-top: 7px; overflow: hidden; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .drag-dots { position: absolute; top: 50%; right: 7px; display: grid; grid-template-columns: repeat(2, 2px); gap: 2px; transform: translateY(-50%); opacity: .58; }
+    .drag-dots i { width: 2px; height: 2px; border-radius: 50%; background: currentColor; }
+    .selected-mark { position: absolute; left: 0; top: 9px; bottom: 9px; width: 2px; border-radius: 0 2px 2px 0; }
+    .scheme-foot { padding: 13px 17px 16px; }
+    .scheme-foot p { color: var(--muted); font-size: 11px; line-height: 1.65; }
+    .scheme-foot b { color: var(--text-2); font-weight: 750; }
+    .swatches { display: flex; gap: 5px; margin-top: 10px; }
+    .swatches i { width: 25px; height: 12px; border: 1px solid rgb(255 255 255 / 8%); border-radius: 4px; background: var(--c); }
+    .footer { display: flex; justify-content: space-between; gap: 28px; margin-top: 20px; border-top: 1px solid var(--border); padding-top: 14px; color: var(--subtle); font-size: 11px; }
+    .footer b { color: var(--text-2); font-weight: 700; }
+
+    /* A · 冰川描边 */
+    .style-a { --a-card-bg: linear-gradient(135deg, #1b2532 0%, #151c26 100%); --a-card-border: #2c3a4a; --a-port-bg: #0e1620; --a-port-border: #2d4054; --a-port-text: #9fb4c9; --a-target: #91a5b9; --a-selected-bg: linear-gradient(135deg, #17345b 0%, #112640 62%, #0d1c2e 100%); --a-selected-border: #5189c5; --a-selected-text: #e8f3ff; --a-selected-target: #bad2e8; --a-selected-port-bg: #0d1e33; --a-selected-port-border: #37658f; --a-selected-port-text: #c5e0fb; --a-strip: #58a6ff; }
+    .style-a .proxy-card { border: 1px solid var(--a-card-border); color: #e6edf3; background: var(--a-card-bg); box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%); }
+    .style-a .proxy-card.selected { border-color: var(--a-selected-border); color: var(--a-selected-text); background: var(--a-selected-bg); box-shadow: 0 9px 22px rgb(0 0 0 / 32%), inset 0 1px 0 rgb(148 203 255 / 13%); }
+    .style-a .proxy-card.selected .selected-mark { background: var(--a-strip); box-shadow: 0 0 10px rgb(88 166 255 / 60%); }
+    .style-a .proxy-port { border: 1px solid var(--a-port-border); color: var(--a-port-text); background: var(--a-port-bg); }
+    .style-a .proxy-card.selected .proxy-port { border-color: var(--a-selected-port-border); color: var(--a-selected-port-text); background: var(--a-selected-port-bg); }
+    .style-a .proxy-target { color: var(--a-target); }
+    .style-a .proxy-card.selected .proxy-target { color: var(--a-selected-target); }
+    .style-a .proxy-card.selected .proxy-name { color: var(--a-selected-text); }
+
+    /* B · 状态极光 */
+    .style-b { --b-card-bg: linear-gradient(135deg, #1b2028 0%, #161b22 100%); --b-card-border: #333d49; --b-port-bg: #11171e; --b-port-border: #3a4653; --b-port-text: #aab7c4; --b-target: #96a3b1; --b-selected-bg: linear-gradient(135deg, #1b3b67 0%, #132b4b 62%, #0f2035 100%); --b-selected-border: #71a9e7; --b-selected-text: #ecf6ff; --b-selected-target: #c0d9ef; --b-selected-port-bg: #102743; --b-selected-port-border: #4775a2; --b-selected-port-text: #d0e5f8; --b-strip: #79c0ff; }
+    .style-b .proxy-card { border: 1px solid var(--b-card-border); color: #e6edf3; background: var(--b-card-bg); box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%); }
+    .style-b .proxy-card.running:not(.selected) { border-color: #31523b; background: linear-gradient(135deg, #19261f 0%, #151c1a 100%); }
+    .style-b .proxy-card.error:not(.selected) { border-color: #5b2c31; background: linear-gradient(135deg, #24191c 0%, #1a1517 100%); }
+    .style-b .proxy-card.selected { border-color: var(--b-selected-border); color: var(--b-selected-text); background: var(--b-selected-bg); box-shadow: 0 0 0 1px rgb(113 169 231 / 16%), 0 12px 26px rgb(0 0 0 / 35%); }
+    .style-b .proxy-card.selected .selected-mark { background: var(--b-strip); box-shadow: 0 0 11px rgb(121 192 255 / 70%); }
+    .style-b .proxy-port { border: 1px solid var(--b-port-border); color: var(--b-port-text); background: var(--b-port-bg); }
+    .style-b .proxy-card.selected .proxy-port { border-color: var(--b-selected-port-border); color: var(--b-selected-port-text); background: var(--b-selected-port-bg); }
+    .style-b .proxy-target { color: var(--b-target); }
+    .style-b .proxy-card.selected .proxy-target { color: var(--b-selected-target); }
+    .style-b .proxy-card.selected .proxy-name { color: var(--b-selected-text); }
+
+    /* C · 冷银玻璃 */
+    .style-c { --c-card-bg: linear-gradient(135deg, #253140 0%, #18212c 58%, #141b24 100%); --c-card-border: #3a4a5d; --c-port-bg: rgb(10 19 29 / 66%); --c-port-border: #455a70; --c-port-text: #b9cbdd; --c-target: #a8b9ca; --c-selected-bg: radial-gradient(120% 170% at 100% 0%, rgb(104 173 255 / 22%) 0%, transparent 48%), linear-gradient(135deg, #21456f 0%, #163254 54%, #10243b 100%); --c-selected-border: #79afe3; --c-selected-text: #f2f8ff; --c-selected-target: #c9dced; --c-selected-port-bg: rgb(8 31 54 / 72%); --c-selected-port-border: #5a8bb8; --c-selected-port-text: #d8ebfb; --c-strip: #9bd1ff; }
+    .style-c .proxy-card { border: 1px solid var(--c-card-border); color: #e6edf3; background: var(--c-card-bg); box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%), 0 6px 14px rgb(0 0 0 / 15%); }
+    .style-c .proxy-card.selected { border-color: var(--c-selected-border); color: var(--c-selected-text); background: var(--c-selected-bg); box-shadow: 0 0 0 1px rgb(121 175 227 / 20%), 0 0 22px rgb(64 139 214 / 18%), 0 12px 26px rgb(0 0 0 / 35%), inset 0 1px 0 rgb(202 232 255 / 20%); }
+    .style-c .proxy-card.selected .selected-mark { background: var(--c-strip); box-shadow: 0 0 12px rgb(155 209 255 / 75%); }
+    .style-c .proxy-port { border: 1px solid var(--c-port-border); color: var(--c-port-text); background: var(--c-port-bg); }
+    .style-c .proxy-card.selected .proxy-port { border-color: var(--c-selected-port-border); color: var(--c-selected-port-text); background: var(--c-selected-port-bg); }
+    .style-c .proxy-target { color: var(--c-target); }
+    .style-c .proxy-card.selected .proxy-target { color: var(--c-selected-target); }
+    .style-c .proxy-card.selected .proxy-name { color: var(--c-selected-text); }
+
+    .proxy-dot.running { background: var(--success); box-shadow: 0 0 0 3px rgb(63 185 80 / 12%), 0 0 8px rgb(63 185 80 / 40%); }
+    .proxy-dot.stopped { background: #7d8997; box-shadow: 0 0 0 3px rgb(125 137 151 / 9%); }
+    .proxy-dot.error { background: var(--danger); box-shadow: 0 0 0 3px rgb(248 81 73 / 12%), 0 0 8px rgb(248 81 73 / 32%); }
+    .proxy-status.running { color: #7ee787; background: rgb(63 185 80 / 13%); }
+    .proxy-status.stopped { color: #a8b3c0; background: rgb(125 137 151 / 11%); }
+    .proxy-status.error { color: #ff9b95; background: rgb(248 81 73 / 13%); }
+  </style>
+</head>
+<body>
+  <main class="review">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Dark proxy list · color study</p>
+        <h1>黑色主题 · 代理列表配色优化</h1>
+        <p class="lede">保持卡片结构、信息层级、排序和状态逻辑不变，只增强底色层次、描边、端口标识与选中反馈。<strong>推荐方案 A</strong>：在现有冰川蓝体系内增加质感，不引入新的主色。</p>
+      </div>
+      <aside class="scope-card">
+        <span>本次范围</span>
+        <strong>只优化配色与层次</strong>
+        <small>卡片仍为 64px 双行结构，不新增字段，不改变交互；状态绿/红继续只表达真实状态。</small>
+      </aside>
+    </header>
+
+    <section class="scheme-grid">
+      <article class="scheme style-a recommended">
+        <header class="scheme-head">
+          <div class="scheme-title">
+            <span class="index">A</span>
+            <div><h2>冰川描边</h2><p>深石墨底 + 冷蓝层次，选中态最清晰，整体克制耐看。</p></div>
+          </div>
+          <span class="tag">推荐</span>
+        </header>
+        <div class="preview-wrap">
+          <div class="preview-label"><span>代理列表预览</span><span>运行中 / 已停止 / 异常</span></div>
+          <div class="sidebar-demo">
+            <div class="sidebar-head"><span class="mini-action start">一键开启</span><span class="mini-action stop">一键关闭</span><span class="mini-action create">＋ 新增</span></div>
+            <div class="proxy-list">
+              <div class="proxy-card selected running"><span class="selected-mark"></span><div class="proxy-title"><i class="proxy-dot running"></i><strong class="proxy-name">默认代理</strong><span class="proxy-status running">运行中</span><code class="proxy-port">:8080</code></div><code class="proxy-target">tcp://127.0.0.1:8080</code><span class="drag-dots"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+              <div class="proxy-card stopped"><div class="proxy-title"><i class="proxy-dot stopped"></i><strong class="proxy-name">测试环境</strong><span class="proxy-status stopped">已停止</span><code class="proxy-port">:9091</code></div><code class="proxy-target">http://10.20.30.18/reqxml</code><span class="drag-dots"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+              <div class="proxy-card error"><div class="proxy-title"><i class="proxy-dot error"></i><strong class="proxy-name">生产环境</strong><span class="proxy-status error">异常</span><code class="proxy-port">:8081</code></div><code class="proxy-target">tcp://172.16.8.24:8080</code><span class="drag-dots"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+            </div>
+          </div>
+        </div>
+        <footer class="scheme-foot"><p><b>优点：</b>改动最稳，选中态有明确蓝光但不刺眼；端口标识也更有层级。适合长时间使用。</p><div class="swatches"><i style="--c:#1b2532"></i><i style="--c:#17345b"></i><i style="--c:#5189c5"></i><i style="--c:#58a6ff"></i><i style="--c:#151c26"></i></div></footer>
+      </article>
+
+      <article class="scheme style-b">
+        <header class="scheme-head">
+          <div class="scheme-title">
+            <span class="index">B</span>
+            <div><h2>状态极光</h2><p>运行、停止、异常分别带轻微状态底色，扫视效率最高。</p></div>
+          </div>
+          <span class="tag neutral">信息优先</span>
+        </header>
+        <div class="preview-wrap">
+          <div class="preview-label"><span>代理列表预览</span><span>状态色只做低饱和铺底</span></div>
+          <div class="sidebar-demo">
+            <div class="sidebar-head"><span class="mini-action start">一键开启</span><span class="mini-action stop">一键关闭</span><span class="mini-action create">＋ 新增</span></div>
+            <div class="proxy-list">
+              <div class="proxy-card selected running"><span class="selected-mark"></span><div class="proxy-title"><i class="proxy-dot running"></i><strong class="proxy-name">默认代理</strong><span class="proxy-status running">运行中</span><code class="proxy-port">:8080</code></div><code class="proxy-target">tcp://127.0.0.1:8080</code><span class="drag-dots"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+              <div class="proxy-card stopped"><div class="proxy-title"><i class="proxy-dot stopped"></i><strong class="proxy-name">测试环境</strong><span class="proxy-status stopped">已停止</span><code class="proxy-port">:9091</code></div><code class="proxy-target">http://10.20.30.18/reqxml</code><span class="drag-dots"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+              <div class="proxy-card error"><div class="proxy-title"><i class="proxy-dot error"></i><strong class="proxy-name">生产环境</strong><span class="proxy-status error">异常</span><code class="proxy-port">:8081</code></div><code class="proxy-target">tcp://172.16.8.24:8080</code><span class="drag-dots"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+            </div>
+          </div>
+        </div>
+        <footer class="scheme-foot"><p><b>优点：</b>不用读文字也能快速区分状态；成本是列表颜色更多，异常卡的红色存在感更强。</p><div class="swatches"><i style="--c:#19261f"></i><i style="--c:#1b2028"></i><i style="--c:#312126"></i><i style="--c:#1b3b67"></i><i style="--c:#71a9e7"></i></div></footer>
+      </article>
+
+      <article class="scheme style-c">
+        <header class="scheme-head">
+          <div class="scheme-title">
+            <span class="index">C</span>
+            <div><h2>冷银玻璃</h2><p>渐变玻璃底与高光边，视觉更精致，选中卡更有聚焦感。</p></div>
+          </div>
+          <span class="tag neutral">视觉强化</span>
+        </header>
+        <div class="preview-wrap">
+          <div class="preview-label"><span>代理列表预览</span><span>高光 / 玻璃层 / 蓝色泛光</span></div>
+          <div class="sidebar-demo">
+            <div class="sidebar-head"><span class="mini-action start">一键开启</span><span class="mini-action stop">一键关闭</span><span class="mini-action create">＋ 新增</span></div>
+            <div class="proxy-list">
+              <div class="proxy-card selected running"><span class="selected-mark"></span><div class="proxy-title"><i class="proxy-dot running"></i><strong class="proxy-name">默认代理</strong><span class="proxy-status running">运行中</span><code class="proxy-port">:8080</code></div><code class="proxy-target">tcp://127.0.0.1:8080</code><span class="drag-dots"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+              <div class="proxy-card stopped"><div class="proxy-title"><i class="proxy-dot stopped"></i><strong class="proxy-name">测试环境</strong><span class="proxy-status stopped">已停止</span><code class="proxy-port">:9091</code></div><code class="proxy-target">http://10.20.30.18/reqxml</code><span class="drag-dots"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+              <div class="proxy-card error"><div class="proxy-title"><i class="proxy-dot error"></i><strong class="proxy-name">生产环境</strong><span class="proxy-status error">异常</span><code class="proxy-port">:8081</code></div><code class="proxy-target">tcp://172.16.8.24:8080</code><span class="drag-dots"><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+            </div>
+          </div>
+        </div>
+        <footer class="scheme-foot"><p><b>优点：</b>卡片质感最强，选中态更有“浮起”效果；层数最多，列表中可能出现轻微视觉噪声。</p><div class="swatches"><i style="--c:#253140"></i><i style="--c:#21456f"></i><i style="--c:#79afe3"></i><i style="--c:#9bd1ff"></i><i style="--c:#141b24"></i></div></footer>
+      </article>
+    </section>
+
+    <footer class="footer"><span><b>取舍建议：</b>A 最稳，B 最强调状态，C 最强调质感；三套都沿用现有冰川蓝，不恢复旧薄荷绿。</span><span>审核后按选定方案落到正式侧边栏 CSS。</span></footer>
+  </main>
+</body>
+</html>
