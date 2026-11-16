@@ -155,8 +155,8 @@ test("converts a reqxml target string array into tcp targets", () => {
   }`);
 
   assert.deepEqual(config.tcpTargets.map(({ host, port, protocol, id, name, enabled }) => ({ host, port, protocol, id, name, enabled })), [
-    { host: "one.example.test", port: 8001, protocol: "http", id: "tcp-1", name: "/reqxml", enabled: true },
-    { host: "two.example.test", port: 8443, protocol: "https", id: "tcp-2", name: "/reqxml", enabled: true },
+    { host: "one.example.test", port: 8001, protocol: "http", id: "tcp-1", name: "hq", enabled: true },
+    { host: "two.example.test", port: 8443, protocol: "https", id: "tcp-2", name: "jy", enabled: true },
   ]);
 });
 

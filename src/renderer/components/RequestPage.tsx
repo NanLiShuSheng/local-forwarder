@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AppConfig, ManualRequestConfig, ManualRequestResponse } from "../../shared/contracts";
+import { DEFAULT_REQUEST_HOST, DEFAULT_REQUEST_PARAMS_TEXT, DEFAULT_REQUEST_PORT } from "../../shared/config-defaults";
 import { parseManualRequestParams, parseManualRequestPort } from "../../shared/manual-request";
 import { useToast } from "./ToastProvider";
 
@@ -9,7 +10,7 @@ interface RequestPageProps {
   onSendRequest: (request: ManualRequestConfig) => Promise<ManualRequestResponse>;
 }
 
-const defaultRequest: ManualRequestConfig = { host: "127.0.0.1", port: 8080, paramsText: "", transport: "tzt" };
+const defaultRequest: ManualRequestConfig = { host: DEFAULT_REQUEST_HOST, port: DEFAULT_REQUEST_PORT, paramsText: DEFAULT_REQUEST_PARAMS_TEXT, transport: "tzt" };
 
 function requestParamCount(text: string): number {
   try {

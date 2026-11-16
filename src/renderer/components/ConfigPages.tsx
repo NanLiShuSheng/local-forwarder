@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, ForwardingAddressHistory, LogEntry } from "../../shared/contracts";
+import { createDefaultForwardingTargets } from "../../shared/config-defaults";
 import { parseDirectoryInput } from "../../shared/directory-path";
 import { formatLocalCacheText, parseLocalCacheText } from "../../shared/local-cache";
 import { useToast } from "./ToastProvider";
@@ -52,15 +53,11 @@ export function formatEncryptionLocalTime(timestamp: number): string {
 }
 
 const addressLabels = ["hq", "jy", "zx"] as const;
-const forwardingAddressPlaceholders = {
-  hq: "60.12.9.58:7778",
-  jy: "123.103.83.82:6064",
-  zx: "123.103.83.82:6064",
-} as const;
+const defaultForwardingTargets = createDefaultForwardingTargets();
 
 export function forwardingAddressPlaceholder(index: number): string | undefined {
-  const key = addressLabels[index];
-  return key === undefined ? undefined : forwardingAddressPlaceholders[key];
+  const target = defaultForwardingTargets[index];
+  return target === undefined ? undefined : `${target.host}:${target.port}`;
 }
 
 export interface AddressDraft { id: string; name: string; address: string; enabled: boolean; }
