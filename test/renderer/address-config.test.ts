@@ -54,6 +54,18 @@ test("accepts a complete HTTPS forwarding URL without an explicit port", () => {
   assert.equal(target.basePath, "/ant");
 });
 
+test("omits default web ports when displaying saved forwarding targets", () => {
+  const httpsTarget = targetFromDraft({ id: "jy", name: "jy", address: "https://h5khtest.citics.com/ant", enabled: true }, 1);
+  const httpTarget = targetFromDraft({ id: "hq", name: "hq", address: "http://example.com:80/ant", enabled: true }, 0);
+  assert.equal(addressForTarget(httpsTarget), "https://h5khtest.citics.com/ant");
+  assert.equal(addressForTarget(httpTarget), "http://example.com/ant");
+});
+
+test("keeps non-default web ports when displaying saved forwarding targets", () => {
+  const target = targetFromDraft({ id: "zx", name: "zx", address: "https://example.com:8443/ant", enabled: true }, 2);
+  assert.equal(addressForTarget(target), "https://example.com:8443/ant");
+});
+
 test("does not display a TCP target as HTTP when legacy protocol metadata is present", () => {
   assert.equal(addressForTarget({ id: "jy", name: "jy", host: "123.103.83.82", port: 6064, protocol: "http", enabled: true }), "tcp://123.103.83.82:6064");
   assert.equal(addressForTarget({ id: "jy", name: "jy", host: "123.103.83.82", port: 6064, protocol: "http", transport: "http", enabled: true }), "http://123.103.83.82:6064");

@@ -66,7 +66,9 @@ export interface AddressDraft { id: string; name: string; address: string; enabl
 export function addressForTarget(target: AppConfig["tcpTargets"][number]): string {
   const protocol = target.transport === "http" ? target.protocol ?? "http" : "tcp";
   const host = target.host.includes(":") && !target.host.startsWith("[") ? `[${target.host}]` : target.host;
-  return `${protocol}://${host}:${target.port}${target.basePath ?? ""}`;
+  const defaultPort = protocol === "https" ? 443 : protocol === "http" ? 80 : undefined;
+  const port = target.port === defaultPort ? "" : `:${target.port}`;
+  return `${protocol}://${host}${port}${target.basePath ?? ""}`;
 }
 
 export function appendForwardingAddressHistory(history: readonly string[] | undefined, address: string): string[] {
