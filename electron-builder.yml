@@ -2,7 +2,8 @@ appId: com.localforwarder.desktop
 productName: Local Forwarder
 asar: true
 files:
-  - dist/**
+  - dist/index.html
+  - dist/assets/**
   - dist-electron/**
   - package.json
 extraResources:

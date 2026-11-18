@@ -19,7 +19,9 @@ test("Electron Builder exposes a cross-platform Windows NSIS target", async () =
   assert.doesNotMatch(builderConfig, /^electronDist:\s*node_modules\/electron\/dist\s*$/m);
   assert.match(builderConfig, /^asar:\s*true\s*$/m);
   assert.match(builderConfig, /^files:\s*$/m);
-  assert.match(builderConfig, /^\s+-\s+dist\/\*\*\s*$/m);
+  assert.match(builderConfig, /^\s+-\s+dist\/index\.html\s*$/m);
+  assert.match(builderConfig, /^\s+-\s+dist\/assets\/\*\*\s*$/m);
+  assert.doesNotMatch(builderConfig, /^\s+-\s+dist\/\*\*\s*$/m);
   assert.match(builderConfig, /^\s+-\s+dist-electron\/\*\*\s*$/m);
   assert.match(builderConfig, /^\s+-\s+package\.json\s*$/m);
   assert.match(builderConfig, /^extraResources:\s*$/m);
