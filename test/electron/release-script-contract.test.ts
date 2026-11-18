@@ -90,13 +90,18 @@ test("server publisher removes intermediate release assets and keeps active mani
   const version = "0.3.8";
   const windowsInstaller = `Local-Forwarder-Setup-${version}.exe`;
   const macZip = `Local-Forwarder-${version}-x64-mac.zip`;
+  const macArmZip = `Local-Forwarder-${version}-arm64-mac.zip`;
   const macDmg = `Local-Forwarder-${version}-mac.dmg`;
+  const macArmDmg = `Local-Forwarder-${version}-arm64-mac.dmg`;
   const sourceFiles = [
     windowsInstaller,
     `${windowsInstaller}.blockmap`,
     macZip,
     `${macZip}.blockmap`,
+    macArmZip,
+    `${macArmZip}.blockmap`,
     macDmg,
+    macArmDmg,
   ];
 
   try {
@@ -119,13 +124,19 @@ test("server publisher removes intermediate release assets and keeps active mani
       `  - url: ${macZip}`,
       "    sha512: new",
       "    size: 3",
+      `  - url: ${macArmZip}`,
+      "    sha512: new",
+      "    size: 3",
       `path: ${macZip}`,
       "sha512: new",
       "",
     ].join("\n"));
     await writeFile(path.join(source, "mac-update.json"), JSON.stringify({
       version,
-      files: [{ arch: "x64", name: macDmg, sha512: "new", size: 3 }],
+      files: [
+        { arch: "x64", name: macDmg, sha512: "new", size: 3 },
+        { arch: "arm64", name: macArmDmg, sha512: "new", size: 3 },
+      ],
     }));
 
     const staleFiles = [

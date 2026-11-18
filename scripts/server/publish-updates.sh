@@ -35,7 +35,7 @@ for manifest in "${manifests[@]}"; do
             echo "Manifest $manifest references missing asset: $asset" >&2
             exit 1
         fi
-    done < <(awk '/^[[:space:]]*(path|url):[[:space:]]*/ { sub(/^[^:]+:[[:space:]]*/, ""); gsub(/["'\'']/, ""); print }' "$source_dir/$manifest")
+    done < <(awk '/^[[:space:]]*(-[[:space:]]+)?(path|url):[[:space:]]*/ { sub(/^[^:]+:[[:space:]]*/, ""); gsub(/["'\'']/, ""); print }' "$source_dir/$manifest")
 done
 
 mkdir -p "$public_dir"
@@ -93,7 +93,7 @@ for manifest in latest.yml latest-mac.yml; do
         case "$name" in
             *.exe|*.zip) printf '%s\n' "$name.blockmap" >> "$keep_file" ;;
         esac
-    done < <(awk '/^[[:space:]]*(path|url):[[:space:]]*/ { sub(/^[^:]+:[[:space:]]*/, ""); gsub(/["'\'']/, ""); print }' "$manifest_path")
+    done < <(awk '/^[[:space:]]*(-[[:space:]]+)?(path|url):[[:space:]]*/ { sub(/^[^:]+:[[:space:]]*/, ""); gsub(/["'\'']/, ""); print }' "$manifest_path")
 done
 
 if [[ -f "$public_dir/mac-update.json" ]]; then
