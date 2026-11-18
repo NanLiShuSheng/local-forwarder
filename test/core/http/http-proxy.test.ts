@@ -915,6 +915,17 @@ test("handles local values, maps, files, and TCP reqxml without leaving data in 
     assert.deepEqual(await saveFile.json(), { ERRORNO: "0" });
     const readFile = await fetch(`http://127.0.0.1:${address.port}/reqreadfile?filename=fixture.txt`);
     assert.equal(await readFile.text(), "file-data");
+    proxy.setFileValue("fixture.txt", "updated-data");
+    const updatedFile = await fetch(`http://127.0.0.1:${address.port}/reqreadfile?filename=FIXTURE.TXT`);
+    assert.equal(await updatedFile.text(), "updated-data");
+    proxy.setFileValue("FIXTURE.TXT", "case-updated-data");
+    assert.deepEqual(proxy.getValues().fileValues, { "FIXTURE.TXT": "case-updated-data" });
+    proxy.deleteFileValue("fixture.txt");
+    const deletedFile = await fetch(`http://127.0.0.1:${address.port}/reqreadfile?filename=fixture.txt`);
+    assert.equal(await deletedFile.text(), "");
+    proxy.setFileValue("other.txt", "other-data");
+    proxy.clearFileValues();
+    assert.deepEqual(proxy.getValues().fileValues, {});
     const xml = await fetch(`http://127.0.0.1:${address.port}/reqxml?Action=100`);
     assert.deepEqual(await xml.json(), { ACTION: "100", ERRORNO: "0" });
   } finally {

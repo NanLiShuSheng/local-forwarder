@@ -9,7 +9,7 @@ test("feature pages stay mounted after their first visit so runtime results surv
   assert.match(source, /const \[hasOpened, setHasOpened\] = useState\(active\)/);
   assert.match(source, /className="page-pane" hidden=\{!active\}/);
 
-  for (const page of ["request", "string", "decryption", "local", "local-cache", "values", "appearance", "logs", "json"]) {
+  for (const page of ["request", "string", "decryption", "local", "local-cache", "file-cache", "values", "appearance", "logs", "json"]) {
     assert.match(source, new RegExp(`<PagePane active=\\{page === "${page}"\\}>`));
   }
 
@@ -24,7 +24,7 @@ test("the encryption workspace and request page stay mounted while other tabs ar
   assert.match(source, /<PagePane active=\{page === "runtime" \|\| page === "encryption"\}>/);
   assert.match(source, /<ConfigPages page=\{page === "runtime" \? "addresses" : page\}/);
   assert.match(source, /<PagePane active=\{page === "string"\}><StringToolPage config=\{config\} \/><\/PagePane>/);
-  assert.match(source, /<RequestPage config=\{config\} onChange=\{save\} onSendRequest=\{sendRequest\} \/>/);
+  assert.match(source, /<RequestPage config=\{config\} onChange=\{save\} onSendRequest=\{sendRequest\} onFillJson=\{fillJsonPreview\} \/>/);
 });
 
 test("hidden pages do not keep page-level keyboard shortcuts active", async () => {
@@ -36,6 +36,7 @@ test("hidden pages do not keep page-level keyboard shortcuts active", async () =
 
   assert.match(appSource, /<LocalVariablesPage active=\{page === "local"\} \/>/);
   assert.match(appSource, /<LocalCachePage active=\{page === "local-cache"\} instanceId=\{selectedInstance\?\.id\} \/>/);
+  assert.match(appSource, /<FileCachePage instanceId=\{selectedInstance\?\.id\} \/>/);
   assert.match(localVariablesSource, /if \(!active\b/);
   assert.match(localCacheSource, /if \(!active\b/);
 });

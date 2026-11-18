@@ -5,7 +5,7 @@ import { parseDirectoryInput } from "../../shared/directory-path";
 import { formatLocalCacheText, parseLocalCacheText } from "../../shared/local-cache";
 import { useToast } from "./ToastProvider";
 
-export type Page = "runtime" | "local-cache" | "rules" | "addresses" | "request" | "string" | "local" | "values" | "cache" | "encryption" | "decryption" | "logs" | "appearance" | "json";
+export type Page = "runtime" | "local-cache" | "file-cache" | "rules" | "addresses" | "request" | "string" | "local" | "values" | "cache" | "encryption" | "decryption" | "logs" | "appearance" | "json";
 interface ConfigPagesProps {
   page: Page;
   config: AppConfig;
@@ -163,7 +163,7 @@ export function targetFromDraft(draft: AddressDraft, index: number): AppConfig["
 }
 
 export function ConfigPages({ page, config, logs, onChange, encryptionPreferences, onSelectEncryptionDirectory, onSaveEncryptionPreferences, onEncryptDirectory, onCancelEncryption, onEncryptionProgress, loginCache, onSaveLoginCache }: ConfigPagesProps) {
-  const { notifyError } = useToast();
+  const { notify, notifyError } = useToast();
   const [addressDrafts, setAddressDrafts] = useState(() => draftsForTargets(config.tcpTargets));
   const [openHistoryIndex, setOpenHistoryIndex] = useState<number>();
   const [openEncryptionHistoryKind, setOpenEncryptionHistoryKind] = useState<EncryptionDirectoryKind>();
@@ -343,6 +343,7 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
       const total = result.totalFiles ?? 0;
       const processed = result.processedFiles ?? (result.ok ? total : 0);
       const skipped = result.skippedFiles ?? 0;
+      const missing = result.missingOutputFiles ?? 0;
       const removed = result.removedFiles ?? 0;
       if (result.canceled) {
         encryptionProcessingStartedAt.current = null;
@@ -352,7 +353,8 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
       }
       setEncryptionProgress({ phase: "completed", current: total, total, processedFiles: processed, processingStartedAt: null });
       const completedAt = formatEncryptionLocalTime(Date.now());
-      setEncryptionLogs((current) => [...current, "", `完成：处理 ${processed} 个，跳过 ${skipped} 个，删除 ${removed} 个（共 ${total} 个） ${completedAt}`].slice(-200));
+      setEncryptionLogs((current) => [...current, "", `完成：处理 ${processed} 个，跳过 ${skipped} 个，删除 ${removed} 个${missing > 0 ? `，输出缺失 ${missing} 个` : ""}（共 ${total} 个） ${completedAt}`].slice(-200));
+      if (missing > 0) notify({ kind: "warning", title: "输出文件缺失", message: `检测到 ${missing} 个输出文件缺失。增量加密只比较源文件，未重新生成这些文件；如需补全请执行全量加密。` });
     } catch (error) {
       encryptionProcessingStartedAt.current = null;
       setEncryptionProgress((current) => ({ ...current, phase: "idle", processingStartedAt: null }));
@@ -459,7 +461,7 @@ export function ConfigPages({ page, config, logs, onChange, encryptionPreference
       {encryptionRunning && <button type="button" className="encryption-cancel-button" disabled={encryptionCancelling} onClick={() => void cancelEncryption()}>{encryptionCancelling ? "正在取消…" : "取消加密"}</button>}
       <p>增量模式会跳过未变化的文件</p>
     </div>
-    <p className="encryption-footnote">加密时自动跳过隐藏文件、node_modules 和 .map；输出目录中的同名 .d 文件会被覆盖。小写文件输出启用后，若多个源路径转小写后发生冲突，将停止执行并提示。</p>
+    <p className="encryption-footnote">加密时自动跳过隐藏文件、node_modules 和 .map；输出目录中的同名 .d 文件会被覆盖。增量加密只比较源文件 SHA-256，不检查输出文件是否存在；缺失的输出会提示，可用全量加密补全。小写文件输出启用后，若多个源路径转小写后发生冲突，将停止执行并提示。</p>
 
     <div className="encryption-log-shell">
       <div className="encryption-log-heading"><strong>实时日志</strong><span><i aria-hidden="true" />{encryptionLogStatus}{encryptionLogs.length > 0 ? ` · ${encryptionLogs.length} 条` : ""}</span></div>

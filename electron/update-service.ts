@@ -1,4 +1,4 @@
-import { autoUpdater } from "electron-updater";
+import { autoUpdater, CancellationToken } from "electron-updater";
 import type {
   UpdateInfoSnapshot,
   UpdateProgressSnapshot,
@@ -16,6 +16,7 @@ export interface UpdateAdapter {
   onError(listener: (error: unknown) => void): () => void;
   checkForUpdates(): Promise<unknown>;
   downloadUpdate(): Promise<unknown>;
+  cancelDownload(): void;
   quitAndInstall(): void;
   openDownloadedUpdate?(): Promise<unknown>;
 }
@@ -24,6 +25,7 @@ export interface UpdateServiceOptions {
   currentVersion: string;
   isPackaged: boolean;
   isSmokeMode: boolean;
+  backgroundCheckRetryDelaysMs?: readonly number[];
   installMode?: "automatic" | "manual";
   updater?: UpdateAdapter;
   stopAll: () => Promise<{ ok: boolean; error?: string } | void>;
@@ -36,6 +38,7 @@ export interface UpdateService {
   startBackgroundCheck(): Promise<void>;
   check(): Promise<{ ok: boolean; error?: string }>;
   download(): Promise<{ ok: boolean; error?: string }>;
+  cancel(): Promise<{ ok: boolean; error?: string }>;
   install(): Promise<{ ok: boolean; error?: string }>;
   dispose(): void;
 }
@@ -47,6 +50,8 @@ const FALLBACK_ERRORS = {
   openInstaller: "打开安装包失败",
 } as const;
 
+const DEFAULT_BACKGROUND_CHECK_RETRY_DELAYS_MS = [1_500, 5_000, 15_000] as const;
+
 type UpdateOperation = keyof typeof FALLBACK_ERRORS;
 type OperationResult = { ok: boolean; error?: string };
 
@@ -54,6 +59,7 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
   const updater = options.updater;
   const active = options.isPackaged && !options.isSmokeMode && updater !== undefined;
   const installMode = options.installMode ?? "automatic";
+  const backgroundCheckRetryDelaysMs = options.backgroundCheckRetryDelaysMs ?? DEFAULT_BACKGROUND_CHECK_RETRY_DELAYS_MS;
   let state: UpdateState = {
     state: "idle",
     currentVersion: options.currentVersion,
@@ -63,6 +69,8 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
   let backgroundStarted = false;
   let checkPromise: Promise<OperationResult> | undefined;
   let downloadPromise: Promise<OperationResult> | undefined;
+  let downloadAttempt = 0;
+  let downloadCanceled = false;
   let installPromise: Promise<OperationResult> | undefined;
   let currentOperation: UpdateOperation = "check";
   const removeListeners: Array<() => void> = [];
@@ -83,6 +91,7 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
       setState({ state: "not-available", currentVersion: options.currentVersion });
     }));
     removeListeners.push(updater.onDownloadProgress((progress) => {
+      if (downloadCanceled) return;
       setState({
         state: "downloading",
         currentVersion: options.currentVersion,
@@ -91,9 +100,11 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
       });
     }));
     removeListeners.push(updater.onUpdateDownloaded((update) => {
+      if (downloadCanceled) return;
       setState({ state: "downloaded", currentVersion: options.currentVersion, update });
     }));
     removeListeners.push(updater.onError((error) => {
+      if (currentOperation === "download" && downloadCanceled) return;
       setError(currentOperation, error);
     }));
   }
@@ -117,17 +128,46 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
   function download(): Promise<OperationResult> {
     if (!active) return Promise.resolve({ ok: true });
     if (downloadPromise !== undefined) return downloadPromise;
-    currentOperation = "download";
+    const attempt = ++downloadAttempt;
+    downloadCanceled = false;
+    const operation = (async () => {
+      if (state.state === "available") {
+        const refresh = await check();
+        if (attempt !== downloadAttempt) return { ok: true };
+        if (!refresh.ok || state.state !== "available") return refresh.ok ? { ok: true } : refresh;
+      }
+      currentOperation = "download";
+      setState({
+        state: "downloading",
+        currentVersion: options.currentVersion,
+        update: state.update,
+      });
+      return runDownloadAdapterOperation(attempt, () => updater.downloadUpdate());
+    })();
+    const tracked = operation.finally(() => {
+      if (attempt === downloadAttempt) downloadPromise = undefined;
+    });
+    downloadPromise = tracked;
+    return tracked;
+  }
+
+  async function cancel(): Promise<OperationResult> {
+    if (!active || state.state !== "downloading") return { ok: true };
+    downloadCanceled = true;
+    try {
+      updater.cancelDownload();
+    } catch {
+      downloadCanceled = false;
+      return { ok: false, error: "停止更新失败" };
+    }
+    downloadAttempt += 1;
+    downloadPromise = undefined;
     setState({
-      state: "downloading",
+      state: "available",
       currentVersion: options.currentVersion,
       update: state.update,
     });
-    downloadPromise = runAdapterOperation("download", () => updater.downloadUpdate());
-    downloadPromise = downloadPromise.finally(() => {
-      downloadPromise = undefined;
-    });
-    return downloadPromise;
+    return { ok: true };
   }
 
   function install(): Promise<OperationResult> {
@@ -216,11 +256,30 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
     }
   }
 
-  function startBackgroundCheck(): Promise<void> {
+  function runDownloadAdapterOperation(attempt: number, action: () => Promise<unknown>): Promise<OperationResult> {
+    const handleFailure = (error: unknown): OperationResult => {
+      if (attempt !== downloadAttempt) return { ok: true };
+      return { ok: false, error: setError("download", error) };
+    };
+    try {
+      return Promise.resolve(action())
+        .then((): OperationResult => ({ ok: true }))
+        .catch(handleFailure);
+    } catch (error) {
+      return Promise.resolve(handleFailure(error));
+    }
+  }
+
+  async function startBackgroundCheck(): Promise<void> {
     if (!active || backgroundStarted || disposed) return Promise.resolve();
     backgroundStarted = true;
-    void check();
-    return Promise.resolve();
+    let result = await check();
+    for (const delayMs of backgroundCheckRetryDelaysMs) {
+      if (result.ok || disposed) return;
+      await new Promise<void>((resolve) => setTimeout(resolve, Math.max(0, delayMs)));
+      if (disposed || state.state !== "error") return;
+      result = await check();
+    }
   }
 
   function dispose(): void {
@@ -247,7 +306,7 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
     options.publish(getState());
   }
 
-  return { getState, startBackgroundCheck, check, download, install, dispose };
+  return { getState, startBackgroundCheck, check, download, cancel, install, dispose };
 }
 
 const ACTIONABLE_UPDATE_ERRORS: ReadonlyArray<readonly [RegExp, string]> = [
@@ -287,6 +346,10 @@ function describeUpdateFailure(operation: UpdateOperation, error?: unknown): str
 }
 
 export function createElectronUpdateAdapter(): UpdateAdapter {
+  let downloadCancellationToken: CancellationToken | undefined;
+  let activeDownloadPromise: Promise<unknown> | undefined;
+  let downloadCanceled = false;
+  let downloadGeneration = 0;
   return {
     get autoDownload() {
       return autoUpdater.autoDownload;
@@ -328,7 +391,27 @@ export function createElectronUpdateAdapter(): UpdateAdapter {
       return () => autoUpdater.removeListener("error", listener);
     },
     checkForUpdates: () => autoUpdater.checkForUpdates(),
-    downloadUpdate: () => autoUpdater.downloadUpdate(),
+    async downloadUpdate() {
+      if (downloadCanceled && activeDownloadPromise !== undefined) {
+        await activeDownloadPromise.catch(() => undefined);
+      }
+      downloadCanceled = false;
+      const generation = ++downloadGeneration;
+      const token = new CancellationToken();
+      downloadCancellationToken = token;
+      const operation = autoUpdater.downloadUpdate(token);
+      activeDownloadPromise = operation;
+      return operation.finally(() => {
+        if (downloadGeneration === generation) {
+          activeDownloadPromise = undefined;
+          downloadCancellationToken = undefined;
+        }
+      });
+    },
+    cancelDownload: () => {
+      downloadCanceled = true;
+      downloadCancellationToken?.cancel();
+    },
     quitAndInstall: () => autoUpdater.quitAndInstall(),
   };
 }

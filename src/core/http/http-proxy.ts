@@ -452,6 +452,27 @@ export class HttpProxy {
     return { localValues: this.localValues, mapValues: this.mapValues, fileValues: this.fileValues };
   }
 
+  public deleteFileValue(filename: string): void {
+    const wanted = filename.toUpperCase();
+    for (const key of Object.keys(this.fileValues)) {
+      if (key.toUpperCase() === wanted) delete this.fileValues[key];
+    }
+  }
+
+  public clearFileValues(): void {
+    for (const key of Object.keys(this.fileValues)) delete this.fileValues[key];
+    this.options.onFileValuesChanged?.({ ...this.fileValues });
+  }
+
+  public setFileValue(filename: string, value: string): void {
+    const normalized = filename.toUpperCase();
+    for (const key of Object.keys(this.fileValues)) {
+      if (key.toUpperCase() === normalized) delete this.fileValues[key];
+    }
+    this.fileValues[normalized] = value;
+    this.options.onFileValuesChanged?.({ ...this.fileValues });
+  }
+
   public setMapValues(values: Record<string, string>): void {
     for (const key of Object.keys(this.mapValues)) delete this.mapValues[key];
     Object.assign(this.mapValues, values);

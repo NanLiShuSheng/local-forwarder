@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>缓存接口标识原型</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1320;
+      --bg-mid: #101b2d;
+      --bg-accent: #29476f;
+      --panel: rgb(18 31 51 / 94%);
+      --surface: #14243a;
+      --surface-alt: #172840;
+      --surface-raised: #1b2d47;
+      --selected: #1c3553;
+      --code: #0e1a2b;
+      --text: #e9eef7;
+      --text-bright: #f6f9ff;
+      --text-soft: #b6c4d8;
+      --muted: #8497b1;
+      --border: #2b3d58;
+      --border-subtle: #263750;
+      --green: #79e2c0;
+      --green-soft: rgb(121 226 192 / 12%);
+      --blue: #8bc8ff;
+      --blue-soft: rgb(102 174 255 / 11%);
+      --danger: #ffc1c1;
+      --danger-border: #83505e;
+      --danger-bg: rgb(247 131 131 / 7%);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 1280px;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 76% -10%, rgb(59 101 157 / 58%) 0, transparent 36%),
+        linear-gradient(145deg, #0b1320 0%, #101b2d 58%, #0c1524 100%);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+      text-rendering: optimizeLegibility;
+    }
+    button, input { font: inherit; }
+    .prototype { width: 1280px; margin: 0 auto; padding: 34px 38px 42px; }
+    .prototype-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; margin-bottom: 22px; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 8px; color: var(--green); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
+    .eyebrow::before { width: 18px; height: 1px; background: var(--green); content: ""; }
+    .prototype-heading h1 { margin: 0; color: var(--text-bright); font-size: 24px; letter-spacing: -.035em; }
+    .prototype-heading p { max-width: 630px; margin: 8px 0 0; color: var(--text-soft); font-size: 12px; line-height: 1.7; }
+    .legend { display: flex; gap: 8px; flex: 0 0 auto; }
+    .legend span { display: inline-flex; height: 27px; align-items: center; border: 1px solid var(--border-subtle); border-radius: 7px; padding: 0 9px; color: var(--muted); background: rgb(20 36 58 / 72%); font-size: 10px; }
+    .legend b { margin-right: 5px; color: var(--blue); font: 700 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .screen { overflow: hidden; margin-top: 14px; border: 1px solid var(--border); border-radius: 15px; background: var(--panel); box-shadow: 0 24px 60px rgb(0 0 0 / 22%); }
+    .window-bar { display: flex; height: 35px; align-items: center; gap: 7px; border-bottom: 1px solid var(--border-subtle); padding: 0 14px; color: #7588a2; background: rgb(9 17 29 / 72%); font-size: 10px; }
+    .window-dots { display: flex; gap: 5px; }
+    .window-dots i { width: 8px; height: 8px; border-radius: 50%; background: #3b4d67; }
+    .window-dots i:first-child { background: #c96d6d; }
+    .window-dots i:nth-child(2) { background: #c9a96d; }
+    .window-dots i:nth-child(3) { background: #68b994; }
+    .window-title { margin-left: 5px; }
+    .page { padding: 18px 20px 20px; }
+    .cache-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+    .title-group { display: flex; min-width: 0; align-items: center; gap: 10px; }
+    .title-group h2 { margin: 0; color: var(--text-bright); font-size: 18px; letter-spacing: -.02em; white-space: nowrap; }
+    .api-pill { display: inline-flex; height: 24px; align-items: center; border: 1px solid rgb(112 163 215 / 26%); border-radius: 6px; padding: 0 7px; color: #91b9e4; background: var(--blue-soft); font: 600 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .01em; white-space: nowrap; }
+    .sync-status { display: inline-flex; height: 27px; align-items: center; gap: 6px; border: 1px solid var(--border-subtle); border-radius: 7px; padding: 0 8px; color: var(--green); background: var(--surface-alt); font-size: 10px; white-space: nowrap; }
+    .sync-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+    .heading-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; }
+    .action-divider { width: 1px; height: 22px; margin: 0 3px; background: var(--border); }
+    .cache-button { display: inline-flex; height: 31px; align-items: center; justify-content: center; gap: 5px; border: 1px solid #3b4e68; border-radius: 7px; padding: 0 10px; color: #dae5f4; background: var(--surface-raised); font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .cache-button.primary { border-color: var(--green); color: #092019; background: var(--green); }
+    .cache-button.danger { border-color: var(--danger-border); color: var(--danger); background: var(--danger-bg); }
+    .cache-toolbar { display: flex; align-items: center; gap: 8px; margin-top: 13px; border: 1px solid var(--border-subtle); border-radius: 9px; padding: 5px; background: var(--surface-alt); }
+    .search { position: relative; flex: 1; }
+    .search span { position: absolute; top: 50%; left: 10px; color: var(--muted); transform: translateY(-50%); font-size: 13px; }
+    .search input { width: 100%; height: 29px; border: 1px solid #2f425d; border-radius: 6px; padding: 0 10px 0 29px; color: var(--text); background: #111f33; outline: none; font-size: 10px; }
+    .filters { display: flex; gap: 2px; border: 1px solid var(--border-subtle); border-radius: 7px; padding: 2px; background: #111f33; }
+    .filters button { border: 0; border-radius: 4px; padding: 5px 7px; color: var(--muted); background: transparent; font-size: 9px; font-weight: 700; }
+    .filters button.active { color: #b9ddff; background: var(--selected); }
+    .workspace { display: grid; grid-template-columns: 315px minmax(0, 1fr); gap: 10px; margin-top: 10px; }
+    .list-panel, .detail-panel { min-height: 214px; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 9px; background: var(--surface-alt); }
+    .list-panel { padding: 4px; }
+    .key-row { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 7px; min-height: 40px; border: 1px solid transparent; border-radius: 6px; padding: 4px 7px; color: inherit; background: transparent; text-align: left; }
+    .key-row.selected { border-color: #4b7ba8; background: var(--selected); box-shadow: inset 3px 0 0 #6da8dc; }
+    .key-copy { display: grid; min-width: 0; gap: 1px; }
+    .key-name { overflow: hidden; color: var(--text-bright); font: 700 10px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .key-preview { overflow: hidden; color: var(--muted); font: 9px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+    .key-meta { display: grid; justify-items: end; gap: 2px; }
+    .type-badge { display: inline-flex; border-radius: 4px; padding: 1px 4px; color: var(--muted); background: #20334c; font-size: 8px; font-weight: 800; }
+    .type-badge.json { color: #8bc8ff; background: rgb(80 144 214 / 16%); }
+    .char-count { color: #71839b; font-size: 8px; }
+    .detail-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border-subtle); padding: 10px 12px; }
+    .detail-heading h3 { margin: 0; color: var(--text-bright); font: 700 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .detail-meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; color: var(--muted); font-size: 9px; }
+    .detail-actions { display: flex; gap: 5px; }
+    .icon-button { display: grid; width: 27px; height: 27px; place-items: center; border: 1px solid #3b4e68; border-radius: 6px; color: var(--text-soft); background: var(--surface-raised); font-size: 12px; }
+    .view-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border-subtle); padding: 6px 10px 0; }
+    .view-tabs span { border-bottom: 2px solid transparent; padding: 4px 8px 6px; color: var(--muted); font-size: 9px; }
+    .view-tabs span.active { border-bottom-color: var(--green); color: var(--text-bright); }
+    .code-view { padding: 9px 0; background: var(--code); font: 9px/1.8 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .code-line { display: grid; grid-template-columns: 35px minmax(0, 1fr); min-height: 18px; }
+    .line-number { border-right: 1px solid #22334a; color: #5d718b; text-align: right; padding-right: 9px; }
+    .line-content { overflow: hidden; padding-left: 10px; color: #c3d2e5; text-overflow: ellipsis; white-space: nowrap; }
+    .annotation { display: flex; align-items: flex-start; gap: 9px; margin: 9px 2px 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+    .annotation b { display: inline-flex; height: 19px; align-items: center; border-radius: 5px; padding: 0 6px; color: #9ec9f4; background: var(--blue-soft); font-size: 9px; }
+    .difference { display: inline-flex; height: 24px; align-items: center; gap: 6px; margin-top: 8px; border: 1px dashed #3a506e; border-radius: 6px; padding: 0 8px; color: #9fb1c8; background: rgb(18 32 51 / 58%); font-size: 9px; }
+    .difference strong { color: var(--text-soft); }
+  </style>
+</head>
+<body>
+  <main class="prototype">
+    <header class="prototype-heading">
+      <div>
+        <span class="eyebrow">UI PROTOTYPE</span>
+        <h1>缓存页标题补充接口路径</h1>
+        <p>在页面标题与“已同步”之间加入低强调的接口路径徽标，帮助快速确认当前缓存对应的 `/req*` 接口，同时不打断现有标题层级和操作区布局。</p>
+      </div>
+      <div class="legend"><span><b>/reqsavemap</b> 本地缓存</span><span><b>/reqsavefile</b> 文件缓存</span></div>
+    </header>
+
+    <section class="screen">
+      <div class="window-bar"><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title">Local Forwarder · 本地缓存</span></div>
+      <div class="page">
+        <div class="cache-heading">
+          <div class="title-group">
+            <h2>本地缓存</h2>
+            <span class="api-pill">/reqsavemap</span>
+            <span class="sync-status"><i></i>已同步</span>
+          </div>
+          <div class="heading-actions">
+            <button class="cache-button primary">＋ 新增</button>
+            <button class="cache-button">文本模式</button>
+            <span class="action-divider"></span>
+            <button class="cache-button danger">清空缓存</button>
+          </div>
+        </div>
+        <div class="cache-toolbar">
+          <label class="search"><span>⌕</span><input aria-label="搜索本地缓存" placeholder="搜索键或值" /></label>
+          <div class="filters"><button class="active">全部 12</button><button>有值 11</button><button>空值 1</button><button>JSON 3</button></div>
+        </div>
+        <div class="workspace">
+          <div class="list-panel">
+            <button class="key-row selected"><span class="key-copy"><span class="key-name">LOGIN_CONTEXT</span><span class="key-preview">{"broker":"TZT","clientId":"5851278"...}</span></span><span class="key-meta"><span class="type-badge json">JSON</span><span class="char-count">426</span></span></button>
+            <button class="key-row"><span class="key-copy"><span class="key-name">LAST_OP_STATION</span><span class="key-preview">TYJR-TZT-XET-BJ156-SH--MI;IIP=10.23...</span></span><span class="key-meta"><span class="type-badge">文本</span><span class="char-count">98</span></span></button>
+            <button class="key-row"><span class="key-copy"><span class="key-name">Token</span><span class="key-preview">wSjczW16@170A-DF72246Lxi5xZ</span></span><span class="key-meta"><span class="type-badge">文本</span><span class="char-count">30</span></span></button>
+            <button class="key-row"><span class="key-copy"><span class="key-name">FundAccount</span><span class="key-preview">109220495</span></span><span class="key-meta"><span class="type-badge">文本</span><span class="char-count">9</span></span></button>
+          </div>
+          <div class="detail-panel">
+            <div class="detail-heading"><div><h3>LOGIN_CONTEXT</h3><div class="detail-meta"><span class="type-badge json">JSON 对象</span><span>426 字符</span><span>·</span><span>格式化后 18 行</span></div></div><div class="detail-actions"><button class="icon-button">⧉</button><button class="icon-button">×</button><button class="cache-button primary">编辑原文</button></div></div>
+            <div class="view-tabs"><span class="active">格式化</span><span>原文</span></div>
+            <div class="code-view"><div class="code-line"><span class="line-number">1</span><span class="line-content">{</span></div><div class="code-line"><span class="line-number">2</span><span class="line-content">  "broker": "TZT",</span></div><div class="code-line"><span class="line-number">3</span><span class="line-content">  "clientId": "5851278",</span></div><div class="code-line"><span class="line-number">4</span><span class="line-content">  "loginDate": "20261118"</span></div><div class="code-line"><span class="line-number">5</span><span class="line-content">}</span></div></div>
+          </div>
+        </div>
+        <div class="annotation"><b>新增</b><span>标题后增加 `/reqsavemap` 接口徽标，再显示“已同步”状态；右侧操作区保持现状。</span></div>
+      </div>
+    </section>
+
+    <section class="screen">
+      <div class="window-bar"><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title">Local Forwarder · 文件缓存</span></div>
+      <div class="page">
+        <div class="cache-heading">
+          <div class="title-group">
+            <h2>文件缓存</h2>
+            <span class="api-pill">/reqsavefile</span>
+            <span class="sync-status"><i></i>已同步</span>
+          </div>
+          <div class="heading-actions">
+            <button class="cache-button primary">＋ 新增</button>
+            <span class="action-divider"></span>
+            <button class="cache-button danger">清空缓存</button>
+          </div>
+        </div>
+        <div class="cache-toolbar">
+          <label class="search"><span>⌕</span><input aria-label="搜索文件缓存" placeholder="搜索文件名或内容" /></label>
+          <div class="filters"><button class="active">全部 8</button><button>有值 7</button><button>空值 1</button><button>JSON 2</button></div>
+        </div>
+        <div class="workspace">
+          <div class="list-panel">
+            <button class="key-row selected"><span class="key-copy"><span class="key-name">INDEX.HTML</span><span class="key-preview">&lt;!doctype html&gt;&lt;html lang="zh-CN"&gt;...</span></span><span class="key-meta"><span class="type-badge">文本</span><span class="char-count">1.2k</span></span></button>
+            <button class="key-row"><span class="key-copy"><span class="key-name">LOGIN.JSON</span><span class="key-preview">{"ErrorNo":1,"Token":"..."}</span></span><span class="key-meta"><span class="type-badge json">JSON</span><span class="char-count">184</span></span></button>
+            <button class="key-row"><span class="key-copy"><span class="key-name">CONFIG.JS</span><span class="key-preview">window.appConfig = {...}</span></span><span class="key-meta"><span class="type-badge">文本</span><span class="char-count">96</span></span></button>
+            <button class="key-row"><span class="key-copy"><span class="key-name">EMPTY.TXT</span><span class="key-preview">空文件</span></span><span class="key-meta"><span class="type-badge">空值</span><span class="char-count">0</span></span></button>
+          </div>
+          <div class="detail-panel">
+            <div class="detail-heading"><div><h3>INDEX.HTML</h3><div class="detail-meta"><span class="type-badge">文本</span><span>1,204 字符</span></div></div><div class="detail-actions"><button class="icon-button">⧉</button><button class="icon-button">×</button><button class="cache-button primary">编辑原文</button></div></div>
+            <div class="view-tabs"><span>格式化</span><span class="active">原文</span></div>
+            <div class="code-view"><div class="code-line"><span class="line-number">1</span><span class="line-content">&lt;!doctype html&gt;</span></div><div class="code-line"><span class="line-number">2</span><span class="line-content">&lt;html lang="zh-CN"&gt;</span></div><div class="code-line"><span class="line-number">3</span><span class="line-content">  &lt;head&gt;&lt;meta charset="UTF-8" /&gt;&lt;/head&gt;</span></div><div class="code-line"><span class="line-number">4</span><span class="line-content">  &lt;body&gt;&lt;div id="app"&gt;&lt;/div&gt;&lt;/body&gt;</span></div><div class="code-line"><span class="line-number">5</span><span class="line-content">&lt;/html&gt;</span></div></div>
+          </div>
+        </div>
+        <div class="annotation"><b>新增</b><span>标题后增加 `/reqsavefile` 接口徽标；与本地缓存不同，文件缓存不提供“文本模式”。</span></div>
+        <div class="difference"><strong>页面差异</strong><span>文件缓存：新增 / 编辑 / 删除 / 清空</span><span>·</span><span>无文本模式</span></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

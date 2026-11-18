@@ -13,6 +13,9 @@ interface HttpRuntime extends TcpBridgeLike {
   stop(): Promise<void>;
   getStats(): HttpProxyStats;
   getValues(): { localValues: Record<string, string>; mapValues: Record<string, string>; fileValues: Record<string, string> };
+  setFileValue(filename: string, value: string): void;
+  deleteFileValue(filename: string): void;
+  clearFileValues?(): void;
   setMapValues?(values: Record<string, string>): void;
 }
 
@@ -170,6 +173,53 @@ export class ForwardingService {
 
   public getMapValues(): Record<string, string> {
     return { ...(this.http?.getValues().mapValues ?? this.config.mapValues) };
+  }
+
+  public getFileValues(): Record<string, string> {
+    const active = this.http?.getValues().fileValues;
+    if (active !== undefined) return { ...active };
+    return Object.fromEntries(Object.entries(this.config.legacy?.files ?? {}).filter(([, value]) => typeof value === "string")) as Record<string, string>;
+  }
+
+  public deleteFileValue(filename: string): void {
+    if (this.http !== undefined) {
+      this.http.deleteFileValue(filename);
+      return;
+    }
+    const files = this.config.legacy?.files;
+    if (files === undefined) return;
+    const wanted = filename.toUpperCase();
+    for (const key of Object.keys(files)) {
+      if (key.toUpperCase() === wanted) delete files[key];
+    }
+  }
+
+  public setFileValue(filename: string, value: string): void {
+    const normalized = filename.toUpperCase();
+    if (this.http !== undefined) {
+      this.http.setFileValue(filename, value);
+      return;
+    }
+    const legacy = this.config.legacy ?? { files: {}, extra: {} };
+    const files = { ...legacy.files };
+    for (const key of Object.keys(files)) {
+      if (key.toUpperCase() === normalized) delete files[key];
+    }
+    files[normalized] = value;
+    this.config.legacy = { ...legacy, files };
+  }
+
+  public clearFileValues(): void {
+    if (this.http !== undefined) {
+      this.http.clearFileValues?.();
+      return;
+    }
+    const legacy = this.config.legacy ?? { files: {}, extra: {} };
+    const files = { ...legacy.files };
+    for (const key of Object.keys(files)) {
+      if (typeof files[key] === "string") delete files[key];
+    }
+    this.config.legacy = { ...legacy, files };
   }
 
   public setMapValues(values: Record<string, string>): void {

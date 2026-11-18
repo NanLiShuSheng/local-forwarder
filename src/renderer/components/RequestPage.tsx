@@ -8,6 +8,7 @@ interface RequestPageProps {
   config: AppConfig;
   onChange: (config: AppConfig) => Promise<boolean>;
   onSendRequest: (request: ManualRequestConfig) => Promise<ManualRequestResponse>;
+  onFillJson: (text: string) => void;
 }
 
 const defaultRequest: ManualRequestConfig = { host: DEFAULT_REQUEST_HOST, port: DEFAULT_REQUEST_PORT, paramsText: DEFAULT_REQUEST_PARAMS_TEXT, transport: "tzt" };
@@ -24,13 +25,12 @@ function requestPortError(text: string): string {
   return text.trim() === "" ? "端口不能为空" : "端口必须是 1 - 65535 之间的整数";
 }
 
-export function RequestPage({ config, onChange, onSendRequest }: RequestPageProps) {
+export function RequestPage({ config, onChange, onSendRequest, onFillJson }: RequestPageProps) {
   const initialDraft = config.request ?? defaultRequest;
   const { notifyError } = useToast();
   const [draft, setDraft] = useState<ManualRequestConfig>(() => initialDraft);
   const [portText, setPortText] = useState(() => String(initialDraft.port));
   const [response, setResponse] = useState<ManualRequestResponse>();
-  const [copyStatus, setCopyStatus] = useState("");
   const [running, setRunning] = useState(false);
 
   useEffect(() => {
@@ -72,7 +72,6 @@ export function RequestPage({ config, onChange, onSendRequest }: RequestPageProp
     try {
       const result = await onSendRequest(request);
       setResponse(result);
-      setCopyStatus("");
     } catch (cause) {
       notifyError(cause, "请求失败");
     } finally {
@@ -85,16 +84,6 @@ export function RequestPage({ config, onChange, onSendRequest }: RequestPageProp
     : `${response.statusCode}${response.statusMessage ? ` ${response.statusMessage}` : ""}`;
   const responseBody = response?.body ?? "尚未发送请求";
   const transport = draft.transport ?? "tzt";
-  const copyResponse = async () => {
-    if (response?.body === undefined) return;
-    try {
-      await navigator.clipboard.writeText(response.body);
-      setCopyStatus("已复制");
-    } catch (cause) {
-      setCopyStatus("");
-      notifyError(cause, "复制失败");
-    }
-  };
 
   return <section className="panel request-panel">
     <div className="login-cache-notice" role="note" aria-labelledby="login-cache-notice-title">
@@ -110,7 +99,7 @@ export function RequestPage({ config, onChange, onSendRequest }: RequestPageProp
     </div>
     <div className="request-workspace">
       <section className="request-card"><div className="request-card-heading"><div><p className="eyebrow">Request</p><h3>请求参数</h3></div><span>{requestParamCount(draft.paramsText)} 个参数</span></div><textarea className="request-input" aria-label="请求参数" value={draft.paramsText} onChange={(event) => setDraft((current) => ({ ...current, paramsText: event.target.value }))} onBlur={() => void saveDraft(draft)} placeholder="Action=100\naccount=600554432" rows={12} /><p className="request-hint"><code>键=值</code>，每行一个参数；分号开头的行是注释，重复键取最后一个值。</p><div className="request-actions"><button type="button" className="primary-button" disabled={running} onClick={() => void send()}>发送请求</button></div></section>
-      <section className="request-card response-card"><div className="request-card-heading"><div><p className="eyebrow">Response</p><h3>应答内容</h3></div><div className="response-actions"><span className="response-duration">耗时 {response?.durationMs === undefined ? "—" : response.durationMs} ms</span><div className="response-copy-actions"><button type="button" className="secondary-button" disabled={response?.body === undefined} onClick={() => void copyResponse()}>复制应答数据</button>{copyStatus && <small role="status">{copyStatus}</small>}</div></div></div><div className="response-code">{responseCode}</div><pre className="response-body">{responseBody}</pre></section>
+      <section className="request-card response-card"><div className="request-card-heading"><div><p className="eyebrow">Response</p><h3>应答内容</h3></div><div className="response-actions"><span className="response-duration">耗时 {response?.durationMs === undefined ? "—" : response.durationMs} ms</span><div className="response-copy-actions"><button type="button" className="secondary-button" disabled={response?.body === undefined} onClick={() => { if (response?.body !== undefined) onFillJson(response.body); }}>回填到 JSON 可视化</button></div></div></div><div className="response-code">{responseCode}</div><pre className="response-body">{responseBody}</pre></section>
     </div>
   </section>;
 }

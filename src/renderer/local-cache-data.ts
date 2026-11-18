@@ -1,3 +1,5 @@
+import { decodeFileCacheValue } from "../shared/file-cache-value";
+
 export type LocalCacheFilter = "all" | "value" | "empty" | "json";
 export type LocalCacheValueKind = "empty" | "text" | "json-object" | "json-array";
 
@@ -32,7 +34,7 @@ function previewValue(value: string): string {
 }
 
 function parseJsonContainer(value: string): unknown | undefined {
-  const trimmed = value.trim();
+  const trimmed = decodeFileCacheValue(value).trim();
   if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return undefined;
   try {
     const parsed: unknown = JSON.parse(trimmed);
@@ -44,6 +46,7 @@ function parseJsonContainer(value: string): unknown | undefined {
 
 export function describeLocalCacheEntry(key: string, value: string): LocalCacheEntry {
   const parsed = parseJsonContainer(value);
+  const decodedValue = decodeFileCacheValue(value);
   if (parsed !== undefined) {
     const formatted = JSON.stringify(parsed, null, 2);
     const kind = Array.isArray(parsed) ? "json-array" : "json-object";
@@ -54,7 +57,7 @@ export function describeLocalCacheEntry(key: string, value: string): LocalCacheE
       label: kind === "json-array" ? "JSON 数组" : "JSON 对象",
       formatted,
       formattedLines: formatted.split("\n").length,
-      preview: previewValue(value),
+      preview: previewValue(decodedValue),
       chars: value.length,
       isJson: true,
       isLong: value.length >= LONG_VALUE_THRESHOLD,
@@ -69,7 +72,7 @@ export function describeLocalCacheEntry(key: string, value: string): LocalCacheE
     label: kind === "empty" ? "空值" : "文本",
     formatted: value,
     formattedLines: value.split("\n").length,
-    preview: previewValue(value),
+    preview: previewValue(decodedValue),
     chars: value.length,
     isJson: false,
     isLong: value.length >= LONG_VALUE_THRESHOLD,
@@ -85,7 +88,7 @@ export function filterLocalCacheEntries(values: Record<string, string>, query: s
       if (filter === "empty" && entry.kind !== "empty") return false;
       if (filter === "json" && !entry.isJson) return false;
       if (wanted === "") return true;
-      return entry.key.toLocaleLowerCase().includes(wanted) || entry.value.toLocaleLowerCase().includes(wanted);
+      return entry.key.toLocaleLowerCase().includes(wanted) || decodeFileCacheValue(entry.value).toLocaleLowerCase().includes(wanted);
     });
 }
 

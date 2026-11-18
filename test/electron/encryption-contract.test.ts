@@ -30,7 +30,7 @@ test("shared encryption contracts preserve history and restrict writable patches
   assert.match(contracts, /selectEncryptionDirectory\(kind: EncryptionDirectoryKind\): Promise<OperationResult & \{[\s\S]*preferences\?: EncryptionPreferences\s*;?\s*\}>/);
   assert.match(contracts, /saveEncryptionPreferences\(patch: EncryptionPreferencesPatch\)/);
   assert.match(contracts, /cancelEncryption\(\): Promise<OperationResult>;/);
-  assert.match(contracts, /export interface EncryptionResult extends OperationResult \{[\s\S]*canceled\?: boolean;/);
+  assert.match(contracts, /export interface EncryptionResult extends OperationResult \{[\s\S]*canceled\?: boolean;[\s\S]*missingOutputFiles\?: number;/);
   assert.match(preload, /EncryptionPreferencesPatch/);
   assert.match(preload, /saveEncryptionPreferences: \(patch: EncryptionPreferencesPatch\)/);
   assert.doesNotMatch(preload, /Partial<EncryptionPreferences>/);

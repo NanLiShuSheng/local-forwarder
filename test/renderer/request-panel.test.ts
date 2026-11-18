@@ -18,8 +18,10 @@ test("request page keeps IP, port, and pasted parameters and sends the request",
   assert.match(source, /TZT TCP/);
   assert.match(source, /分号.*注释/);
   assert.match(source, /重复键.*最后/);
-  assert.match(source, /复制应答数据/);
-  assert.match(source, /navigator\.clipboard/);
+  assert.match(source, /回填到 JSON 可视化/);
+  assert.match(source, /onFillJson\(response\.body\)/);
+  assert.doesNotMatch(source, /navigator\.clipboard/);
+  assert.doesNotMatch(source, /复制应答数据/);
   assert.match(source, /config\.request/);
   assert.match(source, /paramsText/);
   assert.match(source, /onBlur/);
@@ -32,12 +34,14 @@ test("request page keeps IP, port, and pasted parameters and sends the request",
   assert.match(source, /<span className="login-cache-notice-tag">当前代理<\/span>/);
   assert.match(styles, /\.login-cache-notice\s*\{[^}]*border-left:\s*3px solid var\(--info\);/);
   assert.match(styles, /\.login-cache-notice\s*\{[^}]*background:\s*var\(--info-background\);/);
+  assert.match(styles, /\.app-shell\[data-theme="light"\] \.login-cache-notice\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--info\) 3%, var\(--surface-elevated-background\)\);/);
   assert.match(styles, /\.login-cache-notice-tag\s*\{[^}]*white-space:\s*nowrap;/);
   assert.match(source, /<div className="response-actions">/);
   const responseActions = source.match(/<div className="response-actions">([\s\S]*?)<\/div>\s*<\/div>\s*<div className="response-code">/);
   assert.ok(responseActions, "response-actions should wrap the response metadata controls");
   assert.match(responseActions[1], /className="response-duration"/);
   assert.match(responseActions[1], /className="response-copy-actions"/);
+  assert.match(responseActions[1], /回填到 JSON 可视化/);
   assert.match(source, /<span className="response-duration">耗时 \{response\?\.durationMs === undefined \? "—" : response\.durationMs\} ms<\/span>/);
   assert.match(styles, /\.request-card-heading\s*\{[^}]*flex-wrap:\s*wrap;/);
   assert.match(styles, /\.response-actions\s*\{[^}]*flex-wrap:\s*wrap;[^}]*gap:\s*14px;/);

@@ -15,6 +15,10 @@ export interface ManagedForwardingService {
   mergeLocalValues(values: Record<string, string>): void;
   getMapValues(): Record<string, string>;
   setMapValues(values: Record<string, string>): void;
+  getFileValues(): Record<string, string>;
+  setFileValue(filename: string, value: string): void;
+  deleteFileValue(filename: string): void;
+  clearFileValues(): void;
   setRuntimeValues?(values: Record<string, string>): void;
 }
 
@@ -194,6 +198,46 @@ export class ForwardingServiceManager {
 
   public getMapValues(id = this.workspace.selectedInstanceId): Record<string, string> {
     return { ...this.requireService(id).getMapValues() };
+  }
+
+  public getFileValues(id = this.workspace.selectedInstanceId): Record<string, string> {
+    return { ...this.requireService(id).getFileValues() };
+  }
+
+  public async saveFileValue(filename: string, value: string, id = this.workspace.selectedInstanceId): Promise<void> {
+    if (typeof filename !== "string" || filename.length === 0) throw new Error("文件名不能为空");
+    if (filename.includes("/") || filename.includes("\\") || filename === "." || filename === "..") throw new Error("文件名不能包含路径分隔符");
+    if (typeof value !== "string") throw new Error("文件缓存内容无效");
+    const instance = this.requireInstance(id);
+    const service = this.requireService(id);
+    service.setFileValue(filename, value);
+    await this.persistFileValues(instance, service);
+  }
+
+  public async deleteFileValue(filename: string, id = this.workspace.selectedInstanceId): Promise<void> {
+    if (typeof filename !== "string" || filename.length === 0) throw new Error("文件名不能为空");
+    const instance = this.requireInstance(id);
+    const service = this.requireService(id);
+    service.deleteFileValue(filename);
+    await this.persistFileValues(instance, service);
+  }
+
+  public async clearFileValues(id = this.workspace.selectedInstanceId): Promise<void> {
+    const instance = this.requireInstance(id);
+    const service = this.requireService(id);
+    service.clearFileValues();
+    await this.persistFileValues(instance, service);
+  }
+
+  private async persistFileValues(instance: ProxyInstance, service: ManagedForwardingService): Promise<void> {
+    const legacy = instance.config.legacy ?? { files: {}, extra: {} };
+    const files = { ...legacy.files };
+    for (const key of Object.keys(files)) {
+      if (typeof files[key] === "string") delete files[key];
+    }
+    Object.assign(files, service.getFileValues());
+    instance.config = { ...instance.config, legacy: { ...legacy, files } };
+    await this.persist();
   }
 
   public async saveMapValues(values: Record<string, string>, id = this.workspace.selectedInstanceId): Promise<void> {

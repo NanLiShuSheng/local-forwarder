@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { flattenJsonValue, parseJsonPreviewText } from "../../src/shared/json-preview";
+import { flattenJsonValue, parseJsonPreviewText, responseTextToJsonPreview } from "../../src/shared/json-preview";
 
 async function loadPipeDelimitedArrayParser(): Promise<(value: unknown) => unknown> {
   const module = await import("../../src/shared/json-preview") as unknown as { parsePipeDelimitedArray?: unknown };
@@ -89,4 +89,28 @@ test("rejects malformed JSON with a user-facing error", () => {
   const result = parseJsonPreviewText('{"code":}');
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.error, /JSON/);
+});
+
+test("converts TZT key-value responses into JSON preview text", () => {
+  const formatted = responseTextToJsonPreview("Action = 100\nErrorNo = 100015\nToken = token-100");
+  assert.deepEqual(JSON.parse(formatted), {
+    Action: "100",
+    ErrorNo: "100015",
+    Token: "token-100",
+  });
+});
+
+test("preserves multiline and equals-containing values when converting TZT responses", () => {
+  const formatted = responseTextToJsonPreview("Grid = A|B|\n | | | |\nURL = a=b\nTOKEN = ok");
+  assert.deepEqual(JSON.parse(formatted), {
+    Grid: "A|B|\n| | | |",
+    URL: "a=b",
+    TOKEN: "ok",
+  });
+});
+
+test("keeps valid JSON and non-key-value text unchanged for JSON preview", () => {
+  const json = '{"Action":"100"}';
+  assert.equal(responseTextToJsonPreview(json), json);
+  assert.equal(responseTextToJsonPreview("plain response"), "plain response");
 });

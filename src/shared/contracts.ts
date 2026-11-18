@@ -186,6 +186,7 @@ export interface EncryptionResult extends OperationResult {
   totalFiles?: number;
   processedFiles?: number;
   skippedFiles?: number;
+  missingOutputFiles?: number;
   removedFiles?: number;
   files?: EncryptionFileResult[];
   logs?: string[];
@@ -258,6 +259,7 @@ export interface ForwarderApi {
   getUpdateState(): Promise<UpdateState>;
   checkForUpdates(): Promise<UpdateOperationResult>;
   downloadUpdate(): Promise<UpdateOperationResult>;
+  cancelUpdate(): Promise<UpdateOperationResult>;
   installUpdate(): Promise<UpdateOperationResult>;
   onUpdateState(listener: (state: UpdateState) => void): () => void;
   saveConfig(config: AppConfig): Promise<OperationResult>;
@@ -267,6 +269,10 @@ export interface ForwarderApi {
   saveLoginCache(values: Record<string, string>): Promise<OperationResult>;
   getMapValues(id?: string): Promise<Record<string, string>>;
   saveMapValues(values: Record<string, string>, id?: string): Promise<OperationResult>;
+  getFileValues(id?: string): Promise<Record<string, string>>;
+  saveFileValue(filename: string, value: string, id?: string): Promise<OperationResult>;
+  deleteFileValue(filename: string, id?: string): Promise<OperationResult>;
+  clearFileValues(id?: string): Promise<OperationResult>;
   listProxyInstances(): Promise<ProxyInstanceSummary[]>;
   selectProxyInstance(id: string): Promise<OperationResult & { instanceId?: string }>;
   createProxyInstance(): Promise<OperationResult & { instance?: ProxyInstanceSummary }>;
@@ -301,6 +307,7 @@ export const IPC_CHANNELS = {
   getUpdateState: "update:state:get",
   checkForUpdates: "update:check",
   downloadUpdate: "update:download",
+  cancelUpdate: "update:cancel",
   installUpdate: "update:install",
   updateState: "update:state",
   saveConfig: "config:save",
@@ -310,6 +317,10 @@ export const IPC_CHANNELS = {
   saveLoginCache: "values:login:save",
   getMapValues: "values:map:get",
   saveMapValues: "values:map:save",
+  getFileValues: "values:file:get",
+  saveFileValue: "values:file:save",
+  deleteFileValue: "values:file:delete",
+  clearFileValues: "values:file:clear",
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
   getEncryptionPreferences: "encryption:get-preferences",

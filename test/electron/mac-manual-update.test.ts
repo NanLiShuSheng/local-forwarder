@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -11,6 +11,7 @@ import {
   createMacUpdateUrls,
   parseMacUpdateManifest,
 } from "../../electron/mac-manual-update";
+import type { ManualUpdateFetch } from "../../electron/mac-manual-update";
 import type { UpdateInfoSnapshot, UpdateProgressSnapshot } from "../../src/shared/contracts";
 
 interface TestServer {
@@ -65,6 +66,18 @@ function manifestBody(version: string, fileName: string, payload: Buffer): Buffe
     releaseDate: "2026-11-11T00:00:00.000Z",
     files: [{ arch: "x64", name: fileName, sha512: sha512(payload), size: payload.length }],
   }));
+}
+
+async function waitForFile(filePath: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      await access(filePath);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw new Error(`file did not appear: ${filePath}`);
 }
 
 test("compares stable and prerelease versions", () => {
@@ -173,6 +186,126 @@ test("rejects a downloaded DMG whose SHA-512 does not match", async () => {
     await assert.rejects(readFile(path.join(downloadDirectory, fileName)), /ENOENT/);
   } finally {
     await server.close();
+    await rm(downloadDirectory, { recursive: true, force: true });
+  }
+});
+
+test("cancels an in-progress DMG download, removes the partial file, and can retry", async () => {
+  const payload = Buffer.alloc(4096, 7);
+  const fileName = "Local-Forwarder-1.1.0-mac.dmg";
+  const manifest = JSON.parse(manifestBody("1.1.0", fileName, payload).toString());
+  let downloadRequests = 0;
+  const fetchImpl: ManualUpdateFetch = async (input, init) => {
+    if (String(input).endsWith("mac-update.json")) {
+      return new Response(JSON.stringify(manifest), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    downloadRequests += 1;
+    if (downloadRequests > 1) {
+      return new Response(new Uint8Array(payload), {
+        status: 200,
+        headers: { "Content-Length": String(payload.length) },
+      });
+    }
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(payload.subarray(0, 128)));
+        init?.signal?.addEventListener("abort", () => {
+          controller.error(Object.assign(new Error("Aborted"), { name: "AbortError" }));
+        }, { once: true });
+      },
+    });
+    return new Response(body, {
+      status: 200,
+      headers: { "Content-Length": String(payload.length) },
+    });
+  };
+  const downloadDirectory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-mac-cancel-"));
+  const errors: unknown[] = [];
+  const adapter = createMacManualUpdateAdapter({
+    currentVersion: "1.0.0",
+    architecture: "x64",
+    manifestUrl: "http://updates.example.com/mac-update.json",
+    downloadBaseUrl: "http://updates.example.com/",
+    downloadDirectory,
+    fetchImpl,
+    openPath: async () => "",
+  });
+  adapter.onError((error) => errors.push(error));
+  const temporary = path.join(downloadDirectory, `${fileName}.part`);
+
+  try {
+    await adapter.checkForUpdates();
+    const download = adapter.downloadUpdate();
+    await waitForFile(temporary);
+    adapter.cancelDownload();
+    await assert.rejects(download, (error: unknown) => (error as { code?: unknown }).code === "ERR_MANUAL_UPDATE_CANCELED");
+    assert.equal(errors.length, 0);
+    await assert.rejects(readFile(temporary), /ENOENT/);
+    await assert.rejects(readFile(path.join(downloadDirectory, fileName)), /ENOENT/);
+
+    const retriedPath = await adapter.downloadUpdate();
+    assert.deepEqual(await readFile(retriedPath), payload);
+  } finally {
+    await rm(downloadDirectory, { recursive: true, force: true });
+  }
+});
+
+test("waits for a canceled download to settle before an immediate retry starts", async () => {
+  const payload = Buffer.alloc(2048, 3);
+  const fileName = "Local-Forwarder-1.1.0-mac.dmg";
+  const manifest = JSON.parse(manifestBody("1.1.0", fileName, payload).toString());
+  let downloadRequests = 0;
+  const fetchImpl: ManualUpdateFetch = async (input, init) => {
+    if (String(input).endsWith("mac-update.json")) {
+      return new Response(JSON.stringify(manifest), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    downloadRequests += 1;
+    if (downloadRequests > 1) {
+      return new Response(new Uint8Array(payload), {
+        status: 200,
+        headers: { "Content-Length": String(payload.length) },
+      });
+    }
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(payload.subarray(0, 64)));
+        init?.signal?.addEventListener("abort", () => {
+          controller.error(Object.assign(new Error("Aborted"), { name: "AbortError" }));
+        }, { once: true });
+      },
+    });
+    return new Response(body, {
+      status: 200,
+      headers: { "Content-Length": String(payload.length) },
+    });
+  };
+  const downloadDirectory = await mkdtemp(path.join(os.tmpdir(), "local-forwarder-mac-retry-"));
+  const adapter = createMacManualUpdateAdapter({
+    currentVersion: "1.0.0",
+    architecture: "x64",
+    manifestUrl: "http://updates.example.com/mac-update.json",
+    downloadBaseUrl: "http://updates.example.com/",
+    downloadDirectory,
+    fetchImpl,
+    openPath: async () => "",
+  });
+
+  try {
+    await adapter.checkForUpdates();
+    const first = adapter.downloadUpdate();
+    await waitForFile(path.join(downloadDirectory, `${fileName}.part`));
+    adapter.cancelDownload();
+    const retry = adapter.downloadUpdate();
+    await assert.rejects(first, (error: unknown) => (error as { code?: unknown }).code === "ERR_MANUAL_UPDATE_CANCELED");
+    assert.deepEqual(await readFile(await retry), payload);
+    assert.equal(downloadRequests, 2);
+  } finally {
     await rm(downloadDirectory, { recursive: true, force: true });
   }
 });

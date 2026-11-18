@@ -146,6 +146,39 @@ test("reads and replaces map values before and during runtime", async () => {
   }
 });
 
+test("reads and deletes file values before and during runtime", async () => {
+  const config = createDefaultConfig();
+  config.server.port = await freePort();
+  config.cache.rootDir = await mkdtemp(path.join(os.tmpdir(), "forwarder-file-values-"));
+  config.legacy = { files: { "A.TXT": "first-value", "B.TXT": "second-value" }, extra: {} };
+  const service = new ForwardingService({ config });
+
+  try {
+    assert.deepEqual(service.getFileValues(), { "A.TXT": "first-value", "B.TXT": "second-value" });
+    service.deleteFileValue("a.txt");
+    assert.deepEqual(service.getFileValues(), { "B.TXT": "second-value" });
+
+    await service.start();
+    assert.deepEqual(service.getFileValues(), { "B.TXT": "second-value" });
+    service.deleteFileValue("b.txt");
+    assert.deepEqual(service.getFileValues(), {});
+    assert.deepEqual(service.getConfig().legacy?.files, {});
+  } finally {
+    await service.stop();
+  }
+});
+
+test("clears file values without removing non-string legacy file entries", () => {
+  const config = createDefaultConfig();
+  config.legacy = { files: { "A.TXT": "first-value", "config.js": { source: true } }, extra: {} };
+  const service = new ForwardingService({ config });
+
+  service.clearFileValues();
+
+  assert.deepEqual(service.getFileValues(), {});
+  assert.deepEqual(service.getConfig().legacy?.files, { "config.js": { source: true } });
+});
+
 test("clears captured logs and accepts new entries afterward", async () => {
   const config = createDefaultConfig();
   let onLog: ((entry: LogEntry) => void) | undefined;

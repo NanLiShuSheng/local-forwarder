@@ -25,6 +25,7 @@ const IPC_CHANNELS = {
   getUpdateState: "update:state:get",
   checkForUpdates: "update:check",
   downloadUpdate: "update:download",
+  cancelUpdate: "update:cancel",
   installUpdate: "update:install",
   updateState: "update:state",
   saveConfig: "config:save",
@@ -34,6 +35,10 @@ const IPC_CHANNELS = {
   saveLoginCache: "values:login:save",
   getMapValues: "values:map:get",
   saveMapValues: "values:map:save",
+  getFileValues: "values:file:get",
+  saveFileValue: "values:file:save",
+  deleteFileValue: "values:file:delete",
+  clearFileValues: "values:file:clear",
   selectProjectDirectory: "config:select-project-directory",
   selectEncryptionDirectory: "encryption:select-directory",
   getEncryptionPreferences: "encryption:get-preferences",
@@ -96,6 +101,7 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
   registerIpcHandler(policy, IPC_CHANNELS.getUpdateState, () => getCurrentUpdateState());
   registerIpcHandler(policy, IPC_CHANNELS.checkForUpdates, () => updateService?.check() ?? { ok: true, skipped: true });
   registerIpcHandler(policy, IPC_CHANNELS.downloadUpdate, () => updateService?.download() ?? { ok: true, skipped: true });
+  registerIpcHandler(policy, IPC_CHANNELS.cancelUpdate, () => updateService?.cancel() ?? { ok: true, skipped: true });
   registerIpcHandler(policy, IPC_CHANNELS.installUpdate, () => updateService?.install() ?? { ok: true, skipped: true });
   registerIpcHandler(
     policy,
@@ -138,6 +144,37 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "本地缓存保存失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.getFileValues, (_event, id) => manager.getFileValues(typeof id === "string" && id.length > 0 ? id : undefined));
+  registerIpcHandler(policy, IPC_CHANNELS.saveFileValue, async (_event, filename, value, id) => {
+    if (typeof filename !== "string" || filename.length === 0) return { ok: false, error: "文件名无效" };
+    if (typeof value !== "string") return { ok: false, error: "文件缓存内容无效" };
+    if (id !== undefined && (typeof id !== "string" || id.length === 0)) return { ok: false, error: "代理实例参数无效" };
+    try {
+      await manager.saveFileValue(filename, value, id);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "文件缓存保存失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.deleteFileValue, async (_event, filename, id) => {
+    if (typeof filename !== "string" || filename.length === 0) return { ok: false, error: "文件名无效" };
+    if (id !== undefined && (typeof id !== "string" || id.length === 0)) return { ok: false, error: "代理实例参数无效" };
+    try {
+      await manager.deleteFileValue(filename, id);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "文件缓存删除失败" };
+    }
+  });
+  registerIpcHandler(policy, IPC_CHANNELS.clearFileValues, async (_event, id) => {
+    if (id !== undefined && (typeof id !== "string" || id.length === 0)) return { ok: false, error: "代理实例参数无效" };
+    try {
+      await manager.clearFileValues(id);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "文件缓存清空失败" };
     }
   });
   registerIpcHandler(policy, IPC_CHANNELS.listProxyInstances, (): ProxyInstanceSummary[] => manager.list());

@@ -8,8 +8,8 @@ import { canInstallUpdate, UpdateCard } from "../../src/renderer/components/Upda
 
 const callbacks = { onDownload: () => undefined, onInstall: () => undefined, onDismiss: () => undefined };
 
-function renderCard(state: UpdateState, dismissedVersion?: string): string {
-  return renderToStaticMarkup(createElement(UpdateCard, { state, dismissedVersion, ...callbacks }));
+function renderCard(state: UpdateState, dismissedVersion?: string, hiddenDuringDownloadVersion?: string): string {
+  return renderToStaticMarkup(createElement(UpdateCard, { state, dismissedVersion, hiddenDuringDownloadVersion, ...callbacks }));
 }
 
 test("update card exposes download and install actions", async () => {
@@ -18,6 +18,7 @@ test("update card exposes download and install actions", async () => {
   assert.match(source, /立即重启更新/);
   assert.match(source, /打开安装包/);
   assert.match(source, /稍后更新/);
+  assert.match(source, /关闭更新窗口/);
   assert.match(source, /下载进度/);
 });
 
@@ -88,6 +89,14 @@ test("a dismissed version stays hidden while a newer version is shown", () => {
   const state: UpdateState = { state: "available", currentVersion: "1.0.0", update: { version: "1.1.0" } };
   assert.equal(renderCard(state, "1.1.0"), "");
   assert.match(renderCard(state, "1.0.9"), /版本 1\.0\.0 → 1\.1\.0/);
+});
+
+test("a download hidden by the user reappears when it finishes or fails", () => {
+  const downloading: UpdateState = { state: "downloading", currentVersion: "1.0.0", update: { version: "1.1.0" } };
+  assert.equal(renderCard(downloading, undefined, "1.1.0"), "");
+  assert.match(renderCard({ ...downloading, state: "downloaded" }, undefined, "1.1.0"), /更新已下载/);
+  assert.match(renderCard({ ...downloading, state: "error", error: "adapter failure" }, undefined, "1.1.0"), /更新操作失败，请重试/);
+  assert.match(renderCard(downloading, undefined, "1.0.9"), /正在下载更新/);
 });
 
 test("startup errors and no-update states do not render an update prompt", () => {

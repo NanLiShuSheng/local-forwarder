@@ -40,6 +40,26 @@ function fakeFactory() {
       mergeLocalValues: (values) => { current.localValues = { ...current.localValues, ...values }; void persistence.save(current); },
       getMapValues: () => ({ ...current.mapValues }),
       setMapValues: (values) => { current.mapValues = { ...values }; },
+      getFileValues: () => Object.fromEntries(Object.entries(current.legacy?.files ?? {}).filter(([, value]) => typeof value === "string")) as Record<string, string>,
+      setFileValue: (filename, value) => {
+        const legacy = current.legacy ?? { files: {}, extra: {} };
+        const files = { ...legacy.files };
+        const normalized = filename.toUpperCase();
+        for (const key of Object.keys(files)) if (key.toUpperCase() === normalized) delete files[key];
+        files[normalized] = value;
+        current.legacy = { ...legacy, files };
+      },
+      deleteFileValue: (filename) => {
+        const files = current.legacy?.files ?? {};
+        const wanted = filename.toUpperCase();
+        for (const key of Object.keys(files)) if (key.toUpperCase() === wanted) delete files[key];
+      },
+      clearFileValues: () => {
+        const legacy = current.legacy ?? { files: {}, extra: {} };
+        const files = { ...legacy.files };
+        for (const key of Object.keys(files)) if (typeof files[key] === "string") delete files[key];
+        current.legacy = { ...legacy, files };
+      },
     };
   };
 }
@@ -193,6 +213,50 @@ test("views and edits map cache on the selected proxy without affecting another 
   assert.deepEqual(manager.getMapValues("first"), { UPDATED: "second-value" });
   assert.deepEqual(manager.getMapValues("second"), {});
   assert.deepEqual(savedWorkspace?.instances.find((instance) => instance.id === "first")?.config.mapValues, { UPDATED: "second-value" });
+});
+
+test("views and deletes file cache on the selected proxy while preserving legacy file entries", async () => {
+  const workspace = workspaceWithTwoInstances();
+  workspace.instances[0]!.config.legacy = { files: { "A.TXT": "first-value", "config.js": { source: true } }, extra: {} };
+  let savedWorkspace: ProxyWorkspace | undefined;
+  const manager = new ForwardingServiceManager({
+    workspace,
+    workspaceStore: { save: async (next) => { savedWorkspace = next; } },
+    serviceFactory: fakeFactory(),
+  });
+
+  assert.deepEqual(manager.getFileValues("first"), { "A.TXT": "first-value" });
+  await manager.deleteFileValue("a.txt", "first");
+
+  assert.deepEqual(manager.getFileValues("first"), {});
+  const savedFiles = savedWorkspace?.instances.find((instance) => instance.id === "first")?.config.legacy?.files;
+  assert.deepEqual(savedFiles, { "config.js": { source: true } });
+});
+
+test("adds and edits file cache on the selected proxy while preserving legacy file entries", async () => {
+  const workspace = workspaceWithTwoInstances();
+  workspace.instances[0]!.config.legacy = { files: { "config.js": { source: true } }, extra: {} };
+  let savedWorkspace: ProxyWorkspace | undefined;
+  const manager = new ForwardingServiceManager({
+    workspace,
+    workspaceStore: { save: async (next) => { savedWorkspace = next; } },
+    serviceFactory: fakeFactory(),
+  });
+
+  await manager.saveFileValue("new.txt", "first-value", "first");
+  assert.deepEqual(manager.getFileValues("first"), { "NEW.TXT": "first-value" });
+  assert.deepEqual(manager.getFileValues("second"), {});
+
+  await manager.saveFileValue("NEW.TXT", "second-value", "first");
+  assert.deepEqual(manager.getFileValues("first"), { "NEW.TXT": "second-value" });
+  const savedFiles = savedWorkspace?.instances.find((instance) => instance.id === "first")?.config.legacy?.files;
+  assert.deepEqual(savedFiles, { "NEW.TXT": "second-value", "config.js": { source: true } });
+
+  await manager.clearFileValues("first");
+  assert.deepEqual(manager.getFileValues("first"), {});
+  assert.deepEqual(savedWorkspace?.instances.find((instance) => instance.id === "first")?.config.legacy?.files, { "config.js": { source: true } });
+
+  await assert.rejects(() => manager.saveFileValue("../bad.txt", "x", "first"), /路径分隔符/);
 });
 
 test("routes automatic login capture into the selected proxy cache", async () => {

@@ -108,6 +108,43 @@ export function parseJsonPreviewText(input: string): JsonPreviewParseResult {
   }
 }
 
+function parseKeyValueResponseText(input: string): Record<string, string> | undefined {
+  const values: Record<string, string> = {};
+  let lastKey: string | undefined;
+  let foundKeyValue = false;
+  for (const rawLine of input.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line === "") {
+      lastKey = undefined;
+      continue;
+    }
+    const separator = line.indexOf("=");
+    const key = separator >= 0 ? line.slice(0, separator).trim() : "";
+    if (separator < 0 || key === "") {
+      if (lastKey === undefined) return undefined;
+      values[lastKey] += `\n${line}`;
+      continue;
+    }
+    lastKey = key;
+    values[lastKey] = line.slice(separator + 1).trim();
+    foundKeyValue = true;
+  }
+  return foundKeyValue ? values : undefined;
+}
+
+export function responseTextToJsonPreview(input: string): string {
+  const text = input.trim();
+  if (text === "") return input;
+  try {
+    JSON.parse(text);
+    return input;
+  } catch {
+    // TZT native responses use readable Key = Value lines instead of JSON.
+  }
+  const values = parseKeyValueResponseText(text);
+  return values === undefined ? input : JSON.stringify(values, null, 2);
+}
+
 function propertyPath(parentPath: string, key: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(key) ? `${parentPath}.${key}` : `${parentPath}[${JSON.stringify(key)}]`;
 }

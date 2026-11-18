@@ -87,6 +87,21 @@ export function createMacManualUpdateAdapter(options: MacManualUpdateAdapterOpti
   const errorListeners = new Set<(error: unknown) => void>();
   let pendingUpdate: { info: UpdateInfoSnapshot; file: MacUpdateFile } | undefined;
   let downloadedPath: string | undefined;
+  let downloadAbortController: AbortController | undefined;
+  let activeDownloadPromise: Promise<string> | undefined;
+  let downloadCanceled = false;
+
+  function startDownload(): Promise<string> {
+    if (downloadCanceled && activeDownloadPromise !== undefined) {
+      return activeDownloadPromise.catch(() => undefined).then(() => startDownload());
+    }
+    downloadCanceled = false;
+    const operation = performDownload();
+    activeDownloadPromise = operation;
+    return operation.finally(() => {
+      if (activeDownloadPromise === operation) activeDownloadPromise = undefined;
+    });
+  }
 
   return {
     autoDownload: false,
@@ -154,33 +169,10 @@ export function createMacManualUpdateAdapter(options: MacManualUpdateAdapterOpti
         throw error;
       }
     },
-    async downloadUpdate() {
-      if (pendingUpdate === undefined) {
-        throw manualUpdateError("ERR_MANUAL_UPDATE_MANIFEST", "没有可下载的 Mac 更新");
-      }
-      const { info, file } = pendingUpdate;
-      await mkdir(options.downloadDirectory, { recursive: true });
-      const destination = path.join(options.downloadDirectory, file.name);
-      const temporary = `${destination}.part`;
-      try {
-        await downloadToFile({
-          url: `${options.downloadBaseUrl}${encodeURIComponent(file.name)}`,
-          destination: temporary,
-          expected: file,
-          fetchImpl,
-          now,
-          onProgress: (progress) => emit(progressListeners, progress),
-        });
-        await rm(destination, { force: true });
-        await rename(temporary, destination);
-        downloadedPath = destination;
-        emit(downloadedListeners, info);
-        return destination;
-      } catch (error) {
-        await rm(temporary, { force: true }).catch(() => undefined);
-        emit(errorListeners, error);
-        throw error;
-      }
+    downloadUpdate: () => startDownload(),
+    cancelDownload() {
+      downloadCanceled = true;
+      downloadAbortController?.abort();
     },
     async openDownloadedUpdate() {
       if (downloadedPath === undefined) {
@@ -196,6 +188,45 @@ export function createMacManualUpdateAdapter(options: MacManualUpdateAdapterOpti
       throw manualUpdateError("ERR_MANUAL_UPDATE_OPEN", "Mac 版本需要手动安装");
     },
   };
+
+  async function performDownload(): Promise<string> {
+    if (pendingUpdate === undefined) {
+      throw manualUpdateError("ERR_MANUAL_UPDATE_MANIFEST", "没有可下载的 Mac 更新");
+    }
+    const { info, file } = pendingUpdate;
+    const destination = path.join(options.downloadDirectory, file.name);
+    const temporary = `${destination}.part`;
+    const controller = new AbortController();
+    downloadAbortController = controller;
+    try {
+      await mkdir(options.downloadDirectory, { recursive: true });
+      if (controller.signal.aborted) throw manualUpdateError("ERR_MANUAL_UPDATE_CANCELED", "下载已取消");
+      await downloadToFile({
+        url: `${options.downloadBaseUrl}${encodeURIComponent(file.name)}`,
+        destination: temporary,
+        expected: file,
+        fetchImpl,
+        now,
+        signal: controller.signal,
+        onProgress: (progress) => emit(progressListeners, progress),
+      });
+      if (controller.signal.aborted) throw manualUpdateError("ERR_MANUAL_UPDATE_CANCELED", "下载已取消");
+      await rm(destination, { force: true });
+      await rename(temporary, destination);
+      downloadedPath = destination;
+      emit(downloadedListeners, info);
+      return destination;
+    } catch (error) {
+      await rm(temporary, { force: true }).catch(() => undefined);
+      if (controller.signal.aborted) {
+        throw manualUpdateError("ERR_MANUAL_UPDATE_CANCELED", "下载已取消");
+      }
+      emit(errorListeners, error);
+      throw error;
+    } finally {
+      if (downloadAbortController === controller) downloadAbortController = undefined;
+    }
+  }
 }
 
 function parseMacUpdateFile(value: unknown): MacUpdateFile {
@@ -221,6 +252,7 @@ interface DownloadToFileOptions {
   expected: MacUpdateFile;
   fetchImpl: ManualUpdateFetch;
   now: () => number;
+  signal?: AbortSignal;
   onProgress: (progress: UpdateProgressSnapshot) => void;
 }
 
@@ -228,7 +260,9 @@ async function downloadToFile(options: DownloadToFileOptions): Promise<void> {
   const response = await options.fetchImpl(options.url, {
     headers: { "User-Agent": "Local-Forwarder" },
     redirect: "follow",
-    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    signal: options.signal === undefined
+      ? AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)
+      : AbortSignal.any([AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS), options.signal]),
   });
   if (!response.ok) {
     throw Object.assign(manualUpdateError("ERR_MANUAL_UPDATE_DOWNLOAD", "安装包下载失败"), {
@@ -262,6 +296,7 @@ async function downloadToFile(options: DownloadToFileOptions): Promise<void> {
         options.onProgress(progressSnapshot(transferred, total, startedAt, timestamp));
       }
     }
+    if (options.signal?.aborted) throw manualUpdateError("ERR_MANUAL_UPDATE_CANCELED", "下载已取消");
     options.onProgress(progressSnapshot(transferred, total, startedAt, options.now()));
     const digest = hash.digest("base64");
     if (digest !== options.expected.sha512) {

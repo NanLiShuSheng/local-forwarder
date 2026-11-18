@@ -36,10 +36,11 @@ class FakeAdapter implements UpdateAdapter {
   autoInstallOnAppQuit = true;
   checkCalls = 0;
   downloadCalls = 0;
+  cancelCalls = 0;
   quitAndInstallCalls = 0;
   openDownloadedCalls = 0;
-  checkDeferred?: Deferred<unknown>;
-  downloadDeferred?: Deferred<unknown>;
+  private checkDeferreds: Deferred<unknown>[] = [];
+  private downloadDeferreds: Deferred<unknown>[] = [];
   private checkingListeners = new Set<() => void>();
   private availableListeners = new Set<(info: UpdateInfoSnapshot) => void>();
   private notAvailableListeners = new Set<() => void>();
@@ -73,14 +74,28 @@ class FakeAdapter implements UpdateAdapter {
 
   checkForUpdates(): Promise<unknown> {
     this.checkCalls += 1;
-    this.checkDeferred ??= new Deferred<unknown>();
-    return this.checkDeferred.promise;
+    const deferred = new Deferred<unknown>();
+    this.checkDeferreds.push(deferred);
+    return deferred.promise;
+  }
+
+  get checkDeferred(): Deferred<unknown> | undefined {
+    return this.checkDeferreds.at(-1);
   }
 
   downloadUpdate(): Promise<unknown> {
     this.downloadCalls += 1;
-    this.downloadDeferred ??= new Deferred<unknown>();
-    return this.downloadDeferred.promise;
+    const deferred = new Deferred<unknown>();
+    this.downloadDeferreds.push(deferred);
+    return deferred.promise;
+  }
+
+  get downloadDeferred(): Deferred<unknown> | undefined {
+    return this.downloadDeferreds.at(-1);
+  }
+
+  cancelDownload(): void {
+    this.cancelCalls += 1;
   }
 
   quitAndInstall(): void {
@@ -188,9 +203,70 @@ test("does not download on availability and downloads only when explicitly reque
   assert.equal(adapter.downloadCalls, 0);
 
   const download = service.download();
+  assert.equal(adapter.checkCalls, 2);
+  assert.equal(adapter.downloadCalls, 0);
+  adapter.emitAvailable();
+  adapter.checkDeferred?.resolve({});
+  await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(adapter.downloadCalls, 1);
   adapter.downloadDeferred?.resolve({});
   await download;
+  service.dispose();
+});
+
+test("downloads the version found by the click-time refresh instead of the stale card version", async () => {
+  const { adapter, service } = createHarness();
+  const staleUpdate: UpdateInfoSnapshot = { version: "1.1.0" };
+  const latestUpdate: UpdateInfoSnapshot = { version: "1.2.0" };
+
+  const check = service.check();
+  adapter.emitAvailable(staleUpdate);
+  adapter.checkDeferred?.resolve({});
+  await check;
+  assert.deepEqual(service.getState(), {
+    state: "available",
+    currentVersion: "1.0.0",
+    update: staleUpdate,
+  });
+
+  const download = service.download();
+  assert.equal(adapter.checkCalls, 2);
+  assert.equal(adapter.downloadCalls, 0);
+
+  adapter.emitAvailable(latestUpdate);
+  adapter.checkDeferred?.resolve({});
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.equal(adapter.downloadCalls, 1);
+  assert.deepEqual(service.getState(), {
+    state: "downloading",
+    currentVersion: "1.0.0",
+    update: latestUpdate,
+  });
+
+  adapter.downloadDeferred?.resolve({});
+  await download;
+  service.dispose();
+});
+
+test("does not download after the click-time refresh reports no update", async () => {
+  const { adapter, service } = createHarness();
+
+  const check = service.check();
+  adapter.emitAvailable();
+  adapter.checkDeferred?.resolve({});
+  await check;
+
+  const download = service.download();
+  adapter.emitNotAvailable();
+  adapter.checkDeferred?.resolve({});
+
+  assert.deepEqual(await download, { ok: true });
+  assert.equal(adapter.downloadCalls, 0);
+  assert.deepEqual(service.getState(), {
+    state: "not-available",
+    currentVersion: "1.0.0",
+  });
   service.dispose();
 });
 
@@ -290,6 +366,63 @@ test("reuses in-flight check and download promises", async () => {
   assert.equal(adapter.downloadCalls, 1);
   adapter.downloadDeferred?.resolve({});
   await downloadOne;
+  service.dispose();
+});
+
+test("cancels an active download without publishing an error and allows retry", async () => {
+  const { adapter, service, states } = createHarness();
+
+  const check = service.check();
+  adapter.emitAvailable();
+  adapter.checkDeferred?.resolve({});
+  await check;
+
+  const download = service.download();
+  adapter.emitAvailable();
+  adapter.checkDeferred?.resolve({});
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(adapter.downloadCalls, 1);
+  assert.equal(service.getState().state, "downloading");
+
+  assert.deepEqual(await service.cancel(), { ok: true });
+  assert.equal(adapter.cancelCalls, 1);
+  assert.deepEqual(service.getState(), {
+    state: "available",
+    currentVersion: "1.0.0",
+    update,
+  });
+
+  adapter.emitProgress({ percent: 80, transferred: 80, total: 100, bytesPerSecond: 10 });
+  adapter.emitDownloaded();
+  adapter.emitError(new Error("cancelled"));
+  adapter.downloadDeferred?.reject(new Error("cancelled"));
+
+  assert.deepEqual(await download, { ok: true });
+  assert.deepEqual(service.getState(), {
+    state: "available",
+    currentVersion: "1.0.0",
+    update,
+  });
+  assert.equal(states.some((entry) => entry.state === "error"), false);
+
+  const retry = service.download();
+  assert.equal(adapter.checkCalls, 3);
+  adapter.emitAvailable();
+  adapter.checkDeferred?.resolve({});
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(adapter.downloadCalls, 2);
+  assert.equal(service.getState().state, "downloading");
+
+  adapter.downloadDeferred?.resolve({});
+  await retry;
+  service.dispose();
+});
+
+test("cancel is a no-op when no download is active", async () => {
+  const { adapter, service } = createHarness();
+
+  assert.deepEqual(await service.cancel(), { ok: true });
+  assert.equal(adapter.cancelCalls, 0);
   service.dispose();
 });
 
@@ -520,13 +653,37 @@ test("dispose removes listeners and prevents a startup check", async () => {
 test("starts exactly one background check immediately", async () => {
   const { adapter, service } = createHarness();
 
-  await service.startBackgroundCheck();
+  const started = service.startBackgroundCheck();
   assert.equal(adapter.checkCalls, 1);
 
   await service.startBackgroundCheck();
   assert.equal(adapter.checkCalls, 1);
 
   adapter.checkDeferred?.resolve({});
-  await Promise.resolve();
+  await started;
+  service.dispose();
+});
+
+test("retries a transient startup check failure and publishes the available update", async () => {
+  const { adapter, service } = createHarness({
+    backgroundCheckRetryDelaysMs: [0],
+  });
+
+  const started = service.startBackgroundCheck();
+  assert.equal(adapter.checkCalls, 1);
+
+  adapter.checkDeferred?.reject(new Error("temporary startup failure"));
+  await new Promise<void>((resolve) => setTimeout(resolve, 10));
+
+  assert.equal(adapter.checkCalls, 2);
+  adapter.emitAvailable();
+  adapter.checkDeferred?.resolve({});
+  await started;
+
+  assert.deepEqual(service.getState(), {
+    state: "available",
+    currentVersion: "1.0.0",
+    update,
+  });
   service.dispose();
 });

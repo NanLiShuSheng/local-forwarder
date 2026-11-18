@@ -229,3 +229,10 @@ test("appends the local completion time only to the final encryption log", async
   assert.match(source, /共 \$\{total\} 个） \$\{completedAt\}/);
   assert.doesNotMatch(source, /加密：\$\{progress\.relativePath\}.*formatEncryptionLocalTime/);
 });
+
+test("encryption completion reports missing outputs without re-encrypting unchanged sources", async () => {
+  const source = await readFile("src/renderer/components/ConfigPages.tsx", "utf8");
+  assert.match(source, /const missing = result\.missingOutputFiles \?\? 0;/);
+  assert.match(source, /输出缺失 \$\{missing\} 个/);
+  assert.match(source, /增量加密只比较源文件 SHA-256，不检查输出文件是否存在/);
+});

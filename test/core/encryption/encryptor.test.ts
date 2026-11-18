@@ -229,6 +229,33 @@ test("incremental encryption skips unchanged files and removes deleted outputs",
   }
 });
 
+test("incremental encryption trusts source hashes and reports missing outputs without re-encrypting", async () => {
+  const fixture = await makeFixture();
+  try {
+    const first = await encryptDirectory({ ...fixture, mode: "full" });
+    assert.equal(first.processedFiles, 3);
+    assert.equal(first.missingOutputFiles, 0);
+
+    await rm(path.join(fixture.outputDir, "app.js.d"));
+    const second = await encryptDirectory({ ...fixture, mode: "incremental" });
+    assert.equal(second.processedFiles, 0);
+    assert.equal(second.skippedFiles, 3);
+    assert.equal(second.missingOutputFiles, 1);
+    assert.equal(second.logs.length, 1);
+    assert.match(second.logs[0]!, /Missing 1 output file/);
+    assert.equal((await readFile(fixture.counterPath, "utf8")).trim().split("\n").length, 3);
+    await assert.rejects(() => readFile(path.join(fixture.outputDir, "app.js.d")));
+
+    const repair = await encryptDirectory({ ...fixture, mode: "full" });
+    assert.equal(repair.processedFiles, 3);
+    assert.equal(repair.missingOutputFiles, 0);
+    assert.equal(await readFile(path.join(fixture.outputDir, "app.js.d"), "utf8"), "console.log('app');");
+    assert.equal((await readFile(fixture.counterPath, "utf8")).trim().split("\n").length, 6);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("encryptDirectory rejects invalid source, encoder, and unsafe output directories", async () => {
   const fixture = await makeFixture();
   try {

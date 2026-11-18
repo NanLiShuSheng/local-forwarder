@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createDefaultForwardingTargets, DEFAULT_REQUEST_HOST, DEFAULT_REQUEST_PARAMS_TEXT, DEFAULT_REQUEST_PORT } from "../shared/config-defaults";
 import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus, UpdateState } from "../shared/contracts";
+import { responseTextToJsonPreview } from "../shared/json-preview";
 import { AppearancePage } from "./components/AppearancePage";
 import { ConfigPages, type Page } from "./components/ConfigPages";
 import { DecryptionPage } from "./components/DecryptionPage";
@@ -10,7 +11,9 @@ import { RuleList } from "./components/RuleList";
 import { ProxyInstancePanel } from "./components/ProxyInstancePanel";
 import { ProxyInstanceSidebar } from "./components/ProxyInstanceSidebar";
 import { UpdateCard } from "./components/UpdateCard";
+import { UpdateCancelDialog } from "./components/UpdateCancelDialog";
 import { LocalCachePage } from "./components/LocalCachePage";
+import { FileCachePage } from "./components/FileCachePage";
 import { LocalVariablesPage } from "./components/LocalVariablesPage";
 import { LoginCachePage } from "./components/LoginCachePage";
 import { RequestPage } from "./components/RequestPage";
@@ -25,7 +28,7 @@ const initialStatus: RuntimeStatus = { state: "stopped", requestCount: 0, tcpCon
 const initialUpdateState: UpdateState = { state: "idle", currentVersion: "" };
 const initialEncryptionPreferences: EncryptionPreferences = { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [], lowercaseOutput: false };
 const initialConfig: AppConfig = { server: { bindHost: "127.0.0.1", port: 8080, timeoutMs: 30000, loggingEnabled: true }, httpRules: [], tcpTargets: createDefaultForwardingTargets(), localValues: {}, mapValues: {}, accounts: {}, cache: { rootDir: "", downloadTarget: "", decryptEnabled: false, autoDownload: false }, request: { host: DEFAULT_REQUEST_HOST, port: DEFAULT_REQUEST_PORT, paramsText: DEFAULT_REQUEST_PARAMS_TEXT }, stringTool: { inputText: "", outputText: "", operation: "replace", findText: "", replaceText: "" } };
-type SidebarNavIconName = "runtime" | "request" | "string" | "json" | "local" | "cache" | "values" | "encryption" | "decryption" | "logs" | "appearance";
+type SidebarNavIconName = "runtime" | "request" | "string" | "json" | "local" | "cache" | "file" | "values" | "encryption" | "decryption" | "logs" | "appearance";
 const sidebarNavIconPaths: Record<SidebarNavIconName, string[]> = {
   runtime: ["M4 13a8 8 0 1 1 16 0", "M12 13l3.5-3.5", "M7 17h10"],
   request: ["M5 19 19 5", "M9 5h10v10"],
@@ -33,13 +36,14 @@ const sidebarNavIconPaths: Record<SidebarNavIconName, string[]> = {
   json: ["M8 4c-2 0-3 1-3 3v2c0 2-1 3-2 3 1 0 2 1 2 3v2c0 2 1 3 3 3", "M16 4c2 0 3 1 3 3v2c0 2 1 3 2 3-1 0-2 1-2 3v2c0 2-1 3-3 3"],
   local: ["M5 4h14v16H5z", "M8 8h8", "M8 12h8", "M8 16h5"],
   cache: ["M4 7h16v13H4z", "M4 7l2-3h12l2 3", "M8 11h8", "M8 15h5"],
+  file: ["M6 3h8l4 4v14H6z", "M14 3v5h5", "M9 12h6", "M9 16h6"],
   values: ["M5 6c0-1.1 3.1-2 7-2s7 .9 7 2-3.1 2-7 2-7-.9-7-2Z", "M5 6v6c0 1.1 3.1 2 7 2s7-.9 7-2V6", "M5 12v6c0 1.1 3.1 2 7 2s7-.9 7-2v-6"],
   encryption: ["M7 10V7a5 5 0 0 1 10 0v3", "M5 10h14v10H5z", "M12 14v2"],
   decryption: ["M7 10V7a5 5 0 0 1 9.6-2", "M5 10h14v10H5z", "M12 14v2"],
   logs: ["M5 6h14", "M5 12h14", "M5 18h14"],
   appearance: ["M5 6h14", "M8 4v4", "M5 12h14", "M15 10v4", "M5 18h14", "M11 16v4"],
 };
-const pages: Array<{ id: Page; label: string; icon: SidebarNavIconName }> = [{ id: "runtime", label: "概览", icon: "runtime" }, { id: "request", label: "请求", icon: "request" }, { id: "encryption", label: "加密", icon: "encryption" }, { id: "json", label: "JSON 可视化", icon: "json" }, { id: "logs", label: "日志", icon: "logs" }, { id: "string", label: "字符串", icon: "string" }, { id: "local", label: "本地变量", icon: "local" }, { id: "local-cache", label: "本地缓存", icon: "cache" }, { id: "values", label: "登录缓存", icon: "values" }, { id: "decryption", label: "解密", icon: "decryption" }, { id: "appearance", label: "外观", icon: "appearance" }];
+const pages: Array<{ id: Page; label: string; icon: SidebarNavIconName }> = [{ id: "runtime", label: "概览", icon: "runtime" }, { id: "request", label: "请求", icon: "request" }, { id: "encryption", label: "加密", icon: "encryption" }, { id: "json", label: "JSON 可视化", icon: "json" }, { id: "logs", label: "日志", icon: "logs" }, { id: "string", label: "字符串", icon: "string" }, { id: "local-cache", label: "本地缓存", icon: "cache" }, { id: "file-cache", label: "文件缓存", icon: "file" }, { id: "values", label: "登录缓存", icon: "values" }, { id: "local", label: "本地变量", icon: "local" }, { id: "decryption", label: "解密", icon: "decryption" }, { id: "appearance", label: "外观", icon: "appearance" }];
 
 export function createVersionedLogReader(readLogs: () => Promise<LogEntry[]>, applyLogs: (logs: LogEntry[]) => void) {
   let version = 0;
@@ -116,6 +120,9 @@ function AppContent() {
   const [appVersion, setAppVersion] = useState("");
   const [updateState, setUpdateState] = useState<UpdateState>(initialUpdateState);
   const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | undefined>(() => readDismissedUpdateVersion(getUpdateDismissalStorage()));
+  const [updateDismissPrompt, setUpdateDismissPrompt] = useState(false);
+  const [hiddenDownloadVersion, setHiddenDownloadVersion] = useState<string | undefined>();
+  const [updateDismissBusy, setUpdateDismissBusy] = useState(false);
   const loginNoticeIdRef = useRef(0);
   const manualCheckTrackerRef = useRef<ReturnType<typeof createManualCheckTracker> | undefined>(undefined);
   if (manualCheckTrackerRef.current === undefined) {
@@ -163,8 +170,15 @@ function AppContent() {
     if (manualCheckTracker.complete(requestId) && resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
   }, [notify, updateState.state]);
 
+  useEffect(() => {
+    if (updateState.state === "downloading") return;
+    setHiddenDownloadVersion(undefined);
+    setUpdateDismissPrompt(false);
+  }, [updateState.state]);
+
   const checkForUpdates = async () => {
     setDismissedUpdateVersion(undefined);
+    setHiddenDownloadVersion(undefined);
     const checkSnapshot = updateStateSynchronizer.beginSnapshot();
     const requestId = manualCheckTracker.begin(checkSnapshot.eventRevision, updateStateSynchronizer.getState().state);
     try {
@@ -213,9 +227,40 @@ function AppContent() {
 
   const dismissUpdate = () => {
     const version = updateState.update?.version;
-    if (version !== undefined) {
-      setDismissedUpdateVersion(version);
-      writeDismissedUpdateVersion(getUpdateDismissalStorage(), version);
+    if (version === undefined) return;
+    if (updateState.state === "downloading") {
+      setUpdateDismissPrompt(true);
+      return;
+    }
+    setDismissedUpdateVersion(version);
+    writeDismissedUpdateVersion(getUpdateDismissalStorage(), version);
+  };
+
+  const continueUpdateDownload = () => setUpdateDismissPrompt(false);
+
+  const hideUpdateDuringDownload = () => {
+    const version = updateState.update?.version;
+    if (version === undefined) return;
+    setHiddenDownloadVersion(version);
+    setUpdateDismissPrompt(false);
+  };
+
+  const stopUpdateDownload = async () => {
+    if (updateDismissBusy) return;
+    setUpdateDismissBusy(true);
+    try {
+      const result = await window.forwarder.cancelUpdate();
+      if (!result.ok) {
+        notifyError(result.error ?? "停止更新失败", "停止更新失败");
+        return;
+      }
+      setHiddenDownloadVersion(undefined);
+      setUpdateDismissPrompt(false);
+      notify({ kind: "success", message: "已停止下载更新" });
+    } catch (cause) {
+      notifyError(cause, "停止更新失败");
+    } finally {
+      setUpdateDismissBusy(false);
     }
   };
 
@@ -399,7 +444,7 @@ function AppContent() {
   };
 
   const fillJsonPreview = (text: string) => {
-    setJsonPrefill(text);
+    setJsonPrefill(responseTextToJsonPreview(text));
     setPage("json");
   };
 
@@ -476,11 +521,12 @@ function AppContent() {
     <section className={`content ${page === "request" ? "request-page-content" : ""} ${page === "json" ? "json-page-content" : ""} ${page === "logs" ? "log-page-content" : ""}`}>
       <PagePane active={page === "runtime"}><ProxyInstancePanel instances={instances} status={status} config={config} onChange={save} onChooseProjectDirectory={chooseProjectDirectory} onRename={renameProxyInstance} onStart={start} onStop={stop} /></PagePane>
       <PagePane active={page === "runtime" || page === "encryption"}><ConfigPages page={page === "runtime" ? "addresses" : page} {...pageProps} /></PagePane>
-      <PagePane active={page === "request"}><RequestPage config={config} onChange={save} onSendRequest={sendRequest} /></PagePane>
+      <PagePane active={page === "request"}><RequestPage config={config} onChange={save} onSendRequest={sendRequest} onFillJson={fillJsonPreview} /></PagePane>
       <PagePane active={page === "string"}><StringToolPage config={config} /></PagePane>
       <PagePane active={page === "appearance"}><AppearancePage mode={mode} theme={theme} onModeChange={setMode} appVersion={appVersion || updateState.currentVersion} checkingForUpdates={updateState.state === "checking"} onCheckForUpdates={checkForUpdates} /></PagePane>
       <PagePane active={page === "local"}><LocalVariablesPage active={page === "local"} /></PagePane>
       <PagePane active={page === "local-cache"}><LocalCachePage active={page === "local-cache"} instanceId={selectedInstance?.id} /></PagePane>
+      <PagePane active={page === "file-cache"}><FileCachePage instanceId={selectedInstance?.id} /></PagePane>
       <PagePane active={page === "values"}><LoginCachePage instanceId={selectedInstance?.id} instanceName={selectedInstance?.name} running={selectedInstance?.status.state === "running"} values={loginCache} onSave={saveLoginCache} /></PagePane>
       <PagePane active={page === "decryption"}><DecryptionPage /></PagePane>
       <PagePane active={page === "json"}><JsonPreviewPage prefillText={jsonPrefill} onPrefillApplied={() => setJsonPrefill(undefined)} /></PagePane>
@@ -488,7 +534,8 @@ function AppContent() {
       <PagePane active={page === "logs"}><LogPanel logs={logs} selected={selectedLog} onSelect={setSelectedLog} onClear={clearLogs} onFillJson={fillJsonPreview} /></PagePane>
     </section>
     {loginSuccessNotice !== undefined && <LoginSuccessCard notice={loginSuccessNotice} onClose={() => setLoginSuccessNotice(undefined)} onOpenCache={openLoginCache} />}
-    <UpdateCard state={updateState} dismissedVersion={dismissedUpdateVersion} onDownload={downloadUpdate} onInstall={installUpdate} onDismiss={dismissUpdate} />
+    <UpdateCard state={updateState} dismissedVersion={dismissedUpdateVersion} hiddenDuringDownloadVersion={hiddenDownloadVersion} onDownload={downloadUpdate} onInstall={installUpdate} onDismiss={dismissUpdate} />
+    {updateDismissPrompt && updateState.state === "downloading" && <UpdateCancelDialog version={updateState.update?.version} busy={updateDismissBusy} onContinue={continueUpdateDownload} onHide={hideUpdateDuringDownload} onStop={stopUpdateDownload} />}
   </main>;
 }
 

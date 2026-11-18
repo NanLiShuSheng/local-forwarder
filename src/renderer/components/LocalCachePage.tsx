@@ -411,6 +411,7 @@ export function LocalCachePage({ instanceId, active = true }: { instanceId?: str
     <div className="local-cache-heading">
       <div className="local-cache-heading-title">
         <h2>本地缓存</h2>
+        <span className="local-cache-api-pill">/reqsavemap</span>
         <span className={`local-cache-status ${statusTone}`} aria-live="polite"><i />{statusText}</span>
       </div>
       <div className="local-cache-heading-actions">

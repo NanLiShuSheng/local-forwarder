@@ -3,6 +3,7 @@ import type { UpdateState } from "../../shared/contracts";
 export interface UpdateCardProps {
   state: UpdateState;
   dismissedVersion?: string;
+  hiddenDuringDownloadVersion?: string;
   onDownload: () => void;
   onInstall: () => void;
   onDismiss: () => void;
@@ -26,12 +27,14 @@ export function canInstallUpdate(state: UpdateState): boolean {
   return state.state === "downloaded";
 }
 
-export function UpdateCard({ state, dismissedVersion, onDownload, onInstall, onDismiss }: UpdateCardProps) {
+export function UpdateCard({ state, dismissedVersion, hiddenDuringDownloadVersion, onDownload, onInstall, onDismiss }: UpdateCardProps) {
   const version = state.update?.version;
+  const hiddenDuringDownload = state.state === "downloading" && hiddenDuringDownloadVersion === version;
 
   const visible = version !== undefined
     && (state.state === "available" || state.state === "downloading" || state.state === "downloaded" || state.state === "error")
-    && dismissedVersion !== version;
+    && dismissedVersion !== version
+    && !hiddenDuringDownload;
   if (!visible) return null;
 
   const rawPercent = state.progress?.percent ?? 0;
@@ -47,7 +50,7 @@ export function UpdateCard({ state, dismissedVersion, onDownload, onInstall, onD
         <p className="update-card-eyebrow">发现新版本</p>
         <h2>版本 {state.currentVersion} → {version}</h2>
       </div>
-      <button type="button" className="update-card-close" aria-label="稍后更新" onClick={onDismiss}>×</button>
+      <button type="button" className="update-card-close" aria-label={isDownloading ? "关闭更新窗口" : "稍后更新"} onClick={onDismiss}>×</button>
     </div>
     {isDownloading && <div className="update-card-progress-wrap">
       <div className="update-card-progress-heading"><span>下载进度</span><strong>{Math.round(percent)}%</strong></div>

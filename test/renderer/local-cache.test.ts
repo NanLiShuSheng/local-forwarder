@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { encodeFileCacheValue } from "../../src/shared/file-cache-value";
 import { describeLocalCacheEntry, filterLocalCacheEntries, localCacheStats } from "../../src/renderer/local-cache-data";
 
 test("renderer exposes local cache as a separate structured and editable tab", async () => {
@@ -19,6 +20,7 @@ test("renderer exposes local cache as a separate structured and editable tab", a
   assert.match(cacheSource, /formatLocalCacheText/);
   assert.match(cacheSource, /parseLocalCacheText\(text\)/);
   assert.match(cacheSource, /local-cache-workspace/);
+  assert.match(cacheSource, /<h2>本地缓存<\/h2>\s*<span className="local-cache-api-pill">\/reqsavemap<\/span>/);
   assert.match(cacheSource, /local-cache-key-row/);
   assert.match(cacheSource, /local-cache-code-shell/);
   assert.match(cacheSource, /onBlur=/);
@@ -53,6 +55,18 @@ test("recognizes JSON, empty, and plain text cache values", () => {
   assert.equal(emptyValue.kind, "empty");
   assert.equal(emptyValue.label, "空值");
   assert.equal(emptyValue.preview, "空值");
+});
+
+test("decodes percent-encoded file cache values for formatted display and search", () => {
+  const encoded = encodeFileCacheValue('{"name":"中文","count":2}');
+  const entry = describeLocalCacheEntry("ENCODED", encoded);
+
+  assert.equal(encoded, "%7B%22name%22:%22%E4%B8%AD%E6%96%87%22,%22count%22:2%7D");
+  assert.equal(entry.value, encoded);
+  assert.equal(entry.isJson, true);
+  assert.equal(entry.formatted, '{\n  "name": "中文",\n  "count": 2\n}');
+  assert.equal(entry.preview, '{"name":"中文","count":2}');
+  assert.deepEqual(filterLocalCacheEntries({ ENCODED: encoded }, "中文", "all").map((item) => item.key), ["ENCODED"]);
 });
 
 test("filters cache entries by query and value type", () => {

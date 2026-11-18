@@ -32,6 +32,7 @@ export interface EncryptionResult {
   totalFiles: number;
   processedFiles: number;
   skippedFiles: number;
+  missingOutputFiles: number;
   removedFiles: number;
   files: EncryptionFileResult[];
   logs: string[];
@@ -329,6 +330,7 @@ export async function encryptDirectory({
   const logs: string[] = [];
   let processedFiles = 0;
   let skippedFiles = 0;
+  let missingOutputFiles = 0;
   let removedFiles = 0;
 
   onProgress?.({ mode, phase: "processing", current: 0, total: files.length, processedFiles, skippedFiles, removedFiles });
@@ -361,9 +363,10 @@ export async function encryptDirectory({
     const sourceHash = await hashFile(filePath);
     signal?.throwIfAborted();
     nextState.files[relativePath] = sourceHash;
-    const canSkip = mode === "incremental" && stateMatches && previousFiles[relativePath] === sourceHash && await outputExists(outputPath);
+    const canSkip = mode === "incremental" && stateMatches && previousFiles[relativePath] === sourceHash;
     if (canSkip) {
       skippedFiles += 1;
+      if (!await outputExists(outputPath)) missingOutputFiles += 1;
       onProgress?.({ mode, phase: "processing", status: "skipping", current: processedFiles + skippedFiles, total: files.length, processedFiles, skippedFiles, removedFiles, relativePath });
     } else {
       logs.push(`Encrypting ${relativePath}`);
@@ -376,7 +379,8 @@ export async function encryptDirectory({
   }
 
   signal?.throwIfAborted();
+  if (missingOutputFiles > 0) logs.push(`Missing ${missingOutputFiles} output file(s); run full encryption to rebuild them.`);
   await writeEncryptState(statePath, nextState);
   onProgress?.({ mode, phase: "completed", status: "completed", current: files.length, total: files.length, processedFiles, skippedFiles, removedFiles });
-  return { mode, totalFiles: resultFiles.length, processedFiles, skippedFiles, removedFiles, files: resultFiles, logs };
+  return { mode, totalFiles: resultFiles.length, processedFiles, skippedFiles, missingOutputFiles, removedFiles, files: resultFiles, logs };
 }

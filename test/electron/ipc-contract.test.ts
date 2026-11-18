@@ -10,6 +10,7 @@ test("IPC channels expose stable runtime commands", () => {
     getUpdateState: "update:state:get",
     checkForUpdates: "update:check",
     downloadUpdate: "update:download",
+    cancelUpdate: "update:cancel",
     installUpdate: "update:install",
     updateState: "update:state",
     saveConfig: "config:save",
@@ -19,6 +20,10 @@ test("IPC channels expose stable runtime commands", () => {
     saveLoginCache: "values:login:save",
     getMapValues: "values:map:get",
     saveMapValues: "values:map:save",
+    getFileValues: "values:file:get",
+    saveFileValue: "values:file:save",
+    deleteFileValue: "values:file:delete",
+    clearFileValues: "values:file:clear",
     selectProjectDirectory: "config:select-project-directory",
     selectEncryptionDirectory: "encryption:select-directory",
     getEncryptionPreferences: "encryption:get-preferences",
@@ -52,6 +57,7 @@ test("IPC channels expose stable runtime commands", () => {
 
 test("update installation verifies that all proxy instances stopped", async () => {
   const source = await readFile("electron/main.ts", "utf8");
+  assert.match(source, /IPC_CHANNELS\.cancelUpdate/);
   assert.match(source, /async function stopAllForUpdate/);
   assert.match(source, /await manager\.stopAll\(\);[\s\S]*?if \(!manager\.list\(\)\.every\(\(instance\) => instance\.status\.state === "stopped"\)\) \{[\s\S]*?return \{ ok: false, error: "代理未完全停止" \};/);
   assert.match(source, /stopAll: stopAllForUpdate/);
