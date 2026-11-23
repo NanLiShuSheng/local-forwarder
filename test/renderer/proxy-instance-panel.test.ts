@@ -1,6 +1,48 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import type { ProxyInstanceSummary } from "../../src/shared/contracts";
+import { orderProxyInstancesForDisplay } from "../../src/renderer/components/ProxyInstanceSidebar";
+
+function proxySummary(id: string, state: ProxyInstanceSummary["status"]["state"]): ProxyInstanceSummary {
+  return {
+    id,
+    name: id,
+    selected: false,
+    bindHost: "127.0.0.1",
+    port: 8080,
+    target: "127.0.0.1:8080",
+    loginCacheCount: 0,
+    status: { state, requestCount: 0, tcpConnections: 0 },
+  };
+}
+
+test("proxy sidebar moves started proxies above stopped ones while preserving manual order", () => {
+  const instances = [
+    proxySummary("stopped-a", "stopped"),
+    proxySummary("running-b", "running"),
+    proxySummary("stopped-c", "stopped"),
+    proxySummary("starting-d", "starting"),
+  ];
+
+  assert.deepEqual(
+    orderProxyInstancesForDisplay(instances, instances.map((instance) => instance.id)).map((instance) => instance.id),
+    ["running-b", "starting-d", "stopped-a", "stopped-c"],
+  );
+});
+
+test("proxy sidebar keeps the manual order when every proxy is running", () => {
+  const instances = [
+    proxySummary("running-a", "running"),
+    proxySummary("starting-b", "starting"),
+    proxySummary("starting-c", "starting"),
+  ];
+
+  assert.deepEqual(
+    orderProxyInstancesForDisplay(instances, ["running-a", "starting-b", "starting-c"]).map((instance) => instance.id),
+    ["running-a", "starting-b", "starting-c"],
+  );
+});
 
 test("overview renders proxy instance management actions", async () => {
   const panel = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");

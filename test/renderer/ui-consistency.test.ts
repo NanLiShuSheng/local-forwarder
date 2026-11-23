@@ -31,6 +31,17 @@ test("page headings, content spacing, and metadata follow the shared scale", asy
   assert.match(styles, /\.app-shell \.content\s*\{[^}]*padding:\s*32px 40px 48px/);
   assert.match(styles, /\.app-shell \.panel-heading h2,[\s\S]*?font-size:\s*var\(--ui-font-2xl\)/);
   assert.match(styles, /\.app-shell \.panel\s*\{[^}]*border-radius:\s*var\(--ui-radius-panel\)/);
-  assert.match(styles, /\.login-cache-field-key,[\s\S]*?font-size:\s*var\(--ui-font-2xs\)/);
-  assert.match(styles, /\.local-variables-type,[\s\S]*?font-size:\s*var\(--ui-font-2xs\)/);
+  assert.match(styles, /\.login-cache-field-key,[\s\S]*?font-size:\s*var\(--ui-font-xs\)/);
+  assert.match(styles, /\.local-variables-type,[\s\S]*?font-size:\s*var\(--ui-font-xs\)/);
+});
+
+test("the 11px type size is reserved for eyebrow labels", async () => {
+  const styles = await readFile("src/renderer/styles.css", "utf8");
+
+  assert.equal(styles.match(/font-size:\s*var\(--ui-font-2xs\)/g)?.length, 1);
+  assert.match(styles, /\.app-shell \.eyebrow\s*\{[^}]*font-size:\s*var\(--ui-font-2xs\)/);
+  assert.match(styles, /\.app-shell small\s*\{[^}]*font-size:\s*var\(--ui-font-xs\)/);
+  assert.match(styles, /\.app-shell \.proxy-instance-sidebar-status\s*\{[^}]*font-size:\s*var\(--ui-font-xs\)/);
+  assert.match(styles, /\.app-shell :is\(\.proxy-instance-sidebar-status,[\s\S]*?font-size:\s*var\(--ui-font-xs\)/);
+  assert.match(styles, /\.appearance-theme-card-copy > span:not\(\.appearance-theme-card-label\)\s*\{[^}]*font-size:\s*var\(--ui-font-xs\)/);
 });

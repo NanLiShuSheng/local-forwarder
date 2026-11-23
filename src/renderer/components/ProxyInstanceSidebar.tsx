@@ -54,6 +54,26 @@ function moveInstance(ids: string[], sourceId: string, targetId: string, positio
   return next.every((id, index) => id === ids[index]) ? undefined : next;
 }
 
+function isActiveInstance(instance: ProxyInstanceSummary): boolean {
+  return instance.status.state === "running" || instance.status.state === "starting";
+}
+
+export function orderProxyInstancesForDisplay(instances: ProxyInstanceSummary[], order: readonly string[]): ProxyInstanceSummary[] {
+  const instancesById = new Map(instances.map((instance) => [instance.id, instance] as const));
+  const ordered = order.map((id) => instancesById.get(id)).filter((instance): instance is ProxyInstanceSummary => instance !== undefined);
+  for (const instance of instances) {
+    if (!order.includes(instance.id)) ordered.push(instance);
+  }
+
+  const active: ProxyInstanceSummary[] = [];
+  const inactive: ProxyInstanceSummary[] = [];
+  for (const instance of ordered) {
+    if (isActiveInstance(instance)) active.push(instance);
+    else inactive.push(instance);
+  }
+  return [...active, ...inactive];
+}
+
 export function ProxyInstanceSidebar({ instances, onSelect, onCreate, onDelete, onDuplicate, onToggle, onStartAll, onStopAll, bulkBusy }: ProxyInstanceSidebarProps) {
   const [deletingId, setDeletingId] = useState<string>();
   const [contextMenu, setContextMenu] = useState<{ instance: ProxyInstanceSummary; x: number; y: number }>();
@@ -67,15 +87,10 @@ export function ProxyInstanceSidebar({ instances, onSelect, onCreate, onDelete, 
   const cardPositionsBeforeReorderRef = useRef<Map<string, number> | undefined>(undefined);
   const cardAnimationsRef = useRef(new Map<string, Animation>());
 
-  const orderedInstances = useMemo(() => {
-    const instancesById = new Map(instances.map((instance) => [instance.id, instance] as const));
-    const order = dragPreviewOrder ?? instanceOrder;
-    const ordered = order.map((id) => instancesById.get(id)).filter((instance): instance is ProxyInstanceSummary => instance !== undefined);
-    for (const instance of instances) {
-      if (!order.includes(instance.id)) ordered.push(instance);
-    }
-    return ordered;
-  }, [dragPreviewOrder, instanceOrder, instances]);
+  const orderedInstances = useMemo(
+    () => orderProxyInstancesForDisplay(instances, dragPreviewOrder ?? instanceOrder),
+    [dragPreviewOrder, instanceOrder, instances],
+  );
 
   useEffect(() => {
     const availableIds = new Set(instances.map((instance) => instance.id));
