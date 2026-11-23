@@ -259,6 +259,10 @@ export class ForwardingService {
     this.logBuffer.length = 0;
   }
 
+  public recordLog(entry: LogEntry): void {
+    this.appendLogEntry({ ...entry });
+  }
+
   private appendLog(level: LogEntry["level"], message: string): void {
     this.appendLogEntry({ timestamp: new Date().toISOString(), level, message });
   }

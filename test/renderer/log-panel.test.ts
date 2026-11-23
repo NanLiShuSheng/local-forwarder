@@ -116,17 +116,30 @@ test("log panel keeps the list visible beside the selected detail", async () => 
   assert.match(styleSource, /@media\s*\(max-width:\s*820px\)[\s\S]*?\.log-workspace[\s\S]*?grid-template-columns:\s*1fr/);
 });
 
-test("log panel fills the available page height while keeping its columns scrollable", async () => {
-  const [appSource, styleSource] = await Promise.all([
+test("workspace dock fills the available console height while keeping its panes scrollable", async () => {
+  const [appSource, chromeSource, styleSource] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
+    readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
     readFile("src/renderer/styles.css", "utf8"),
   ]);
 
-  assert.match(appSource, /page === "logs" \? "log-page-content" : ""/);
-  assert.match(styleSource, /\.log-page-content[^\{]*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column/);
-  assert.match(styleSource, /\.log-page-content \.log-panel[^\{]*\{[^}]*flex:\s*1[^}]*min-height:\s*0/);
-  assert.match(styleSource, /\.log-page-content \.log-list[^\{]*\{[^}]*max-height:\s*none/);
-  assert.match(styleSource, /\.log-page-content \.log-detail[^\{]*\{[^}]*max-height:\s*none[^}]*min-height:\s*0/);
+  assert.match(appSource, /className=\{`lf-workspace \$\{dockOpen \? "dock-open" : ""\}`\}/);
+  assert.match(appSource, /<WorkspaceDock logs=\{logs\} selected=\{selectedLog\}/);
+  assert.match(chromeSource, /<section className="lf-dock" aria-label="日志控制台">/);
+  assert.match(styleSource, /\.lf-workspace\.dock-open\s*\{[^}]*grid-template-rows:\s*minmax\(0, 1fr\) 214px/);
+  assert.match(styleSource, /\.lf-dock\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column[^}]*overflow:\s*hidden/);
+  assert.match(styleSource, /\.lf-dock-body\s*\{[^}]*flex:\s*1 1 auto[^}]*overflow:\s*auto/);
+  assert.match(styleSource, /\.lf-dock-detail\s*\{[^}]*flex:\s*1 1 auto[^}]*overflow:\s*hidden/);
+  assert.match(styleSource, /@media \(max-width: 820px\)[\s\S]*?\.lf-dock-detail-grid\s*\{\s*grid-template-columns:\s*1fr;/);
+});
+
+test("opening request debugging does not auto-open the console", async () => {
+  const appSource = await readFile("src/renderer/App.tsx", "utf8");
+  const navigateBody = appSource.match(/const navigate = useCallback\(\(nextRoute: WorkspaceRoute\) => \{([\s\S]*?)\n  \}, \[\]\);/)?.[1] ?? "";
+
+  assert.match(navigateBody, /setRoute\(nextRoute\);/);
+  assert.doesNotMatch(navigateBody, /setDockOpen/);
+  assert.match(appSource, /const inspectLog = \(entry: LogEntry\) => \{[\s\S]*?setDockOpen\(true\);/);
 });
 
 test("log panel marks the selected log row with an accessible selected state", async () => {
@@ -393,15 +406,15 @@ test("server-rendered log panel shows the JSON fill button for a non-empty respo
 });
 
 test("App keeps the selected log while navigating to JSON preview", async () => {
-  const [appSource, panelSource] = await Promise.all([
+  const [appSource, chromeSource] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
-    readFile("src/renderer/components/LogPanel.tsx", "utf8"),
+    readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
   ]);
 
   assert.match(appSource, /const \[selectedLog, setSelectedLog\] = useState<LogEntry>\(\);/);
-  assert.match(appSource, /<LogPanel logs=\{logs\} selected=\{selectedLog\} onSelect=\{setSelectedLog\}/);
-  assert.match(panelSource, /onSelect\(entry\)/);
-  assert.match(panelSource, /onCleared: \(\) => onSelect\(undefined\)/);
+  assert.match(appSource, /<WorkspaceDock logs=\{logs\} selected=\{selectedLog\} tab=\{dockTab\} onTabChange=\{setDockTab\} onSelectLog=\{setSelectedLog\}/);
+  assert.match(appSource, /const inspectLog = \(entry: LogEntry\) => \{[\s\S]*?setSelectedLog\(entry\);[\s\S]*?setDockTab\("request"\);[\s\S]*?setDockOpen\(true\);/);
+  assert.match(chromeSource, /onClick=\{\(\) => onSelectLog\(entry\)\}/);
 });
 
 test("log panel labels reqxml rows with the action number", async () => {
@@ -450,8 +463,8 @@ test("log panel keeps the request method inside the log detail", () => {
 test("log panel styles the reqxml action number in both themes", async () => {
   const styles = await readFile("src/renderer/styles.css", "utf8");
   assert.match(styles, /\.log-request-action\s*\{[^}]*color:\s*var\(--log-request-action-text\);/);
-  assert.match(styles, /--log-request-action-text:\s*#79c0ff;/);
-  assert.match(styles, /\.app-shell\[data-theme="light"\][\s\S]*?--log-request-action-text:\s*#0969da;/);
+  assert.match(styles, /--log-request-action-text:\s*#5eaab5;/);
+  assert.match(styles, /\.app-shell\[data-theme="light"\][\s\S]*?--log-request-action-text:\s*#2563eb;/);
 });
 
 test("log rows sit flush against their dividers so the selection has no blank strip", async () => {

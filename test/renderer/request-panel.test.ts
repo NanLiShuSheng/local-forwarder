@@ -2,88 +2,39 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { parseManualRequestPort } from "../../src/shared/manual-request";
+import { workspaceGroups } from "../../src/renderer/workspace-navigation";
 
-test("navigation exposes the request page", async () => {
-  const source = await readFile("src/renderer/App.tsx", "utf8");
-  assert.match(source, /id: "request", label: "请求"/);
+test("workspace navigation exposes request debugging and request history", () => {
+  assert.deepEqual(workspaceGroups.debug.items.map((item) => item.route), ["debug", "history"]);
+  assert.deepEqual(workspaceGroups.debug.items.map((item) => item.label), ["请求调试", "请求历史"]);
 });
 
-test("request page keeps IP, port, and pasted parameters and sends the request", async () => {
+test("request page keeps endpoint fields, parameters and responses in the new workspace layout", async () => {
   const [source, styles] = await Promise.all([
     readFile("src/renderer/components/RequestPage.tsx", "utf8"),
     readFile("src/renderer/styles.css", "utf8"),
   ]);
-  for (const label of ["目标 IP", "端口", "协议", "请求参数", "应答内容", "发送请求"]) assert.match(source, new RegExp(label));
-  assert.doesNotMatch(source, /清空/);
-  assert.match(source, /TZT TCP/);
-  assert.match(source, /分号.*注释/);
-  assert.match(source, /重复键.*最后/);
-  assert.match(source, /回填到 JSON 可视化/);
-  assert.match(source, /onFillJson\(response\.body\)/);
-  assert.doesNotMatch(source, /navigator\.clipboard/);
-  assert.doesNotMatch(source, /复制应答数据/);
+  for (const label of ["目标主机", "端口", "协议", "请求参数", "应答内容", "发送请求", "TZT TCP", "HTTP /reqxml"]) {
+    assert.match(source, new RegExp(label));
+  }
+  assert.match(source, /className="lf-request-workspace"/);
+  assert.match(source, /className="lf-panel lf-endpoint-bar"/);
+  assert.match(source, /className="lf-btn primary lf-send-button"/);
+  assert.match(source, /className="lf-debug-grid"/);
+  assert.match(source, /className="lf-response-banner"/);
   assert.match(source, /config\.request/);
   assert.match(source, /paramsText/);
   assert.match(source, /onBlur/);
   assert.match(source, /onSendRequest/);
   assert.match(source, /parseManualRequestParams/);
-  assert.match(source, /className="login-cache-notice" role="note" aria-labelledby="login-cache-notice-title"/);
-  assert.match(source, /登录请求会自动缓存应答值/);
-  assert.match(source, /Action = 100 \/ 104 \/ 105/);
-  assert.match(source, /普通请求不会触发缓存/);
-  assert.match(source, /<span className="login-cache-notice-tag">当前代理<\/span>/);
-  assert.match(source, /<span className="login-cache-notice-detail">/);
-  const requestHeading = source.match(/<div className="request-card-heading">([\s\S]*?)<textarea className="request-input"/);
-  assert.ok(requestHeading, "request-card-heading should stay directly above the request input");
-  assert.match(requestHeading[1], /<div className="request-heading-actions">/);
-  assert.match(requestHeading[1], /className="request-param-count"/);
-  assert.match(requestHeading[1], /className="primary-button request-send-button"/);
-  assert.match(requestHeading[1], /disabled=\{running\} onClick=\{\(\) => void send\(\)\}/);
-  assert.doesNotMatch(source, /className="request-actions"/);
-  assert.match(styles, /\.login-cache-notice\s*\{[^}]*border-left:\s*3px solid var\(--info\);/);
-  assert.match(styles, /\.login-cache-notice\s*\{[^}]*background:\s*var\(--info-background\);/);
-  assert.match(styles, /\.app-shell\[data-theme="light"\] \.login-cache-notice\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--info\) 3%, var\(--surface-elevated-background\)\);/);
-  assert.match(styles, /\.login-cache-notice-tag\s*\{[^}]*white-space:\s*nowrap;/);
-  assert.match(styles, /\.login-cache-notice\s*\{[^}]*grid-template-columns:\s*28px minmax\(0, 1fr\) auto;/);
-  assert.match(styles, /\.login-cache-notice-copy\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;/);
-  assert.match(styles, /\.request-heading-actions\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;/);
-  assert.match(styles, /\.request-param-count\s*\{[^}]*white-space:\s*nowrap;/);
-  assert.match(styles, /\.request-send-button\s*\{[^}]*white-space:\s*nowrap;/);
-  assert.match(styles, /@media \(max-width: 1050px\)\s*\{\s*\.request-endpoint\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) 96px minmax\(154px, \.68fr\);[^}]*\}\s*\.request-endpoint \.request-url\s*\{[^}]*grid-column:\s*1 \/ -1;[^}]*\}\s*\.request-workspace\s*\{[^}]*grid-template-columns:\s*1fr;[^}]*\}[\s\S]*?\.login-cache-notice-detail > span\s*\{\s*display:\s*none;/);
-  assert.match(source, /<div className="response-actions">/);
-  const responseActions = source.match(/<div className="response-actions">([\s\S]*?)<\/div>\s*<\/div>\s*<div className="response-code">/);
-  assert.ok(responseActions, "response-actions should wrap the response metadata controls");
-  assert.match(responseActions[1], /className="response-duration"/);
-  assert.match(responseActions[1], /className="response-copy-actions"/);
-  assert.match(responseActions[1], /回填到 JSON 可视化/);
-  assert.match(source, /<span className="response-duration">耗时 \{response\?\.durationMs === undefined \? "—" : response\.durationMs\} ms<\/span>/);
-  assert.match(styles, /\.request-card-heading\s*\{[^}]*flex-wrap:\s*wrap;/);
-  assert.match(styles, /\.response-actions\s*\{[^}]*flex-wrap:\s*wrap;[^}]*gap:\s*14px;/);
-  assert.match(styles, /\.response-copy-actions\s*\{[^}]*gap:\s*8px;/);
-  assert.match(source, /className="select-control request-transport-select"/);
-  assert.match(styles, /\.select-control\s*\{[^}]*appearance:\s*none;/);
-  assert.match(styles, /\.select-control\s*\{[^}]*background-position:[^;}]*right 9px center/);
-  const selectControlStyles = styles.match(/\.select-control\s*\{[^}]*\}/)?.[0];
-  assert.ok(selectControlStyles, ".select-control should define shared select styles");
-  assert.match(selectControlStyles, /border:\s*1px solid var\(--border-input\);/);
-  assert.match(selectControlStyles, /border-radius:\s*8px;/);
-  assert.match(selectControlStyles, /padding:\s*9px 34px 9px 10px;/);
-  assert.match(selectControlStyles, /color:\s*var\(--text-primary\);/);
-  assert.match(selectControlStyles, /background-color:\s*var\(--input-background\);/);
-  assert.match(selectControlStyles, /background-image:\s*linear-gradient\(45deg, transparent 50%, currentColor 50%\),\s*linear-gradient\(135deg, currentColor 50%, transparent 50%\);/);
-  assert.match(selectControlStyles, /background-position:\s*right 14px center,\s*right 9px center;/);
-  assert.match(selectControlStyles, /background-repeat:\s*no-repeat;/);
-  assert.match(selectControlStyles, /background-size:\s*5px 5px,\s*5px 5px;/);
-  assert.match(selectControlStyles, /outline:\s*none;/);
-  assert.match(selectControlStyles, /min-width:\s*0;/);
-  assert.match(selectControlStyles, /max-width:\s*100%;/);
-  assert.match(styles, /\.select-control:focus\s*\{[^}]*border-color:\s*var\(--border-selected\);[^}]*\}/);
-  assert.match(styles, /\.select-control:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus-ring\);[^}]*\}/);
-  assert.match(styles, /\.select-control:focus-visible\s*\{[^}]*outline-offset:\s*2px;[^}]*\}/);
-  assert.match(styles, /\.filters\s*\{[^}]*min-width:\s*0;/);
-  assert.match(styles, /\.filters\s*\{[^}]*max-width:\s*100%;/);
-  assert.match(styles, /\.log-toolbar-actions\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*100%;/);
-  assert.match(styles, /\.filters input\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*100%;/);
+  assert.match(source, /onFillJson\(responseBody\)/);
+  assert.match(source, /回填到 JSON 可视化/);
+  assert.match(source, /if \(!active\) return;/);
+  assert.match(styles, /\.lf-endpoint-bar\s*\{[^}]*display:\s*grid;/);
+  assert.match(styles, /\.lf-debug-grid\s*\{[^}]*grid-template-columns:/);
+  assert.match(styles, /\.lf-app \.lf-request-textarea:focus\s*\{[^}]*box-shadow:\s*inset 0 0 0 2px var\(--accent\)/);
+  assert.match(styles, /\.lf-btn\.primary\s*\{[^}]*background:\s*var\(--accent\)/);
+  assert.match(styles, /@media \(max-width: 820px\)[\s\S]*?\.lf-debug-view \.request-endpoint/);
 });
 
 test("request port remains editable when its draft is cleared", async () => {
@@ -98,16 +49,13 @@ test("request port remains editable when its draft is cleared", async () => {
   assert.doesNotMatch(source, /port: Number\(event\.target\.value\)/);
 });
 
-test("renderer does not repeat the selected tab title in the content area", async () => {
+test("workspace header owns the page title instead of repeating it inside the request page", async () => {
   const [appSource, requestSource] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
     readFile("src/renderer/components/RequestPage.tsx", "utf8"),
   ]);
+  assert.match(appSource, /<WorkspacePageHeader eyebrow="Debug · Request" title="请求调试"/);
+  assert.doesNotMatch(requestSource, /<WorkspacePageHeader/);
+  assert.doesNotMatch(requestSource, /<h1>/);
   assert.doesNotMatch(appSource, /<header className="topbar">/);
-  assert.doesNotMatch(appSource, /控制中心/);
-  assert.doesNotMatch(appSource, /content-toolbar/);
-  assert.doesNotMatch(appSource, /address-chip/);
-  assert.doesNotMatch(requestSource, /调试工具/);
-  assert.doesNotMatch(requestSource, /<h2>请求<\/h2>/);
-  assert.match(appSource, /request-page-content/);
 });

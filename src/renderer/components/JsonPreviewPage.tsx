@@ -244,15 +244,15 @@ function exportColors(preview: HTMLElement): JsonPreviewCanvasColors {
     bright: cssToken(style, "--text-bright", "#1f2328"),
     text: cssToken(style, "--text-secondary", "#424a53"),
     muted: cssToken(style, "--text-muted", "#59636e"),
-    info: cssToken(style, "--info", "#0969da"),
+    info: cssToken(style, "--info", "#2563eb"),
     success: cssToken(style, "--text-success", "#1a7f37"),
     warning: cssToken(style, "--warning", "#946300"),
     danger: cssToken(style, "--danger-text", "#a40e26"),
-    selectionRowBackground: cssToken(style, "--selection-row-background", "#e7eef5"),
-    selectionRowText: cssToken(style, "--selection-row-text", "#1b3a57"),
-    selectionRowAccent: cssToken(style, "--selection-row-accent", "#5b7894"),
-    selectionTabText: cssToken(style, "--selection-tab-text", "#1b3a57"),
-    selectionTabUnderline: cssToken(style, "--selection-tab-underline", "#5b7894"),
+    selectionRowBackground: cssToken(style, "--selection-row-background", "#e9f8f2"),
+    selectionRowText: cssToken(style, "--selection-row-text", "#18232f"),
+    selectionRowAccent: cssToken(style, "--selection-row-accent", "#0f9f76"),
+    selectionTabText: cssToken(style, "--selection-tab-text", "#087f5c"),
+    selectionTabUnderline: cssToken(style, "--selection-tab-underline", "#0f9f76"),
   };
 }
 

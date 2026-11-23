@@ -13,7 +13,7 @@ import { ProxyWorkspaceStore } from "../src/core/runtime/proxy-workspace-store";
 import { getDecryptionPreferencesPath, getEncryptionEncoderPath, getEncryptionPreferencesPath, getPreloadPath, getRendererIndexPath } from "./paths";
 import { createRendererSecurityPolicy, type RendererSecurityPolicy } from "./security";
 import { createSaveConfigHandler, createTrustedIpcHandler, type IpcHandler } from "./ipc";
-import { extractManualLoginValues, sendManualRequest } from "../src/core/request/manual-request";
+import { createManualRequestLogEntry, extractManualLoginValues, sendManualRequest } from "../src/core/request/manual-request";
 import { getManualRequestConfigValidationError, isValidManualRequestConfig } from "../src/shared/validation";
 import { createElectronUpdateAdapter, createUpdateService, type UpdateService } from "./update-service";
 import { createUpdateLifecycleGate } from "./update-lifecycle";
@@ -393,6 +393,7 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
           loginSuccess = true;
         }
       }
+      manager.recordLog(createManualRequestLogEntry(payload, result));
       return { ok: true, ...result, loginSuccess };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : "请求失败" };

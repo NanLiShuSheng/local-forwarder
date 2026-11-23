@@ -110,45 +110,41 @@ test("summarizes customer details for the page, sidebar, and login success notic
   assert.equal(customer.accountCount, 2);
 });
 
-test("renderer exposes login cache as a visual page with a raw text fallback", async () => {
-  const [appSource, pageSource, dataSource, styles] = await Promise.all([
+test("renderer exposes login session in the unified data browser with an editable text mode", async () => {
+  const [appSource, pageSource, dataSource, chromeSource, styles] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
-    readFile("src/renderer/components/LoginCachePage.tsx", "utf8"),
+    readFile("src/renderer/components/DataBrowserPage.tsx", "utf8"),
     readFile("src/renderer/login-cache-data.ts", "utf8"),
+    readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
     readFile("src/renderer/styles.css", "utf8"),
   ]);
-  assert.match(appSource, /import \{ LoginCachePage \} from "\.\/components\/LoginCachePage";/);
-  assert.match(appSource, /<LoginCachePage[\s\S]*?values=\{loginCache\}[\s\S]*?onSave=\{saveLoginCache\}/);
-  assert.match(pageSource, /className="login-cache-page"/);
-  assert.match(pageSource, /login-cache-workspace/);
-  assert.match(pageSource, /formatLocalCacheText\(values\)/);
+  assert.match(appSource, /<DataBrowserPage tab=\{dataTab\} selectedInstance=\{selectedInstance\} sessionValues=\{loginCache\} onSaveSession=\{saveLoginCache\}/);
+  assert.doesNotMatch(appSource, /<LoginCachePage/);
+  assert.match(pageSource, /if \(tab === "session"\) \{[\s\S]*?await onSaveSession\(next\)/);
+  assert.match(pageSource, /formatLocalCacheText\(next\)/);
   assert.match(pageSource, /parseLocalCacheText\(text\)/);
-  assert.match(pageSource, /onSave\(parsed\)/);
-  assert.match(pageSource, /className="config-textarea login-cache-input"/);
-  assert.match(pageSource, /所有字段均按明文完整展示/);
+  assert.match(pageSource, /className="[^"]*lf-data-shell"/);
+  assert.match(pageSource, /登录缓存/);
+  assert.match(pageSource, /编辑原文/);
   assert.doesNotMatch(pageSource, /脱敏/);
-  assert.doesNotMatch(pageSource, /账户数量/);
-  assert.doesNotMatch(appSource, /账户数量/);
-  assert.match(dataSource, /loginCacheSummary/);
   assert.doesNotMatch(dataSource, /maskLoginCacheValue/);
-  assert.match(styles, /\.login-cache-workspace/);
-  assert.match(styles, /\.login-cache-field-row/);
+  assert.doesNotMatch(chromeSource, /脱敏/);
+  assert.match(styles, /\.lf-data-tabs/);
+  assert.match(styles, /\.lf-detail-code/);
 });
 
-test("renderer matches the v5 customer card, page-level scrolling, and success notice", async () => {
-  const [appSource, pageSource, styles] = await Promise.all([
+test("renderer keeps the customer summary in the new operator panel and success notice", async () => {
+  const [appSource, chromeSource, styles] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
-    readFile("src/renderer/components/LoginCachePage.tsx", "utf8"),
+    readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
     readFile("src/renderer/styles.css", "utf8"),
   ]);
-  assert.match(pageSource, /login-cache-customer-card/);
-  assert.match(pageSource, /右侧页面整体滚动查看全部内容/);
-  assert.match(pageSource, /className="login-cache-field-list" role="list"/);
-  assert.doesNotMatch(pageSource, /login-cache-detail-panel/);
-  assert.match(styles, /\.login-cache-page[^\{]*\{[^}]*height:\s*auto/);
-  assert.match(styles, /\.login-cache-field-list[^\{]*\{[^}]*overflow:\s*visible/);
-  assert.match(appSource, /function SidebarCustomer/);
-  assert.match(appSource, /className="sidebar-customer"/);
+  assert.match(chromeSource, /loginCacheCustomerSummary\(loginCache\)/);
+  assert.match(chromeSource, /className="lf-operator"/);
+  assert.match(chromeSource, /className="lf-operator-avatar"/);
+  assert.match(chromeSource, /当前登录身份 · \$\{Object\.keys\(loginCache\)\.length\} 个字段/);
+  assert.match(styles, /\.lf-context-footer/);
+  assert.match(styles, /\.lf-operator\s*\{/);
   assert.match(appSource, /function LoginSuccessCard/);
   assert.match(appSource, /result\.loginSuccess/);
   assert.match(appSource, /3 秒后自动隐藏/);

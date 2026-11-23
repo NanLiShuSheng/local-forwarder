@@ -88,6 +88,11 @@ function requestPathFor(requestUrl: string | undefined): string | undefined {
   }
 }
 
+function shouldRecordRequest(requestType: LogEntry["requestType"], requestPath: string | undefined, logAllRequests: boolean | undefined): boolean {
+  if (logAllRequests === true || requestType !== undefined) return true;
+  return requestPath !== undefined && /^\/req/i.test(requestPath);
+}
+
 function captureResponse(response: ServerResponse): ResponseCapture {
   const capture: ResponseCapture = { chunks: [], totalBytes: 0 };
   const responseWithOverrides = response as any;
@@ -554,7 +559,7 @@ export class HttpProxy {
     } finally {
       const durationMs = Date.now() - started;
       this.stats.totalDurationMs += durationMs;
-      if (requestType !== undefined || this.options.logAllRequests === true) {
+      if (shouldRecordRequest(requestType, requestPath, this.options.logAllRequests)) {
         this.options.onLog?.({ timestamp: new Date().toISOString(), level: statusCode >= 500 ? "error" : "info", message: `${request.method ?? "GET"} ${request.url ?? "/"}`, direction: "inbound", protocol: "http", statusCode, durationMs, requestType: requestType ?? "http", requestPath, requestParams: requestParamsFor(request, requestBody), responseData: responseDataFor(response, responseCapture) });
       }
     }

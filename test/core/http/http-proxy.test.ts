@@ -457,6 +457,31 @@ test("logs every HTTP request when all-request diagnostics are enabled", async (
   }
 });
 
+test("logs reqxml requests from native clients without browser request headers", async () => {
+  const logs: LogEntry[] = [];
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    rules: [],
+    timeoutMs: 500,
+    tcpTargets: [{ id: "tcp", name: "tcp", host: "127.0.0.1", port: 9000, enabled: true }],
+    tcpBridge: { request: async () => ({ Action: "100", ERRORNO: "0" }) },
+    onLog: (entry) => logs.push(entry),
+  });
+
+  try {
+    const address = await proxy.start();
+    const response = await fetch(`http://127.0.0.1:${address.port}/reqxml?Action=100`);
+    assert.equal(response.status, 200);
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0]?.requestType, "http");
+    assert.equal(logs[0]?.requestPath, "/reqxml");
+    assert.equal(logs[0]?.statusCode, 200);
+  } finally {
+    await proxy.stop();
+  }
+});
+
 test("forwards GET and POST, substitutes variables, decompresses gzip, and preserves binary responses", async () => {
   const target = http.createServer((request, response) => {
     const chunks: Buffer[] = [];

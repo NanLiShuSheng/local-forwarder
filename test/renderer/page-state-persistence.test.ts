@@ -2,41 +2,39 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("feature pages stay mounted after their first visit so runtime results survive navigation", async () => {
+test("workspace pages stay mounted after their first visit so runtime results survive navigation", async () => {
   const source = await readFile("src/renderer/App.tsx", "utf8");
 
   assert.match(source, /function PagePane\(/);
   assert.match(source, /const \[hasOpened, setHasOpened\] = useState\(active\)/);
-  assert.match(source, /className="page-pane" hidden=\{!active\}/);
+  assert.match(source, /className="lf-view" hidden=\{!active\}/);
 
-  for (const page of ["request", "string", "decryption", "local", "local-cache", "file-cache", "values", "appearance", "logs", "json"]) {
-    assert.match(source, new RegExp(`<PagePane active=\\{page === "${page}"\\}>`));
+  for (const route of ["workbench", "environment", "activity", "debug", "history", "build", "jobs", "appearance", "update", "advanced"]) {
+    assert.match(source, new RegExp(`<PagePane active=\\{route === "${route}"\\}>`), `missing persistent route: ${route}`);
   }
-
-  assert.doesNotMatch(source, /page === "request" && <RequestPage/);
-  assert.doesNotMatch(source, /page === "decryption" && <DecryptionPage/);
-  assert.doesNotMatch(source, /page === "local" && <LocalVariablesPage/);
+  assert.match(source, /<PagePane active=\{isDataRoute\}>/);
+  assert.match(source, /<PagePane active=\{route === "json" \|\| route === "logs" \|\| route === "string"\}>/);
+  assert.doesNotMatch(source, /route === "debug" && <RequestPage/);
+  assert.doesNotMatch(source, /route === "build" && <BuildPage/);
 });
 
-test("the encryption workspace and request page stay mounted while other tabs are active", async () => {
+test("the unified build workspace and request page stay mounted while other pages are active", async () => {
   const source = await readFile("src/renderer/App.tsx", "utf8");
 
-  assert.match(source, /<PagePane active=\{page === "runtime" \|\| page === "encryption"\}>/);
-  assert.match(source, /<ConfigPages page=\{page === "runtime" \? "addresses" : page\}/);
-  assert.match(source, /<PagePane active=\{page === "string"\}><StringToolPage config=\{config\} \/><\/PagePane>/);
-  assert.match(source, /<RequestPage config=\{config\} onChange=\{save\} onSendRequest=\{sendRequest\} onFillJson=\{fillJsonPreview\} \/>/);
+  assert.match(source, /<PagePane active=\{route === "debug"\}>[\s\S]*?<RequestPage config=\{config\} active=\{route === "debug"\}/);
+  assert.match(source, /<PagePane active=\{route === "build"\}>[\s\S]*?<BuildPage onCreateTask=\{createBuildTask\}/);
+  assert.match(source, /<KeepAlivePane active=\{route === "json"\}><JsonPreviewPage/);
+  assert.match(source, /<KeepAlivePane active=\{route === "logs"\}><LogPanel/);
+  assert.match(source, /<KeepAlivePane active=\{route === "string"\}><StringToolPage config=\{config\} \/><\/KeepAlivePane>/);
+  assert.doesNotMatch(source, /<DecryptionPage/);
 });
 
 test("hidden pages do not keep page-level keyboard shortcuts active", async () => {
-  const [appSource, localVariablesSource, localCacheSource] = await Promise.all([
+  const [appSource, requestSource] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
-    readFile("src/renderer/components/LocalVariablesPage.tsx", "utf8"),
-    readFile("src/renderer/components/LocalCachePage.tsx", "utf8"),
+    readFile("src/renderer/components/RequestPage.tsx", "utf8"),
   ]);
 
-  assert.match(appSource, /<LocalVariablesPage active=\{page === "local"\} \/>/);
-  assert.match(appSource, /<LocalCachePage active=\{page === "local-cache"\} instanceId=\{selectedInstance\?\.id\} \/>/);
-  assert.match(appSource, /<FileCachePage instanceId=\{selectedInstance\?\.id\} \/>/);
-  assert.match(localVariablesSource, /if \(!active\b/);
-  assert.match(localCacheSource, /if \(!active\b/);
+  assert.match(appSource, /<RequestPage config=\{config\} active=\{route === "debug"\}/);
+  assert.match(requestSource, /useEffect\(\(\) => \{\s*if \(!active\) return;[\s\S]*?handleShortcut/);
 });

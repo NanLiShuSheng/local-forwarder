@@ -125,7 +125,7 @@ export function addressFromParts(address: string, host: string, port: string): s
   return `${protocol}${displayHost}${displayPort}${basePath}`;
 }
 
-function draftsForTargets(targets: AppConfig["tcpTargets"]): AddressDraft[] {
+export function draftsForTargets(targets: AppConfig["tcpTargets"]): AddressDraft[] {
   return Array.from({ length: Math.max(3, targets.length) }, (_, index) => {
     const target = targets[index];
     return {

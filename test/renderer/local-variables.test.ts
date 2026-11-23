@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { describeLocalVariable, localVariableEntries, localVariableKeyError, localVariableLabel, localVariableStats, normalizeLocalVariableKey } from "../../src/renderer/local-variable-data";
 
 test("describes and filters local variable values", () => {
@@ -56,4 +57,18 @@ test("labels known defaults and supports searching by business label", () => {
   assert.deepEqual(localVariableEntries(values, "两融", "all").map((entry) => entry.key), ["TZTRZRQLOGINFLAG"]);
   assert.deepEqual(localVariableEntries(values, "主题色", "all").map((entry) => entry.key), ["TZTSKINTYPE"]);
   assert.equal(describeLocalVariable("SOFTVERSION", values.SOFTVERSION).label, "App 版本号");
+});
+
+test("data browser shows and searches workspace variable business labels", async () => {
+  const [pageSource, styles] = await Promise.all([
+    readFile("src/renderer/components/DataBrowserPage.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+
+  assert.match(pageSource, /import \{ localVariableLabel \} from "\.\.\/local-variable-data"/);
+  assert.match(pageSource, /filterLocalCacheEntries\(values, query, filter, tab === "variables" \? localVariableLabel : undefined\)/);
+  assert.match(pageSource, /<VariableLabelBadge label=\{variableLabel\}/);
+  assert.match(pageSource, /<VariableLabelBadge label=\{selectedVariableLabel\}/);
+  assert.match(pageSource, /搜索变量名、业务标签或值/);
+  assert.match(styles, /\.lf-type-badge\.business\s*\{/);
 });

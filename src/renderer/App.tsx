@@ -1,49 +1,25 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createDefaultForwardingTargets, DEFAULT_REQUEST_HOST, DEFAULT_REQUEST_PARAMS_TEXT, DEFAULT_REQUEST_PORT } from "../shared/config-defaults";
-import type { AppConfig, EncryptionDirectoryKind, EncryptionMode, EncryptionPreferences, EncryptionPreferencesPatch, EncryptionProgress, EncryptionResult, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus, UpdateState } from "../shared/contracts";
+import type { AppConfig, LogEntry, ManualRequestConfig, ManualRequestResponse, ProxyInstanceSummary, RuntimeStatus, UpdateState } from "../shared/contracts";
 import { responseTextToJsonPreview } from "../shared/json-preview";
 import { AppearancePage } from "./components/AppearancePage";
-import { ConfigPages, type Page } from "./components/ConfigPages";
-import { DecryptionPage } from "./components/DecryptionPage";
-import { LogPanel } from "./components/LogPanel";
+import { BuildPage } from "./components/BuildPage";
+import { DataBrowserPage } from "./components/DataBrowserPage";
 import { JsonPreviewPage } from "./components/JsonPreviewPage";
-import { RuleList } from "./components/RuleList";
-import { ProxyInstancePanel } from "./components/ProxyInstancePanel";
-import { ProxyInstanceSidebar } from "./components/ProxyInstanceSidebar";
-import { UpdateCard } from "./components/UpdateCard";
-import { UpdateCancelDialog } from "./components/UpdateCancelDialog";
-import { LocalCachePage } from "./components/LocalCachePage";
-import { FileCachePage } from "./components/FileCachePage";
-import { LocalVariablesPage } from "./components/LocalVariablesPage";
-import { LoginCachePage } from "./components/LoginCachePage";
+import { LogPanel } from "./components/LogPanel";
 import { RequestPage } from "./components/RequestPage";
 import { StringToolPage } from "./components/StringToolPage";
 import { ToastProvider, useToast } from "./components/ToastProvider";
+import { CommandPalette, WorkspaceContext, WorkspaceDock, WorkspaceIcon, WorkspaceRail, WorkspaceStatusbar, WorkspaceTitlebar, type DockTab, type SaveState, type WorkspaceCommand } from "./components/WorkspaceChrome";
+import { AdvancedSettingsPage, ActivityPage, BuildJobsPage, EnvironmentPage, RequestHistoryPage, UpdateSettingsPage, WorkbenchPage, WorkspacePageHeader, type BuildTask } from "./components/WorkspacePages";
 import { loginCacheCustomerSummary } from "./login-cache-data";
 import { createManualCheckTracker, createUpdateStateSynchronizer, resolveManualCheckResult } from "./update-state";
-import { getUpdateDismissalStorage, readDismissedUpdateVersion, writeDismissedUpdateVersion } from "./update-dismissal";
 import { useTheme } from "./useTheme";
+import { workspaceGroups, workspaceRouteMeta, type WorkspaceGroupKey, type WorkspaceRoute } from "./workspace-navigation";
 
 const initialStatus: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
 const initialUpdateState: UpdateState = { state: "idle", currentVersion: "" };
-const initialEncryptionPreferences: EncryptionPreferences = { inputDir: "", outputDir: "", inputHistory: [], outputHistory: [], lowercaseOutput: false };
 const initialConfig: AppConfig = { server: { bindHost: "127.0.0.1", port: 8080, timeoutMs: 30000, loggingEnabled: true }, httpRules: [], tcpTargets: createDefaultForwardingTargets(), localValues: {}, mapValues: {}, accounts: {}, cache: { rootDir: "", downloadTarget: "", decryptEnabled: false, autoDownload: false }, request: { host: DEFAULT_REQUEST_HOST, port: DEFAULT_REQUEST_PORT, paramsText: DEFAULT_REQUEST_PARAMS_TEXT }, stringTool: { inputText: "", outputText: "", operation: "replace", findText: "", replaceText: "" } };
-type SidebarNavIconName = "runtime" | "request" | "string" | "json" | "local" | "cache" | "file" | "values" | "encryption" | "decryption" | "logs" | "appearance";
-const sidebarNavIconPaths: Record<SidebarNavIconName, string[]> = {
-  runtime: ["M4 13a8 8 0 1 1 16 0", "M12 13l3.5-3.5", "M7 17h10"],
-  request: ["M5 19 19 5", "M9 5h10v10"],
-  string: ["M4 6h16", "M4 12h10", "M4 18h7"],
-  json: ["M8 4c-2 0-3 1-3 3v2c0 2-1 3-2 3 1 0 2 1 2 3v2c0 2 1 3 3 3", "M16 4c2 0 3 1 3 3v2c0 2 1 3 2 3-1 0-2 1-2 3v2c0 2-1 3-3 3"],
-  local: ["M5 4h14v16H5z", "M8 8h8", "M8 12h8", "M8 16h5"],
-  cache: ["M4 7h16v13H4z", "M4 7l2-3h12l2 3", "M8 11h8", "M8 15h5"],
-  file: ["M6 3h8l4 4v14H6z", "M14 3v5h5", "M9 12h6", "M9 16h6"],
-  values: ["M5 6c0-1.1 3.1-2 7-2s7 .9 7 2-3.1 2-7 2-7-.9-7-2Z", "M5 6v6c0 1.1 3.1 2 7 2s7-.9 7-2V6", "M5 12v6c0 1.1 3.1 2 7 2s7-.9 7-2v-6"],
-  encryption: ["M7 10V7a5 5 0 0 1 10 0v3", "M5 10h14v10H5z", "M12 14v2"],
-  decryption: ["M7 10V7a5 5 0 0 1 9.6-2", "M5 10h14v10H5z", "M12 14v2"],
-  logs: ["M5 6h14", "M5 12h14", "M5 18h14"],
-  appearance: ["M5 6h14", "M8 4v4", "M5 12h14", "M15 10v4", "M5 18h14", "M11 16v4"],
-};
-const pages: Array<{ id: Page; label: string; icon: SidebarNavIconName }> = [{ id: "runtime", label: "概览", icon: "runtime" }, { id: "request", label: "请求", icon: "request" }, { id: "encryption", label: "加密", icon: "encryption" }, { id: "json", label: "JSON 可视化", icon: "json" }, { id: "logs", label: "日志", icon: "logs" }, { id: "string", label: "字符串", icon: "string" }, { id: "local-cache", label: "本地缓存", icon: "cache" }, { id: "file-cache", label: "文件缓存", icon: "file" }, { id: "values", label: "登录缓存", icon: "values" }, { id: "local", label: "本地变量", icon: "local" }, { id: "decryption", label: "解密", icon: "decryption" }, { id: "appearance", label: "外观", icon: "appearance" }];
 
 export function createVersionedLogReader(readLogs: () => Promise<LogEntry[]>, applyLogs: (logs: LogEntry[]) => void) {
   let version = 0;
@@ -57,29 +33,23 @@ export function createVersionedLogReader(readLogs: () => Promise<LogEntry[]>, ap
   };
 }
 
-function SidebarNavIcon({ name }: { name: SidebarNavIconName }) {
-  return <svg className="sidebar-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">{sidebarNavIconPaths[name].map((path) => <path key={path} d={path} />)}</svg>;
-}
-
 function PagePane({ active, children }: { active: boolean; children: ReactNode }) {
   const [hasOpened, setHasOpened] = useState(active);
   useEffect(() => { if (active) setHasOpened(true); }, [active]);
   if (!hasOpened && !active) return null;
-  return <div className="page-pane" hidden={!active}>{children}</div>;
+  return <section className="lf-view" hidden={!active}>{children}</section>;
+}
+
+function KeepAlivePane({ active, children }: { active: boolean; children: ReactNode }) {
+  const [hasOpened, setHasOpened] = useState(active);
+  useEffect(() => { if (active) setHasOpened(true); }, [active]);
+  if (!hasOpened && !active) return null;
+  return <div className="lf-keep-alive" hidden={!active}>{children}</div>;
 }
 
 interface LoginSuccessNotice {
   id: number;
   values: Record<string, string>;
-}
-
-function SidebarCustomer({ values }: { values: Record<string, string> }) {
-  const customer = loginCacheCustomerSummary(values);
-  if (!customer.hasCustomer) return null;
-  return <section className="sidebar-customer" aria-label="当前登录客户">
-    <div className="sidebar-customer-avatar">{customer.initial}</div>
-    <strong title={customer.name}>{customer.name}</strong><i /><code title={customer.code}>{customer.code}</code>
-  </section>;
 }
 
 function LoginSuccessCard({ notice, onClose, onOpenCache }: { notice: LoginSuccessNotice; onClose: () => void; onOpenCache: () => void }) {
@@ -106,23 +76,26 @@ function LoginSuccessCard({ notice, onClose, onOpenCache }: { notice: LoginSucce
 function AppContent() {
   const { mode, theme, setMode } = useTheme();
   const { notify, notifyError } = useToast();
-  const [page, setPage] = useState<Page>("runtime");
+  const [route, setRoute] = useState<WorkspaceRoute>("workbench");
   const [status, setStatus] = useState(initialStatus);
   const [instances, setInstances] = useState<ProxyInstanceSummary[]>([]);
   const [config, setConfig] = useState(initialConfig);
   const [loginCache, setLoginCache] = useState<Record<string, string>>({});
   const [loginSuccessNotice, setLoginSuccessNotice] = useState<LoginSuccessNotice>();
-  const [encryptionPreferences, setEncryptionPreferences] = useState(initialEncryptionPreferences);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedLog, setSelectedLog] = useState<LogEntry>();
+  const [dockOpen, setDockOpen] = useState(false);
+  const [dockTab, setDockTab] = useState<DockTab>("logs");
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [environmentOpen, setEnvironmentOpen] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [buildTasks, setBuildTasks] = useState<BuildTask[]>([]);
+  const [buildBackfillTask, setBuildBackfillTask] = useState<BuildTask>();
   const [bulkRuntimeAction, setBulkRuntimeAction] = useState<"start" | "stop">();
   const [jsonPrefill, setJsonPrefill] = useState<string>();
   const [appVersion, setAppVersion] = useState("");
   const [updateState, setUpdateState] = useState<UpdateState>(initialUpdateState);
-  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | undefined>(() => readDismissedUpdateVersion(getUpdateDismissalStorage()));
-  const [updateDismissPrompt, setUpdateDismissPrompt] = useState(false);
-  const [hiddenDownloadVersion, setHiddenDownloadVersion] = useState<string | undefined>();
-  const [updateDismissBusy, setUpdateDismissBusy] = useState(false);
+  const [updateCancelBusy, setUpdateCancelBusy] = useState(false);
   const loginNoticeIdRef = useRef(0);
   const manualCheckTrackerRef = useRef<ReturnType<typeof createManualCheckTracker> | undefined>(undefined);
   if (manualCheckTrackerRef.current === undefined) {
@@ -137,6 +110,69 @@ function AppContent() {
   const logReaderRef = useRef<ReturnType<typeof createVersionedLogReader> | null>(null);
   if (logReaderRef.current === null) logReaderRef.current = createVersionedLogReader(() => window.forwarder.logs(), setLogs);
   const readLogs = () => logReaderRef.current!.read();
+
+  const navigate = useCallback((nextRoute: WorkspaceRoute) => {
+    setRoute(nextRoute);
+    setCommandOpen(false);
+    setEnvironmentOpen(false);
+    window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".lf-main")?.scrollTo({ top: 0, behavior: "smooth" }));
+  }, []);
+
+  const backfillBuildTask = useCallback((task: BuildTask) => {
+    setBuildBackfillTask(task);
+    navigate("build");
+  }, [navigate]);
+  const clearBuildBackfillTask = useCallback(() => setBuildBackfillTask(undefined), []);
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      const command = event.metaKey || event.ctrlKey;
+      if (command && event.key.toLocaleLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen((current) => !current);
+        return;
+      }
+      if (command && event.key.toLocaleLowerCase() === "j") {
+        event.preventDefault();
+        setDockOpen((current) => !current);
+        return;
+      }
+      if (command && event.key.toLocaleLowerCase() === "p") {
+        event.preventDefault();
+        setEnvironmentOpen((current) => !current);
+        return;
+      }
+      if (command && event.key.toLocaleLowerCase() === "l") {
+        event.preventDefault();
+        setMode(theme === "dark" ? "light" : "dark");
+        return;
+      }
+      if (command && /^[1-5]$/.test(event.key)) {
+        event.preventDefault();
+        const shortcuts: Record<string, WorkspaceRoute> = { "1": "workbench", "2": "debug", "3": "kv", "4": "build", "5": "logs" };
+        const nextRoute = shortcuts[event.key];
+        if (nextRoute !== undefined) navigate(nextRoute);
+        return;
+      }
+      if (event.key === "Escape") {
+        setCommandOpen(false);
+        setEnvironmentOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [navigate, theme]);
+
+  useEffect(() => {
+    if (!environmentOpen) return;
+    const close = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".lf-env-anchor") !== null) return;
+      setEnvironmentOpen(false);
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [environmentOpen]);
 
   useEffect(() => {
     if (status.error !== undefined) notifyError(status.error, "代理运行失败");
@@ -170,15 +206,7 @@ function AppContent() {
     if (manualCheckTracker.complete(requestId) && resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
   }, [notify, updateState.state]);
 
-  useEffect(() => {
-    if (updateState.state === "downloading") return;
-    setHiddenDownloadVersion(undefined);
-    setUpdateDismissPrompt(false);
-  }, [updateState.state]);
-
   const checkForUpdates = async () => {
-    setDismissedUpdateVersion(undefined);
-    setHiddenDownloadVersion(undefined);
     const checkSnapshot = updateStateSynchronizer.beginSnapshot();
     const requestId = manualCheckTracker.begin(checkSnapshot.eventRevision, updateStateSynchronizer.getState().state);
     try {
@@ -225,53 +253,31 @@ function AppContent() {
     }
   };
 
-  const dismissUpdate = () => {
-    const version = updateState.update?.version;
-    if (version === undefined) return;
-    if (updateState.state === "downloading") {
-      setUpdateDismissPrompt(true);
-      return;
-    }
-    setDismissedUpdateVersion(version);
-    writeDismissedUpdateVersion(getUpdateDismissalStorage(), version);
-  };
-
-  const continueUpdateDownload = () => setUpdateDismissPrompt(false);
-
-  const hideUpdateDuringDownload = () => {
-    const version = updateState.update?.version;
-    if (version === undefined) return;
-    setHiddenDownloadVersion(version);
-    setUpdateDismissPrompt(false);
-  };
-
   const stopUpdateDownload = async () => {
-    if (updateDismissBusy) return;
-    setUpdateDismissBusy(true);
+    if (updateCancelBusy) return;
+    setUpdateCancelBusy(true);
     try {
       const result = await window.forwarder.cancelUpdate();
       if (!result.ok) {
         notifyError(result.error ?? "停止更新失败", "停止更新失败");
         return;
       }
-      setHiddenDownloadVersion(undefined);
-      setUpdateDismissPrompt(false);
       notify({ kind: "success", message: "已停止下载更新" });
     } catch (cause) {
       notifyError(cause, "停止更新失败");
     } finally {
-      setUpdateDismissBusy(false);
+      setUpdateCancelBusy(false);
     }
   };
 
   const refresh = async () => {
     try {
-      const [nextInstances, nextConfig, nextLoginCache, nextStatus, nextEncryptionPreferences] = await Promise.all([window.forwarder.listProxyInstances(), window.forwarder.getConfig(), window.forwarder.getLoginCache(), window.forwarder.status(), window.forwarder.getEncryptionPreferences(), readLogs()]);
+      const [nextInstances, nextConfig, nextLoginCache, nextStatus] = await Promise.all([window.forwarder.listProxyInstances(), window.forwarder.getConfig(), window.forwarder.getLoginCache(), window.forwarder.status()]);
       setInstances(nextInstances);
       setConfig(nextConfig);
       setLoginCache(nextLoginCache);
       setStatus(nextStatus);
-      setEncryptionPreferences(nextEncryptionPreferences);
+      await readLogs();
     } catch (cause) {
       notifyError(cause, "无法加载运行状态");
     }
@@ -297,23 +303,29 @@ function AppContent() {
   }, [loginSuccessNotice]);
 
   const save = async (nextConfig: AppConfig) => {
+    setSaveState("saving");
     const result = await window.forwarder.saveConfig(nextConfig);
     if (!result.ok) {
+      setSaveState("error");
       notifyError(result.error ?? "配置保存失败", "配置保存失败");
       return false;
     }
     setConfig(nextConfig);
+    setSaveState("saved");
     return true;
   };
 
   const saveLoginCache = async (values: Record<string, string>) => {
+    setSaveState("saving");
     const result = await window.forwarder.saveLoginCache(values);
     if (!result.ok) {
+      setSaveState("error");
       notifyError(result.error ?? "登录缓存保存失败", "登录缓存保存失败");
       return false;
     }
     setLoginCache(values);
     setInstances(await window.forwarder.listProxyInstances());
+    setSaveState("saved");
     return true;
   };
 
@@ -445,41 +457,8 @@ function AppContent() {
 
   const fillJsonPreview = (text: string) => {
     setJsonPrefill(responseTextToJsonPreview(text));
-    setPage("json");
-  };
-
-  const saveEncryptionPreferences = async (patch: EncryptionPreferencesPatch): Promise<boolean> => {
-    const result = await window.forwarder.saveEncryptionPreferences(patch);
-    if (!result.ok) {
-      notifyError(result.error ?? "保存加密目录失败", "保存加密目录失败");
-      return false;
-    }
-    setEncryptionPreferences((current) => result.preferences ?? { ...current, ...patch });
-    return true;
-  };
-
-  const selectEncryptionDirectory = async (kind: EncryptionDirectoryKind): Promise<string | undefined> => {
-    const result = await window.forwarder.selectEncryptionDirectory(kind);
-    if (result.canceled) return undefined;
-    if (!result.ok || result.path === undefined) {
-      notifyError(result.error ?? "选择加密目录失败", "选择加密目录失败");
-      return undefined;
-    }
-    const selectedPath = result.path;
-    setEncryptionPreferences((current) => result.preferences ?? (kind === "input" ? { ...current, inputDir: selectedPath } : { ...current, outputDir: selectedPath }));
-    return selectedPath;
-  };
-
-  const encryptDirectory = async (inputDir: string, outputDir: string, mode: EncryptionMode, lowercaseOutput: boolean): Promise<EncryptionResult> => {
-    const result = await window.forwarder.encryptDirectory(inputDir, outputDir, mode, lowercaseOutput);
-    if (!result.ok && !result.canceled) notifyError(result.error ?? "加密失败", "加密失败");
-    return result;
-  };
-
-  const cancelEncryption = async () => {
-    const result = await window.forwarder.cancelEncryption();
-    if (!result.ok) notifyError(result.error ?? "取消加密失败", "取消加密失败");
-    return result;
+    setDockOpen(false);
+    navigate("json");
   };
 
   const sendRequest = async (request: ManualRequestConfig): Promise<ManualRequestResponse> => {
@@ -503,39 +482,156 @@ function AppContent() {
 
   const openLoginCache = () => {
     setLoginSuccessNotice(undefined);
-    setPage("values");
-    window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".content")?.scrollTo({ top: 0, behavior: "smooth" }));
+    navigate("session");
   };
 
   const selectedInstance = instances.find((instance) => instance.selected) ?? instances[0];
-  const pageProps = { config, logs, onChange: save, encryptionPreferences, onSelectEncryptionDirectory: selectEncryptionDirectory, onSaveEncryptionPreferences: saveEncryptionPreferences, onEncryptDirectory: encryptDirectory, onCancelEncryption: cancelEncryption, onEncryptionProgress: window.forwarder.onEncryptionProgress, loginCache, onSaveLoginCache: saveLoginCache };
+  const activeGroupKey = workspaceRouteMeta[route].group;
+  const activeGroup = workspaceGroups[activeGroupKey];
+  const isDataRoute = route === "session" || route === "kv" || route === "files" || route === "variables";
+  const dataTab = route === "session" || route === "kv" || route === "files" || route === "variables" ? route : "session";
+  const badges = useMemo<Partial<Record<WorkspaceRoute, number>>>(() => ({
+    environment: instances.length,
+    activity: logs.length,
+    logs: logs.length,
+    session: Object.keys(loginCache).length,
+  }), [instances.length, loginCache, logs.length]);
+  const inspectLog = (entry: LogEntry) => {
+    setSelectedLog(entry);
+    setDockTab("request");
+    setDockOpen(true);
+  };
+  const inspectHistoryLog = (entry: LogEntry) => {
+    inspectLog(entry);
+    navigate("debug");
+  };
+  const exportConfig = () => {
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `local-forwarder-config-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    notify({ kind: "success", message: "配置已导出" });
+  };
+  const commands: WorkspaceCommand[] = [
+    ...Object.values(workspaceGroups).flatMap((group) => group.items.map((item) => ({
+      id: `route-${item.route}`,
+      label: item.label,
+      detail: group.subtitle,
+      group: group.label,
+      shortcut: item.route === "workbench" ? "⌘1" : item.route === "debug" ? "⌘2" : item.route === "kv" ? "⌘3" : item.route === "build" ? "⌘4" : item.route === "logs" ? "⌘5" : undefined,
+      run: () => navigate(item.route),
+    }))),
+    ...instances.map((instance) => ({
+      id: `environment-${instance.id}`,
+      label: `切换到 ${instance.name}`,
+      detail: `${instance.bindHost}:${instance.port} · ${instance.target}`,
+      group: "环境",
+      run: () => { void selectProxyInstance(instance.id); },
+    })),
+    { id: "start-all", label: "启动全部环境", detail: "启动所有已停止的代理实例", group: "操作", run: () => { void startAll(); } },
+    { id: "stop-all", label: "停止全部环境", detail: "停止当前所有运行中的代理实例", group: "操作", run: () => { void stopAll(); } },
+    { id: "toggle-dock", label: "切换日志控制台", detail: "显示或收起底部日志、缓存与请求详情", group: "操作", shortcut: "⌘J", run: () => setDockOpen((current) => !current) },
+    { id: "check-update", label: "检查更新", detail: "立即查询是否有可用版本", group: "设置", run: () => { void checkForUpdates(); } },
+    { id: "toggle-theme", label: theme === "dark" ? "切换到浅色外观" : "切换到深色外观", detail: "立即切换工作台配色", group: "设置", shortcut: "⌘L", run: () => setMode(theme === "dark" ? "light" : "dark") },
+  ];
+  const createBuildTask = (task: BuildTask) => setBuildTasks((current) => [task, ...current].slice(0, 50));
+  const updateBuildTask = (id: string, patch: Partial<BuildTask>) => setBuildTasks((current) => current.map((task) => task.id === id ? { ...task, ...patch } : task));
 
-  return <main className="app-shell" data-theme={theme}>
-    <aside className="sidebar">
-      <ProxyInstanceSidebar instances={instances} onSelect={selectProxyInstance} onCreate={createProxyInstance} onDelete={deleteProxyInstance} onDuplicate={duplicateProxyInstance} onToggle={toggleProxyInstance} onStartAll={startAll} onStopAll={stopAll} bulkBusy={bulkRuntimeAction !== undefined} />
-      <nav className="sidebar-nav" aria-label="功能导航">
-        {pages.map((item) => <button key={item.id} className={page === item.id ? "active" : ""} aria-current={page === item.id ? "page" : undefined} onClick={() => setPage(item.id)}><SidebarNavIcon name={item.icon} /><span>{item.label}</span></button>)}
-      </nav>
-      <SidebarCustomer values={loginCache} />
-    </aside>
-    <section className={`content ${page === "request" ? "request-page-content" : ""} ${page === "json" ? "json-page-content" : ""} ${page === "logs" ? "log-page-content" : ""}`}>
-      <PagePane active={page === "runtime"}><ProxyInstancePanel instances={instances} status={status} config={config} onChange={save} onChooseProjectDirectory={chooseProjectDirectory} onRename={renameProxyInstance} onStart={start} onStop={stop} /></PagePane>
-      <PagePane active={page === "runtime" || page === "encryption"}><ConfigPages page={page === "runtime" ? "addresses" : page} {...pageProps} /></PagePane>
-      <PagePane active={page === "request"}><RequestPage config={config} onChange={save} onSendRequest={sendRequest} onFillJson={fillJsonPreview} /></PagePane>
-      <PagePane active={page === "string"}><StringToolPage config={config} /></PagePane>
-      <PagePane active={page === "appearance"}><AppearancePage mode={mode} theme={theme} onModeChange={setMode} appVersion={appVersion || updateState.currentVersion} checkingForUpdates={updateState.state === "checking"} onCheckForUpdates={checkForUpdates} /></PagePane>
-      <PagePane active={page === "local"}><LocalVariablesPage active={page === "local"} /></PagePane>
-      <PagePane active={page === "local-cache"}><LocalCachePage active={page === "local-cache"} instanceId={selectedInstance?.id} /></PagePane>
-      <PagePane active={page === "file-cache"}><FileCachePage instanceId={selectedInstance?.id} /></PagePane>
-      <PagePane active={page === "values"}><LoginCachePage instanceId={selectedInstance?.id} instanceName={selectedInstance?.name} running={selectedInstance?.status.state === "running"} values={loginCache} onSave={saveLoginCache} /></PagePane>
-      <PagePane active={page === "decryption"}><DecryptionPage /></PagePane>
-      <PagePane active={page === "json"}><JsonPreviewPage prefillText={jsonPrefill} onPrefillApplied={() => setJsonPrefill(undefined)} /></PagePane>
-      <PagePane active={page === "rules"}><RuleList config={config} onChange={save} /></PagePane>
-      <PagePane active={page === "logs"}><LogPanel logs={logs} selected={selectedLog} onSelect={setSelectedLog} onClear={clearLogs} onFillJson={fillJsonPreview} /></PagePane>
-    </section>
+  return <main className="app-shell lf-app" data-theme={theme}>
+    <WorkspaceTitlebar
+      instances={instances}
+      selectedInstance={selectedInstance}
+      fallbackStatus={status}
+      loginCache={loginCache}
+      theme={theme}
+      appVersion={appVersion}
+      saveState={saveState}
+      updateState={updateState}
+      environmentOpen={environmentOpen}
+      onToggleEnvironment={() => setEnvironmentOpen((current) => !current)}
+      onCloseEnvironment={() => setEnvironmentOpen(false)}
+      onSelectInstance={(id) => { void selectProxyInstance(id); }}
+      onToggleInstance={(instance) => { void toggleProxyInstance(instance); }}
+      onManageEnvironments={() => navigate("environment")}
+      onOpenCommand={() => setCommandOpen(true)}
+      onCheckForUpdates={() => { void checkForUpdates(); }}
+      onToggleTheme={() => setMode(theme === "dark" ? "light" : "dark")}
+      onOpenAccount={() => navigate("session")}
+    />
+    <div className="lf-shell-body">
+      <WorkspaceRail activeGroup={activeGroupKey} onSelectGroup={(groupKey: WorkspaceGroupKey) => navigate(workspaceGroups[groupKey].items[0]!.route)} />
+      <WorkspaceContext group={activeGroup} activeRoute={route} badges={badges} loginCache={loginCache} selectedInstance={selectedInstance} onNavigate={navigate} onOpenSession={() => navigate("session")} />
+      <div className={`lf-workspace ${dockOpen ? "dock-open" : ""}`}>
+        <main className="lf-main">
+          <PagePane active={route === "workbench"}>
+            <WorkbenchPage instances={instances} selectedInstance={selectedInstance} status={status} config={config} loginCache={loginCache} logs={logs} bulkBusy={bulkRuntimeAction !== undefined} onNavigate={navigate} onSelectInstance={(id) => { void selectProxyInstance(id); }} onToggleInstance={(instance) => { void toggleProxyInstance(instance); }} onStartAll={() => { void startAll(); }} onStopAll={() => { void stopAll(); }} onOpenDock={() => setDockOpen(true)} onChooseProjectDirectory={chooseProjectDirectory} onChangeProjectPath={(projectPath) => save({ ...config, projectPath })} />
+          </PagePane>
+
+          <PagePane active={route === "environment"}>
+            <EnvironmentPage instances={instances} selectedInstance={selectedInstance} status={status} config={config} bulkBusy={bulkRuntimeAction !== undefined} onSelectInstance={(id) => { void selectProxyInstance(id); }} onToggleInstance={(instance) => { void toggleProxyInstance(instance); }} onCreate={() => { void createProxyInstance(); }} onDuplicate={() => { void duplicateProxyInstance(); }} onDelete={(id) => { void deleteProxyInstance(id); }} onStartAll={() => { void startAll(); }} onStopAll={() => { void stopAll(); }} onChange={save} onChooseProjectDirectory={chooseProjectDirectory} onRename={renameProxyInstance} onStart={start} onStop={stop} />
+          </PagePane>
+
+          <PagePane active={route === "activity"}>
+            <ActivityPage logs={logs} instanceName={selectedInstance?.name ?? "当前环境"} onClear={clearLogs} onInspect={inspectLog} onFillJson={fillJsonPreview} />
+          </PagePane>
+
+          <PagePane active={route === "debug"}>
+            <section className="lf-view-body lf-debug-view">
+              <WorkspacePageHeader eyebrow="Debug · Request" title="请求调试" badge={<span className="lf-scope-pill"><span className={`lf-status-dot ${selectedInstance?.status.state === "running" ? "running" : "stopped"}`} />当前环境 <strong>{selectedInstance?.name ?? "—"}</strong></span>} description="目标由当前环境提供，支持 TZT TCP 与 HTTP /reqxml；应答和日志在同一个工作区内查看。" actions={<button className="lf-btn" type="button" onClick={() => navigate("history")}><WorkspaceIcon name="history" className="lf-icon" />请求历史</button>} />
+              <RequestPage config={config} active={route === "debug"} onChange={save} onSendRequest={sendRequest} onFillJson={fillJsonPreview} onOpenSession={() => navigate("session")} />
+            </section>
+          </PagePane>
+
+          <PagePane active={route === "history"}>
+            <RequestHistoryPage logs={logs} instanceName={selectedInstance?.name ?? "当前环境"} onInspect={inspectHistoryLog} onFillJson={fillJsonPreview} onOpenDebug={() => navigate("debug")} />
+          </PagePane>
+
+          <PagePane active={isDataRoute}>
+            <DataBrowserPage tab={dataTab} selectedInstance={selectedInstance} sessionValues={loginCache} onSaveSession={saveLoginCache} onNavigate={navigate} />
+          </PagePane>
+
+          <PagePane active={route === "build"}>
+            <BuildPage onCreateTask={createBuildTask} onUpdateTask={updateBuildTask} onOpenJobs={() => navigate("jobs")} backfillTask={buildBackfillTask} onBackfillApplied={clearBuildBackfillTask} />
+          </PagePane>
+
+          <PagePane active={route === "jobs"}>
+            <BuildJobsPage tasks={buildTasks} onOpenBuild={() => navigate("build")} onBackfillTask={backfillBuildTask} onNotify={(message) => notify({ kind: "success", message })} />
+          </PagePane>
+
+          <PagePane active={route === "json" || route === "logs" || route === "string"}>
+            <section className="lf-view-body">
+              <WorkspacePageHeader eyebrow={`Tools · ${route === "json" ? "JSON" : route === "logs" ? "Logs" : "String"}`} title="工具" description={route === "logs" ? "查看当前环境的请求、转发与系统事件；带应答的记录可直接带入 JSON 可视化。" : "轻量处理与格式转换。工具页签保留当前输入，切换分类不会丢失内容。"} />
+              <div className="lf-tab-bar" role="tablist" aria-label="工具类别">{workspaceGroups.tools.items.map((item) => <button className={route === item.route ? "active" : ""} type="button" role="tab" aria-selected={route === item.route} key={item.route} onClick={() => navigate(item.route)}><WorkspaceIcon name={item.icon} className="lf-icon lf-icon-sm" />{item.label}</button>)}</div>
+              <KeepAlivePane active={route === "json"}><JsonPreviewPage prefillText={jsonPrefill} onPrefillApplied={() => setJsonPrefill(undefined)} /></KeepAlivePane>
+              <KeepAlivePane active={route === "logs"}><LogPanel logs={logs} selected={selectedLog} onSelect={setSelectedLog} onClear={clearLogs} onFillJson={fillJsonPreview} /></KeepAlivePane>
+              <KeepAlivePane active={route === "string"}><StringToolPage config={config} /></KeepAlivePane>
+            </section>
+          </PagePane>
+
+          <PagePane active={route === "appearance"}>
+            <section className="lf-view-body">
+              <WorkspacePageHeader eyebrow="Settings · Appearance" title="外观" description="主题跟随系统或手动切换，界面密度保持工作台级信息量。所有主题都使用原型中的绿色交互色。" />
+              <AppearancePage mode={mode} theme={theme} onModeChange={setMode} />
+            </section>
+          </PagePane>
+
+          <PagePane active={route === "update"}>
+            <UpdateSettingsPage appVersion={appVersion || updateState.currentVersion} updateState={updateState} onCheck={() => { void checkForUpdates(); }} onDownload={() => { void downloadUpdate(); }} onInstall={() => { void installUpdate(); }} onCancel={() => { void stopUpdateDownload(); }} />
+          </PagePane>
+
+          <PagePane active={route === "advanced"}>
+            <AdvancedSettingsPage config={config} version={appVersion || updateState.currentVersion} onExportConfig={exportConfig} onNotify={(message) => notify({ kind: "success", message })} />
+          </PagePane>
+        </main>
+        {dockOpen && <WorkspaceDock logs={logs} selected={selectedLog} tab={dockTab} onTabChange={setDockTab} onSelectLog={setSelectedLog} onClear={() => { void clearLogs(); }} onClose={() => setDockOpen(false)} onFillJson={fillJsonPreview} />}
+      </div>
+    </div>
+    <WorkspaceStatusbar selectedInstance={selectedInstance} fallbackStatus={status} logCount={logs.length} version={appVersion || updateState.currentVersion} dockOpen={dockOpen} onToggleDock={() => setDockOpen((current) => !current)} />
+    <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
     {loginSuccessNotice !== undefined && <LoginSuccessCard notice={loginSuccessNotice} onClose={() => setLoginSuccessNotice(undefined)} onOpenCache={openLoginCache} />}
-    <UpdateCard state={updateState} dismissedVersion={dismissedUpdateVersion} hiddenDuringDownloadVersion={hiddenDownloadVersion} onDownload={downloadUpdate} onInstall={installUpdate} onDismiss={dismissUpdate} />
-    {updateDismissPrompt && updateState.state === "downloading" && <UpdateCancelDialog version={updateState.update?.version} busy={updateDismissBusy} onContinue={continueUpdateDownload} onHide={hideUpdateDuringDownload} onStop={stopUpdateDownload} />}
   </main>;
 }
 

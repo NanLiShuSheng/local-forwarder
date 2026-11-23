@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import net from "node:net";
-import { extractManualLoginValues, formatTztResponse, sendManualRequest } from "../../../src/core/request/manual-request";
+import { createManualRequestLogEntry, extractManualLoginValues, formatTztResponse, sendManualRequest } from "../../../src/core/request/manual-request";
 import { parseManualRequestParams } from "../../../src/shared/manual-request";
 import { createTztCodec } from "../../../src/core/tcp/tzt-codec";
 
@@ -64,6 +64,41 @@ test("ignores login responses when ErrorNo is zero, negative, or missing", () =>
   assert.equal(extractManualLoginValues("Action=100", "Action = 100\nErrorNo = 0\nToken = failed-token"), undefined);
   assert.equal(extractManualLoginValues("Action=104", JSON.stringify({ Action: "104", ErrorNo: -1, SessionNo: 9 })), undefined);
   assert.equal(extractManualLoginValues("Action=100", "Action = 100\nToken = missing-error-no"), undefined);
+});
+
+test("creates a request log entry for a manually sent HTTP reqxml request", () => {
+  const entry = createManualRequestLogEntry(
+    { host: "123.103.83.82", port: 6064, paramsText: "Action=49055\nserviceId=esb.wwygt.zhcx.cxzjzhxx", transport: "http" },
+    { statusCode: 200, statusMessage: "OK", body: '{"ERRORNO":"0"}', durationMs: 38 },
+  );
+
+  assert.equal(entry.message, "POST /reqxml");
+  assert.equal(entry.direction, "outbound");
+  assert.equal(entry.protocol, "http");
+  assert.equal(entry.requestType, "http");
+  assert.equal(entry.requestPath, "/reqxml");
+  assert.equal(entry.statusCode, 200);
+  assert.equal(entry.durationMs, 38);
+  assert.equal(entry.level, "info");
+  assert.match(entry.requestParams ?? "", /^POST \/reqxml\n\nAction=49055&serviceId=esb\.wwygt\.zhcx\.cxzjzhxx$/);
+  assert.equal(entry.responseData, '{"ERRORNO":"0"}');
+});
+
+test("marks a manually sent reqxml request as a TCP request and a server failure as an error", () => {
+  const tcpEntry = createManualRequestLogEntry(
+    { host: "127.0.0.1", port: 9101, paramsText: "Action=100", transport: "tzt" },
+    { body: "Action = 100", durationMs: 12 },
+  );
+  assert.equal(tcpEntry.protocol, "tcp");
+  assert.equal(tcpEntry.requestType, "http");
+  assert.equal(tcpEntry.statusCode, undefined);
+  assert.equal(tcpEntry.level, "info");
+
+  const failedEntry = createManualRequestLogEntry(
+    { host: "127.0.0.1", port: 8080, paramsText: "Action=100", transport: "http" },
+    { statusCode: 503, body: "unavailable", durationMs: 5 },
+  );
+  assert.equal(failedEntry.level, "error");
 });
 
 test("sends pasted request parameters to the reqxml endpoint and returns the response", async () => {

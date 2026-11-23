@@ -73,5 +73,6 @@ test("manual request responses mark only successful login cache captures", async
   const source = await readFile("electron/main.ts", "utf8");
   assert.match(source, /let loginSuccess = false/);
   assert.match(source, /if \(loginValues !== undefined\) \{[\s\S]*?manager\.mergeLocalValues\(loginValues\);[\s\S]*?loginSuccess = true;/);
+  assert.match(source, /manager\.recordLog\(createManualRequestLogEntry\(payload, result\)\)/);
   assert.match(source, /return \{ ok: true, \.\.\.result, loginSuccess \}/);
 });

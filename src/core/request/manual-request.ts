@@ -1,9 +1,11 @@
 import http from "node:http";
 import { parseManualRequestParams, serializeManualRequestParams } from "../../shared/manual-request";
 import { hasSuccessfulLoginErrorNo, parseLocalCacheText } from "../../shared/local-cache";
+import type { LogEntry, ManualRequestConfig } from "../../shared/contracts";
 import { TcpBridgePool } from "../tcp/tcp-bridge";
 
 const MAX_RESPONSE_SIZE = 16 * 1024 * 1024;
+const MAX_LOG_DETAIL_SIZE = 256 * 1024;
 
 export interface ManualRequestOptions {
   host: string;
@@ -18,6 +20,29 @@ export interface ManualRequestResult {
   statusMessage?: string;
   body: string;
   durationMs: number;
+}
+
+function truncateLogDetail(value: string): string {
+  if (Buffer.byteLength(value, "utf8") <= MAX_LOG_DETAIL_SIZE) return value;
+  return `${Buffer.from(value, "utf8").subarray(0, MAX_LOG_DETAIL_SIZE).toString("utf8")}\n…（内容过长，已截取前 ${MAX_LOG_DETAIL_SIZE} 字节）`;
+}
+
+export function createManualRequestLogEntry(request: ManualRequestConfig, result: ManualRequestResult): LogEntry {
+  const params = parseManualRequestParams(request.paramsText);
+  const requestBody = serializeManualRequestParams(params);
+  return {
+    timestamp: new Date().toISOString(),
+    level: result.statusCode !== undefined && result.statusCode >= 500 ? "error" : "info",
+    message: "POST /reqxml",
+    direction: "outbound",
+    protocol: request.transport === "http" ? "http" : "tcp",
+    statusCode: result.statusCode,
+    durationMs: result.durationMs,
+    requestType: "http",
+    requestPath: "/reqxml",
+    requestParams: truncateLogDetail(`POST /reqxml\n\n${requestBody}`),
+    responseData: truncateLogDetail(result.body),
+  };
 }
 
 const LOGIN_ACTIONS = new Set(["100", "104", "105"]);

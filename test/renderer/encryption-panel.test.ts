@@ -16,17 +16,26 @@ test("keeps input and output encryption directory history separate", () => {
   assert.notDeepEqual(encryptionDirectoryHistoryForKind(preferences, "input"), preferences.outputHistory);
 });
 
-test("navigation exposes the encryption page", async () => {
-  const source = await readFile("src/renderer/App.tsx", "utf8");
-  assert.match(source, /id: "encryption", label: "加密"/);
+test("navigation exposes encryption inside the unified build page", async () => {
+  const [appSource, buildSource] = await Promise.all([
+    readFile("src/renderer/App.tsx", "utf8"),
+    readFile("src/renderer/components/BuildPage.tsx", "utf8"),
+  ]);
+  assert.match(appSource, /<PagePane active=\{route === "build"\}>[\s\S]*?<BuildPage/);
+  assert.doesNotMatch(appSource, /id: "encryption"/);
+  assert.match(buildSource, /加密输出/);
+  assert.match(buildSource, /startEncryption/);
 });
 
-test("App keeps encryption history when selecting or saving a directory", async () => {
-  const source = await readFile("src/renderer/App.tsx", "utf8");
+test("build page keeps encryption history when selecting or saving a directory", async () => {
+  const source = await readFile("src/renderer/components/BuildPage.tsx", "utf8");
   assert.match(source, /const initialEncryptionPreferences: EncryptionPreferences = \{ inputDir: "", outputDir: "", inputHistory: \[\], outputHistory: \[\], lowercaseOutput: false \};/);
-  assert.match(source, /setEncryptionPreferences\(\(current\) => result\.preferences \?\? \{ \.\.\.current, \.\.\.patch \}\);/);
-  assert.doesNotMatch(source, /setEncryptionPreferences\(result\.preferences \?\? \{ \.\.\.encryptionPreferences, \.\.\.patch \}\)/);
-  assert.match(source, /setEncryptionPreferences\(\(current\) => result\.preferences \?\? \(kind === "input" \? \{ \.\.\.current, inputDir: selectedPath \} : \{ \.\.\.current, outputDir: selectedPath \}\)\);/);
+  assert.match(source, /const \[encryptionPreferences, setEncryptionPreferences\] = useState\(initialEncryptionPreferences\)/);
+  assert.match(source, /saveEncryptionPreferences\(kind === "input" \? \{ inputDir: directory \} : \{ outputDir: directory \}\)/);
+  assert.match(source, /const next = result\.preferences \?\? \{ \.\.\.encryptionPreferences, \[kind === "input" \? "inputDir" : "outputDir"\]: directory \}/);
+  assert.match(source, /setEncryptionPreferences\(result\.preferences\);/);
+  assert.match(source, /setEncryptionInput\(result\.preferences\.inputDir\);/);
+  assert.match(source, /setEncryptionOutput\(result\.preferences\.outputDir\);/);
 });
 
 test("ConfigPages saves encryption directories through the dedicated patch type", async () => {
@@ -99,19 +108,15 @@ test("full encryption is primary and incremental encryption is outlined", async 
 });
 
 test("encryption page exposes cancellation while a task is running", async () => {
-  const [component, styles, app] = await Promise.all([
-    readFile("src/renderer/components/ConfigPages.tsx", "utf8"),
-    readFile("src/renderer/styles.css", "utf8"),
-    readFile("src/renderer/App.tsx", "utf8"),
-  ]);
-  for (const label of ["取消加密", "正在取消…", "已取消：", "未完成部分不会写入加密状态"]) assert.match(component, new RegExp(label));
-  assert.match(component, /onCancelEncryption/);
-  assert.match(component, /encryptionCancelling/);
+  const component = await readFile("src/renderer/components/BuildPage.tsx", "utf8");
+  for (const label of ["取消任务", "正在取消…", "已取消："]) assert.match(component, new RegExp(label));
+  assert.match(component, /const cancelEncryption = async \(\) => \{/);
+  assert.match(component, /encryptCancelling/);
   assert.match(component, /result\.canceled/);
-  assert.match(component, /encryptionRunning && <button type="button" className="encryption-cancel-button"/);
-  assert.match(styles, /\.encryption-cancel-button\s*\{/);
-  assert.match(app, /const cancelEncryption = async \(\) => \{[\s\S]*?window\.forwarder\.cancelEncryption\(\)[\s\S]*?notifyError\(result\.error \?\? "取消加密失败", "取消加密失败"\);/);
-  assert.match(app, /!result\.ok && !result\.canceled/);
+  assert.match(component, /window\.forwarder\.cancelEncryption\(\)/);
+  assert.match(component, /notifyError\(cause, "取消加密失败"\)/);
+  assert.match(component, /className="lf-btn small danger"[^>]*onClick=\{\(\) => void cancelEncryption\(\)\}/);
+  assert.match(component, /onUpdateTask\(taskId, \{ status: "canceled"/);
 });
 
 test("encryption page does not show the recursive processing description", async () => {

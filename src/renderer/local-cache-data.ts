@@ -79,7 +79,12 @@ export function describeLocalCacheEntry(key: string, value: string): LocalCacheE
   };
 }
 
-export function filterLocalCacheEntries(values: Record<string, string>, query: string, filter: LocalCacheFilter): LocalCacheEntry[] {
+export function filterLocalCacheEntries(
+  values: Record<string, string>,
+  query: string,
+  filter: LocalCacheFilter,
+  labelFor?: (key: string) => string | undefined,
+): LocalCacheEntry[] {
   const wanted = query.trim().toLocaleLowerCase();
   return Object.entries(values)
     .map(([key, value]) => describeLocalCacheEntry(key, value))
@@ -88,7 +93,9 @@ export function filterLocalCacheEntries(values: Record<string, string>, query: s
       if (filter === "empty" && entry.kind !== "empty") return false;
       if (filter === "json" && !entry.isJson) return false;
       if (wanted === "") return true;
-      return entry.key.toLocaleLowerCase().includes(wanted) || decodeFileCacheValue(entry.value).toLocaleLowerCase().includes(wanted);
+      return entry.key.toLocaleLowerCase().includes(wanted)
+        || (labelFor?.(entry.key)?.toLocaleLowerCase().includes(wanted) ?? false)
+        || decodeFileCacheValue(entry.value).toLocaleLowerCase().includes(wanted);
     });
 }
 

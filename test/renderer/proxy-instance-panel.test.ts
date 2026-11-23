@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import type { ProxyInstanceSummary } from "../../src/shared/contracts";
 import { orderProxyInstancesForDisplay } from "../../src/renderer/components/ProxyInstanceSidebar";
+import { workspaceGroups } from "../../src/renderer/workspace-navigation";
 
 function proxySummary(id: string, state: ProxyInstanceSummary["status"]["state"]): ProxyInstanceSummary {
   return {
@@ -44,16 +45,20 @@ test("proxy sidebar keeps the manual order when every proxy is running", () => {
   );
 });
 
-test("overview renders proxy instance management actions", async () => {
+test("environment page renders proxy instance management actions", async () => {
   const panel = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");
+  const environment = await readFile("src/renderer/components/WorkspacePages.tsx", "utf8");
   const app = await readFile("src/renderer/App.tsx", "utf8");
-  const runtime = await readFile("src/renderer/components/RuntimePanel.tsx", "utf8");
-  assert.match(app, /ProxyInstancePanel/);
-  assert.match(app, /ProxyInstanceSidebar/);
+  const styles = await readFile("src/renderer/styles.css", "utf8");
+  assert.match(environment, /<ProxyInstancePanel/);
+  assert.match(environment, /onCreate/);
+  assert.match(environment, /onDuplicate/);
+  assert.match(environment, /onDelete/);
   assert.match(app, /listProxyInstances/);
   assert.match(app, /selectProxyInstance/);
   assert.match(app, /createProxyInstance/);
   assert.match(app, /duplicateProxyInstance/);
+  assert.match(app, /<EnvironmentPage/);
   assert.doesNotMatch(panel, /复制当前代理/);
   assert.doesNotMatch(panel, /登录缓存/);
   assert.doesNotMatch(panel, /loginCacheCount/);
@@ -61,7 +66,9 @@ test("overview renders proxy instance management actions", async () => {
   assert.match(panel, /onStart/);
   assert.doesNotMatch(panel, /代理实例 \/ 概览/);
   assert.doesNotMatch(panel, /当前代理 ·/);
-  assert.match(runtime, /代理状态/);
+  assert.match(environment, /className="lf-mini-action danger"[\s\S]*name="trash"/);
+  assert.match(styles, /\.lf-mini-action\s*\{[^}]*place-items:\s*center[^}]*padding:\s*0[^}]*line-height:\s*0/);
+  assert.match(styles, /\.lf-mini-action > \.lf-icon\s*\{[^}]*display:\s*block/);
 });
 
 test("overview exposes project directory and editable proxy settings", async () => {
@@ -104,24 +111,18 @@ test("overview disables editable data while the proxy is running", async () => {
   assert.match(panel, /className=\{`proxy-instance-sidebar-action \$\{running \? "stop" : "start"\}`\} type="button" disabled=\{busy\}/);
 });
 
-test("settings tab and legacy config actions are removed from the renderer", async () => {
-  const [app, pages] = await Promise.all([
-    readFile("src/renderer/App.tsx", "utf8"),
-    readFile("src/renderer/components/ConfigPages.tsx", "utf8"),
-  ]);
-  assert.doesNotMatch(app, /label: "设置"/);
+test("settings pages are grouped in the redesign and legacy import is removed", async () => {
+  const app = await readFile("src/renderer/App.tsx", "utf8");
+  assert.deepEqual(workspaceGroups.settings.items.map((item) => item.route), ["appearance", "update", "advanced"]);
+  assert.match(app, /<PagePane active=\{route === "advanced"\}>/);
   assert.doesNotMatch(app, /importLegacy/);
-  assert.doesNotMatch(app, /exportConfig/);
-  assert.doesNotMatch(pages, /onImport/);
-  assert.doesNotMatch(pages, /onExport/);
-  assert.doesNotMatch(pages, /page === "settings"/);
 });
 
-test("original request and encryption navigation remain available", async () => {
+test("request debugging and the unified build workspace remain available", async () => {
   const app = await readFile("src/renderer/App.tsx", "utf8");
-  assert.match(app, /label: "请求"/);
-  assert.match(app, /label: "加密"/);
-  assert.match(app, /onEncryptDirectory/);
+  assert.deepEqual(workspaceGroups.debug.items.map((item) => item.route), ["debug", "history"]);
+  assert.deepEqual(workspaceGroups.build.items.map((item) => item.route), ["build", "jobs"]);
+  assert.match(app, /<BuildPage onCreateTask=\{createBuildTask\}/);
   assert.match(app, /onSendRequest/);
 });
 
@@ -137,20 +138,109 @@ test("tabs do not render the global localhost address chip", async () => {
   assert.doesNotMatch(app, /address-chip/);
 });
 
-test("proxy instances live in the sidebar above the original feature tabs", async () => {
-  const [app, sidebar, styles] = await Promise.all([
+test("environment selection lives in the titlebar and context sidebar", async () => {
+  const [app, chrome, styles] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
-    readFile("src/renderer/components/ProxyInstanceSidebar.tsx", "utf8").catch(() => ""),
+    readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
     readFile("src/renderer/styles.css", "utf8"),
   ]);
-  assert.match(app, /ProxyInstanceSidebar/);
-  assert.match(app, /sidebar-nav/);
-  assert.match(sidebar, /instances\.map/);
-  assert.match(sidebar, /新增/);
-  assert.match(sidebar, /instance\.target/);
-  assert.match(styles, /\.proxy-instance-sidebar-list/);
-  assert.match(styles, /max-height:/);
-  assert.match(styles, /overflow-y:\s*auto/);
+  assert.match(app, /<WorkspaceTitlebar/);
+  assert.match(app, /<WorkspaceContext/);
+  assert.match(chrome, /instances\.map/);
+  assert.match(chrome, /Manage environments|onManageEnvironments/);
+  assert.match(chrome, /instance\.target/);
+  assert.match(styles, /\.lf-shell-body\s*\{[^}]*grid-template-columns:/);
+  assert.match(styles, /\.lf-context-nav\s*\{[^}]*overflow-y:\s*auto/);
+});
+
+test("titlebar environment list keeps port-only labels and inline runtime toggles", async () => {
+  const [app, chrome, styles] = await Promise.all([
+    readFile("src/renderer/App.tsx", "utf8"),
+    readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+  assert.match(app, /onToggleInstance=\{\(instance\) => \{ void toggleProxyInstance\(instance\); \}\}/);
+  assert.match(chrome, /onToggleInstance: \(instance: ProxyInstanceSummary\) => void/);
+  assert.match(chrome, /`:\$\{selectedInstance\.port\}`/);
+  assert.match(chrome, /<code>:\{instance\.port\}<\/code>/);
+  assert.doesNotMatch(chrome, /instance\.bindHost/);
+  assert.match(chrome, /className=\{`lf-env-toggle/);
+  assert.match(chrome, /name=\{busy \? "refresh" : running \? "stop" : "play"\}/);
+  assert.match(styles, /\.lf-env-popover\s*\{[^}]*width:\s*274px/);
+  assert.match(styles, /\.lf-env-toggle\s*\{[^}]*width:\s*28px/);
+});
+
+test("workbench proxy list reuses the titlebar runtime toggle", async () => {
+  const [pages, chrome, styles] = await Promise.all([
+    readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
+    readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+
+  assert.match(chrome, /export function InstanceToggleButton/);
+  assert.match(chrome, /event\.stopPropagation\(\); onToggle\(instance\);/);
+  assert.match(pages, /orderProxyInstancesForDisplay\(instances, instances\.map\(\(instance\) => instance\.id\)\)/);
+  assert.match(pages, /workbenchInstances\.map/);
+  assert.match(pages, /<th className="lf-wb-port">端口<\/th>/);
+  assert.match(pages, /<td className="lf-cell-mono lf-wb-port">:\{instance\.port\}<\/td>/);
+  assert.doesNotMatch(pages, /<td className="lf-cell-mono lf-wb-port">\{instance\.bindHost\}/);
+  assert.match(pages, /<th className="lf-cell-toggle">开关<\/th>/);
+  assert.match(pages, /<td className="lf-cell-toggle"><InstanceToggleButton instance=\{instance\} onToggle=\{onToggleInstance\} \/><\/td>/);
+  assert.match(pages, /<colgroup><col className="lf-wb-col-env" \/><col className="lf-wb-col-port" \/><col className="lf-wb-col-upstream" \/><col className="lf-wb-col-status" \/><col className="lf-wb-col-requests" \/><col className="lf-wb-col-toggle" \/><\/colgroup>/);
+  assert.match(pages, /<th className="lf-wb-status">状态<\/th>/);
+  assert.match(pages, /<th className="lf-wb-requests">请求<\/th>/);
+  assert.match(styles, /\.lf-workbench-table \.lf-wb-col-env\s*\{[^}]*width:\s*23%/);
+  assert.match(styles, /\.lf-workbench-table \.lf-wb-col-port\s*\{[^}]*width:\s*60px/);
+  assert.match(styles, /\.lf-workbench-table \.lf-wb-col-status\s*\{[^}]*width:\s*74px/);
+  assert.match(styles, /\.lf-workbench-table \.lf-wb-col-requests\s*\{[^}]*width:\s*56px/);
+  assert.match(styles, /\.lf-workbench-table \.lf-wb-col-toggle\s*\{[^}]*width:\s*48px/);
+  assert.match(styles, /\.lf-workbench-table th\.lf-wb-port,[\s\S]*?\.lf-workbench-table td\.lf-wb-port[\s\S]*?text-align:\s*center/);
+  assert.match(styles, /\.lf-workbench-table th\.lf-cell-toggle,[\s\S]*?\.lf-workbench-table td\.lf-cell-toggle\s*\{[^}]*text-align:\s*center/);
+  assert.match(styles, /\.lf-workbench-table td\.lf-cell-toggle \.lf-env-toggle\s*\{[^}]*margin-right:\s*auto/);
+  assert.match(styles, /\.lf-workbench-table\s*\{[^}]*table-layout:\s*fixed/);
+  assert.match(styles, /\.lf-workbench-table-wrap\s*\{[^}]*overflow-x:\s*clip/);
+});
+
+test("titlebar and environment page sort active proxy instances first", async () => {
+  const [pages, chrome] = await Promise.all([
+    readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
+    readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
+  ]);
+
+  assert.match(chrome, /import \{ orderProxyInstancesForDisplay \} from "\.\/ProxyInstanceSidebar"/);
+  assert.match(chrome, /const orderedInstances = useMemo\(\s*\(\) => orderProxyInstancesForDisplay\(instances, instances\.map\(\(instance\) => instance\.id\)\),\s*\[instances\],\s*\)/);
+  assert.match(chrome, /<div className="lf-env-list"[\s\S]*?\{orderedInstances\.map\(\(instance\) =>/);
+  assert.match(pages, /export function EnvironmentPage[\s\S]*?const orderedInstances = useMemo\(\s*\(\) => orderProxyInstancesForDisplay\(instances, instances\.map\(\(instance\) => instance\.id\)\),\s*\[instances\],\s*\);/);
+  assert.match(pages, /const filtered = useMemo\(\(\) => orderedInstances\.filter\(\(instance\) =>/);
+});
+
+test("environment table selects proxies from the full environment cell without a redundant action", async () => {
+  const [pages, styles] = await Promise.all([
+    readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+  const environment = pages.match(/export function EnvironmentPage[\s\S]*?export interface ActivityPageProps/)?.[0] ?? "";
+
+  assert.match(environment, /<td className="lf-cell-select"><button className="lf-cell-env as-button" type="button" aria-pressed=\{instance\.selected\} onClick=\{\(\) => onSelectInstance\(instance\.id\)\}>/);
+  assert.match(environment, /<InstanceToggleButton instance=\{instance\} onToggle=\{onToggleInstance\} \/>/);
+  assert.doesNotMatch(environment, />设为当前</);
+  assert.doesNotMatch(environment, /instance\.status\.state === "running" \? "停止" : "启动"/);
+  assert.match(styles, /\.lf-data-table td\.lf-cell-select\s*\{[^}]*padding:\s*0/);
+  assert.match(styles, /\.lf-cell-env\.as-button\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*min-height:\s*41px[^}]*padding:\s*0 13px[^}]*cursor:\s*pointer/);
+  assert.match(styles, /\.lf-row-actions \.lf-env-toggle\s*\{[^}]*margin-right:\s*0/);
+});
+
+test("titlebar brand shows the Chinese product label with the runtime version", async () => {
+  const [app, chrome, styles] = await Promise.all([
+    readFile("src/renderer/App.tsx", "utf8"),
+    readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+  assert.match(app, /appVersion=\{appVersion\}/);
+  assert.match(chrome, /appVersion: string/);
+  assert.match(chrome, /const versionLabel = appVersion \|\| updateState\.currentVersion/);
+  assert.match(chrome, /中焯代理 <b className="lf-brand-version">v\{versionLabel \|\| "—"\}<\/b>/);
+  assert.match(styles, /\.lf-brand-version\s*\{[^}]*color:\s*var\(--accent\)/);
 });
 
 test("sidebar does not show the application brand block", async () => {

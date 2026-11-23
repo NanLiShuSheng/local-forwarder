@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { workspaceGroups } from "../../src/renderer/workspace-navigation";
 
 const rendererFiles = [
   "src/renderer/App.tsx",
@@ -19,7 +20,6 @@ const visibleEnglishLabels = [
   "Local Forwarder",
   "Intel Mac service",
   "Overview",
-  "Settings",
   "Control center",
   "Forwarding rules",
   "Service status",
@@ -41,22 +41,22 @@ test("renderer uses Chinese labels for the operation panel", async () => {
   }
 });
 
-test("renderer exposes the hq, jy, and zx forwarding address settings", async () => {
-  const source = (await Promise.all(rendererFiles.map((file) => readFile(file, "utf8")))).join("\n");
-  for (const label of ["转发地址", "hq", "jy", "zx", "tcpTargets"]) {
+test("environment details exposes hq, jy, and zx forwarding address settings", async () => {
+  const source = await readFile("src/renderer/components/WorkspacePages.tsx", "utf8");
+  for (const label of ["转发地址", '"hq"', '"jy"', '"zx"', "tcpTargets", "addressDrafts"]) {
     assert.equal(source.includes(label), true, `missing forwarding address setting: ${label}`);
   }
 });
 
-test("renderer places forwarding addresses below overview without a separate tab", async () => {
-  const [source, styleSource] = await Promise.all([
+test("renderer places forwarding address editing inside environment details without a separate route", async () => {
+  const [appSource, pageSource, styleSource] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
+    readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
     readFile("src/renderer/styles.css", "utf8"),
   ]);
-  assert.doesNotMatch(source, /\{ id: "addresses", label: "转发地址" \}/);
-  assert.match(source, /page === "runtime"/);
-  assert.match(source, /<ConfigPages page=\{page === "runtime" \? "addresses" : page\}/);
-  assert.match(styleSource, /\.dashboard-grid \+ \.panel[^\{]*\{[^}]*margin-top:\s*18px/);
+  assert.doesNotMatch(appSource, /route === "addresses"/);
+  assert.match(pageSource, /<ProxyInstancePanel[\s\S]*?<section className="lf-panel lf-forwarding-settings"/);
+  assert.match(styleSource, /\.lf-address-grid[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
 });
 
 test("renderer exposes manual login cache and project directory controls", async () => {
@@ -103,30 +103,17 @@ test("renderer exposes local variables as a structured editable page", async () 
   assert.match(styleSource, /\.local-variables-textarea[^\n]*white-space:\s*pre-wrap/);
 });
 
-test("renderer gives local variables a separate menu from login cache", async () => {
-  const appSource = await readFile("src/renderer/App.tsx", "utf8");
-  const pageSource = await readFile("src/renderer/components/ConfigPages.tsx", "utf8");
-  assert.match(appSource, /\{ id: "local", label: "本地变量", icon: "local" \}/);
-  assert.match(appSource, /\{ id: "values", label: "登录缓存", icon: "values" \}/);
-  assert.match(appSource, /<PagePane active=\{page === "local"\}><LocalVariablesPage active=\{page === "local"\} \/><\/PagePane>/);
-  assert.doesNotMatch(pageSource, /if \(page === "local"\)/);
-  const valuesStart = pageSource.indexOf('if (page === "values")');
-  const loginSaveStart = pageSource.indexOf("const saveLoginCache");
-  assert.ok(valuesStart >= 0 && loginSaveStart >= 0 && valuesStart > loginSaveStart);
-  const loginPage = pageSource.slice(valuesStart);
-  const loginSaveLogic = pageSource.slice(loginSaveStart, valuesStart);
-  assert.match(loginPage, /className="panel config-textarea-panel"/);
-  assert.match(loginPage, /className="muted config-textarea-hint"/);
-  assert.match(loginPage, /className="config-textarea login-cache-input"/);
-  const cacheHint = loginPage.indexOf("config-textarea-hint");
-  const cacheInput = loginPage.indexOf("login-cache-input");
-  assert.ok(cacheHint >= 0 && cacheHint < cacheInput);
-  assert.match(loginPage, /onBlur/);
-  assert.match(loginSaveLogic, /parseLocalCacheText\(cacheText\)/);
-  assert.match(loginSaveLogic, /onSaveLoginCache\(pasted\)/);
-  assert.match(pageSource, /formatLocalCacheText\(loginCache\)/);
-  assert.doesNotMatch(loginPage, /保存登录缓存/);
-  assert.doesNotMatch(loginPage, /本地变量输入/);
+test("data workspace gives login session and workspace variables separate routes", async () => {
+  const [appSource, dataSource] = await Promise.all([
+    readFile("src/renderer/App.tsx", "utf8"),
+    readFile("src/renderer/components/DataBrowserPage.tsx", "utf8"),
+  ]);
+  assert.deepEqual(workspaceGroups.data.items.map((item) => item.route), ["session", "kv", "files", "variables"]);
+  assert.match(appSource, /<DataBrowserPage tab=\{dataTab\}/);
+  assert.match(dataSource, /tab === "session"/);
+  assert.match(dataSource, /tab === "variables"/);
+  assert.match(dataSource, /onSaveSession/);
+  assert.match(dataSource, /saveSharedValues/);
 });
 
 test("renderer simplifies configuration page headings and enlarges text areas", async () => {
@@ -173,21 +160,17 @@ test("renderer displays operation errors as bottom-right auto-hidden toasts", as
   assert.match(styleSource, /\.toast-viewport[^\{]*\{[^}]*bottom:\s*20px/);
 });
 
-test("renderer gives forwarding address and request transport controls a dark theme", async () => {
+test("forwarding address and request controls use the shared green light and dark themes", async () => {
   const [pageSource, requestSource, styleSource] = await Promise.all([
-    readFile("src/renderer/components/ConfigPages.tsx", "utf8"),
+    readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
     readFile("src/renderer/components/RequestPage.tsx", "utf8"),
     readFile("src/renderer/styles.css", "utf8"),
   ]);
-  assert.match(pageSource, /address-input/);
-  assert.match(requestSource, /className="select-control request-transport-select"/);
-  assert.match(styleSource, /\.select-control\s*\{/);
-  assert.match(styleSource, /\.address-input[^\{]*\{[^}]*background:\s*var\(--input-background\)/);
-  assert.match(styleSource, /\.select-control[^\{]*\{[^}]*background-color:\s*var\(--input-background\)/);
-  assert.match(styleSource, /\.address-input[^\{]*\{[^}]*color:\s*var\(--text-primary\)/);
-  assert.match(styleSource, /\.select-control[^\{]*\{[^}]*color:\s*var\(--text-primary\)/);
-  assert.doesNotMatch(styleSource, /\.address-input[^\{]*\{[^}]*background:\s*#111e32/);
-  assert.doesNotMatch(styleSource, /\.select-control[^\{]*\{[^}]*background-color:\s*#111e32/);
-  assert.doesNotMatch(styleSource, /\.address-input[^\{]*\{[^}]*color:\s*#e8effa/);
-  assert.doesNotMatch(styleSource, /\.select-control[^\{]*\{[^}]*color:\s*#e8effa/);
+  assert.match(pageSource, /className="lf-address-field"/);
+  assert.match(pageSource, /className="lf-control mono"/);
+  assert.match(requestSource, /className="lf-control mono"/);
+  assert.match(styleSource, /\.lf-control\s*\{[^}]*color:\s*var\(--text-primary\);[^}]*background:\s*var\(--lf-panel-2\)/);
+  assert.match(styleSource, /\.app-shell\s*\{[\s\S]*?--accent:\s*#4d9375;/);
+  assert.match(styleSource, /\.app-shell\[data-theme="light"\]\s*\{[\s\S]*?--accent:\s*#0f9f76;/);
+  assert.doesNotMatch(styleSource, /#111e32|#e8effa/i);
 });

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { applyStringOperation } from "../../src/shared/string-tool";
 import { getAppConfigValidationError } from "../../src/shared/validation";
+import { workspaceGroups } from "../../src/renderer/workspace-navigation";
 
 test("applies the supported string editing operations", () => {
   assert.equal(applyStringOperation("action=100\naction=101", "replace", "action", "Action"), "Action=100\nAction=101");
@@ -27,12 +28,15 @@ test("validates and accepts persisted string tool state", () => {
   }), undefined);
 });
 
-test("exposes the string tool as a tab without repeating its title in the page", async () => {
+test("exposes the string tool inside the tools workspace without repeating its title in the page", async () => {
   const [appSource, pageSource] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
     readFile("src/renderer/components/StringToolPage.tsx", "utf8"),
   ]);
-  assert.match(appSource, /\{ id: "string", label: "字符串", icon: "string" \}/);
+  assert.deepEqual(workspaceGroups.tools.items.map((item) => item.route), ["logs", "json", "string"]);
+  assert.deepEqual(workspaceGroups.tools.items.map((item) => item.label), ["日志", "JSON 可视化", "字符串处理"]);
+  assert.match(appSource, /workspaceGroups\.tools\.items\.map/);
+  assert.match(appSource, /<KeepAlivePane active=\{route === "string"\}><StringToolPage config=\{config\} \/><\/KeepAlivePane>/);
   assert.match(pageSource, /string-tool-panel/);
   assert.doesNotMatch(pageSource, /<h2>字符串工具<\/h2>/);
   assert.match(pageSource, /复制结果/);

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createDefaultConfig } from "../../../src/core/config/model";
 import { ForwardingServiceManager, type ManagedForwardingService } from "../../../src/core/runtime/forwarding-service-manager";
-import type { AppConfig, ProxyWorkspace, RuntimeStatus } from "../../../src/shared/contracts";
+import type { AppConfig, LogEntry, ProxyWorkspace, RuntimeStatus } from "../../../src/shared/contracts";
 
 function workspaceWithTwoInstances(): ProxyWorkspace {
   const first = createDefaultConfig();
@@ -29,12 +29,14 @@ function fakeFactory() {
   return (config: AppConfig, persistence: { save(config: AppConfig): Promise<void> }): ManagedForwardingService => {
     let current = structuredClone(config);
     let state: RuntimeStatus["state"] = "stopped";
+    const logs: LogEntry[] = [];
     return {
       start: async () => { state = "running"; return { state, requestCount: 0, tcpConnections: 0 }; },
       stop: async () => { state = "stopped"; return { state, requestCount: 0, tcpConnections: 0 }; },
       status: () => ({ state, requestCount: 0, tcpConnections: 0 }),
-      getLogs: () => [],
+      getLogs: () => logs.map((entry) => ({ ...entry })),
       clearLogs: () => undefined,
+      recordLog: (entry) => { logs.push({ ...entry }); },
       getConfig: () => structuredClone(current),
       saveConfig: async (next) => { current = structuredClone(next); await persistence.save(current); },
       mergeLocalValues: (values) => { current.localValues = { ...current.localValues, ...values }; void persistence.save(current); },
@@ -293,4 +295,18 @@ test("clears logs on the currently selected proxy instance", async () => {
   manager.clearLogs();
 
   assert.deepEqual(clearedPorts, [18080, 18081]);
+});
+
+test("routes manual request logs to the currently selected proxy instance", async () => {
+  const manager = new ForwardingServiceManager({ workspace: workspaceWithTwoInstances(), workspaceStore: { save: async () => undefined }, serviceFactory: fakeFactory() });
+  const entry: LogEntry = { timestamp: "2026-11-23T10:00:00.000Z", level: "info", message: "POST /reqxml", requestType: "http", requestPath: "/reqxml" };
+
+  manager.recordLog(entry);
+  assert.deepEqual(manager.getLogs("first"), [entry]);
+  assert.deepEqual(manager.getLogs("second"), []);
+
+  await manager.select("second");
+  manager.recordLog({ ...entry, timestamp: "2026-11-23T10:00:01.000Z" });
+  assert.deepEqual(manager.getLogs("first"), [entry]);
+  assert.equal(manager.getLogs("second").length, 1);
 });
