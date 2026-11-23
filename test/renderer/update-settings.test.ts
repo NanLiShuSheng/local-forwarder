@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { UpdateSettingsPage } from "../../src/renderer/components/WorkspacePages";
+import { UpdateCard } from "../../src/renderer/components/UpdateCard";
 import type { UpdateState } from "../../src/shared/contracts";
 import { workspaceGroups } from "../../src/renderer/workspace-navigation";
 
@@ -18,7 +19,17 @@ function renderUpdatePage(updateState: UpdateState, appVersion = "1.0.0"): strin
   }));
 }
 
-test("update settings page is the only global update surface", async () => {
+function renderReminder(updateState: UpdateState, dismissedVersion?: string): string {
+  return renderToStaticMarkup(createElement(UpdateCard, {
+    state: updateState,
+    dismissedVersion,
+    onDownload: () => undefined,
+    onInstall: () => undefined,
+    onDismiss: () => undefined,
+  }));
+}
+
+test("update settings page works with the global update reminder", async () => {
   const [appSource, chromeSource] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
     readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
@@ -26,8 +37,8 @@ test("update settings page is the only global update surface", async () => {
 
   assert.deepEqual(workspaceGroups.settings.items.map((item) => item.route), ["appearance", "update", "advanced"]);
   assert.match(appSource, /<PagePane active=\{route === "update"\}>[\s\S]*?<UpdateSettingsPage/);
-  assert.doesNotMatch(appSource, /<UpdateCard/);
-  assert.doesNotMatch(appSource, /<UpdateCancelDialog/);
+  assert.match(appSource, /<UpdateCard/);
+  assert.match(appSource, /<UpdateCancelDialog/);
   assert.doesNotMatch(chromeSource, /UpdateCard/);
 });
 
@@ -59,6 +70,36 @@ test("update settings page exposes the current version and state-specific action
   assert.match(latest, /当前已是最新版本/);
 });
 
+test("available update renders a dismissible startup reminder", () => {
+  const markup = renderReminder({ state: "available", currentVersion: "2.0.3", update: { version: "2.0.4" } });
+
+  assert.match(markup, /发现新版本/);
+  assert.match(markup, /版本 2\.0\.3 → 2\.0\.4/);
+  assert.match(markup, /下载更新/);
+  assert.match(markup, /稍后更新/);
+});
+
+test("a dismissed version stays hidden until a newer version is published", () => {
+  const available: UpdateState = { state: "available", currentVersion: "2.0.3", update: { version: "2.0.4" } };
+
+  assert.equal(renderReminder(available, "2.0.4"), "");
+  assert.equal(renderReminder(available, "2.0.5"), "");
+  assert.match(renderReminder(available, "2.0.3"), /版本 2\.0\.3 → 2\.0\.4/);
+});
+
+test("startup update checks publish a reminder without auto-downloading", async () => {
+  const [main, app] = await Promise.all([
+    readFile("electron/main.ts", "utf8"),
+    readFile("src/renderer/App.tsx", "utf8"),
+  ]);
+
+  assert.match(main, /createWindow\(rendererSecurityPolicy\);[\s\S]*?startBackgroundCheck\(\)/);
+  assert.match(app, /<UpdateCard/);
+  const checkForUpdatesBody = app.match(/const checkForUpdates = async \(\) => \{([\s\S]*?)\n  \};/)?.[1] ?? "";
+  assert.notEqual(checkForUpdatesBody, "");
+  assert.doesNotMatch(checkForUpdatesBody, /downloadUpdate/);
+});
+
 test("App wires update state loading, subscription cleanup, and settings actions", async () => {
   const app = await readFile("src/renderer/App.tsx", "utf8");
   assert.match(app, /getAppVersion\(\)/);
@@ -71,7 +112,11 @@ test("App wires update state loading, subscription cleanup, and settings actions
   assert.match(app, /const stopUpdateDownload = async \(\) => \{/);
   assert.match(app, /window\.forwarder\.cancelUpdate\(\)/);
   assert.match(app, /<UpdateSettingsPage appVersion=\{appVersion \|\| updateState\.currentVersion\}/);
-  assert.doesNotMatch(app, /readDismissedUpdateVersion|writeDismissedUpdateVersion/);
+  assert.match(app, /readDismissedUpdateVersion/);
+  assert.match(app, /writeDismissedUpdateVersion/);
+  assert.match(app, /updateDismissPrompt/);
+  assert.match(app, /hiddenDownloadVersion/);
+  assert.match(app, /setDismissedUpdateVersion\(undefined\)/);
 });
 
 test("appearance page contains only appearance controls while update controls live in settings", async () => {

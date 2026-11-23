@@ -1,4 +1,5 @@
 import type { UpdateState } from "../../shared/contracts";
+import { isUpdateVersionNewer } from "../update-dismissal";
 
 export interface UpdateCardProps {
   state: UpdateState;
@@ -33,7 +34,7 @@ export function UpdateCard({ state, dismissedVersion, hiddenDuringDownloadVersio
 
   const visible = version !== undefined
     && (state.state === "available" || state.state === "downloading" || state.state === "downloaded" || state.state === "error")
-    && dismissedVersion !== version
+    && isUpdateVersionNewer(version, dismissedVersion)
     && !hiddenDuringDownload;
   if (!visible) return null;
 

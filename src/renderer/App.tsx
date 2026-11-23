@@ -10,9 +10,12 @@ import { LogPanel } from "./components/LogPanel";
 import { RequestPage } from "./components/RequestPage";
 import { StringToolPage } from "./components/StringToolPage";
 import { ToastProvider, useToast } from "./components/ToastProvider";
+import { UpdateCancelDialog } from "./components/UpdateCancelDialog";
+import { UpdateCard } from "./components/UpdateCard";
 import { CommandPalette, WorkspaceContext, WorkspaceDock, WorkspaceIcon, WorkspaceRail, WorkspaceStatusbar, WorkspaceTitlebar, type DockTab, type SaveState, type WorkspaceCommand } from "./components/WorkspaceChrome";
 import { AdvancedSettingsPage, ActivityPage, BuildJobsPage, EnvironmentPage, RequestHistoryPage, UpdateSettingsPage, WorkbenchPage, WorkspacePageHeader, type BuildTask } from "./components/WorkspacePages";
 import { loginCacheCustomerSummary } from "./login-cache-data";
+import { getUpdateDismissalStorage, readDismissedUpdateVersion, writeDismissedUpdateVersion } from "./update-dismissal";
 import { createManualCheckTracker, createUpdateStateSynchronizer, resolveManualCheckResult } from "./update-state";
 import { useTheme } from "./useTheme";
 import { workspaceGroups, workspaceRouteMeta, type WorkspaceGroupKey, type WorkspaceRoute } from "./workspace-navigation";
@@ -95,6 +98,9 @@ function AppContent() {
   const [jsonPrefill, setJsonPrefill] = useState<string>();
   const [appVersion, setAppVersion] = useState("");
   const [updateState, setUpdateState] = useState<UpdateState>(initialUpdateState);
+  const [dismissedUpdateVersion, setDismissedUpdateVersion] = useState<string | undefined>(() => readDismissedUpdateVersion(getUpdateDismissalStorage()));
+  const [updateDismissPrompt, setUpdateDismissPrompt] = useState(false);
+  const [hiddenDownloadVersion, setHiddenDownloadVersion] = useState<string | undefined>();
   const [updateCancelBusy, setUpdateCancelBusy] = useState(false);
   const loginNoticeIdRef = useRef(0);
   const manualCheckTrackerRef = useRef<ReturnType<typeof createManualCheckTracker> | undefined>(undefined);
@@ -206,7 +212,16 @@ function AppContent() {
     if (manualCheckTracker.complete(requestId) && resolution.notifyLatest) notify({ kind: "success", message: "当前已是最新版本" });
   }, [notify, updateState.state]);
 
+  useEffect(() => {
+    if (updateState.state === "downloading") return;
+    setHiddenDownloadVersion(undefined);
+    setUpdateDismissPrompt(false);
+  }, [updateState.state]);
+
   const checkForUpdates = async () => {
+    setDismissedUpdateVersion(undefined);
+    setHiddenDownloadVersion(undefined);
+    setUpdateDismissPrompt(false);
     const checkSnapshot = updateStateSynchronizer.beginSnapshot();
     const requestId = manualCheckTracker.begin(checkSnapshot.eventRevision, updateStateSynchronizer.getState().state);
     try {
@@ -253,6 +268,26 @@ function AppContent() {
     }
   };
 
+  const dismissUpdate = () => {
+    const version = updateState.update?.version;
+    if (version === undefined) return;
+    if (updateState.state === "downloading") {
+      setUpdateDismissPrompt(true);
+      return;
+    }
+    setDismissedUpdateVersion(version);
+    writeDismissedUpdateVersion(getUpdateDismissalStorage(), version);
+  };
+
+  const continueUpdateDownload = () => setUpdateDismissPrompt(false);
+
+  const hideUpdateDuringDownload = () => {
+    const version = updateState.update?.version;
+    if (version === undefined) return;
+    setHiddenDownloadVersion(version);
+    setUpdateDismissPrompt(false);
+  };
+
   const stopUpdateDownload = async () => {
     if (updateCancelBusy) return;
     setUpdateCancelBusy(true);
@@ -262,6 +297,8 @@ function AppContent() {
         notifyError(result.error ?? "停止更新失败", "停止更新失败");
         return;
       }
+      setHiddenDownloadVersion(undefined);
+      setUpdateDismissPrompt(false);
       notify({ kind: "success", message: "已停止下载更新" });
     } catch (cause) {
       notifyError(cause, "停止更新失败");
@@ -632,6 +669,8 @@ function AppContent() {
     <WorkspaceStatusbar selectedInstance={selectedInstance} fallbackStatus={status} logCount={logs.length} version={appVersion || updateState.currentVersion} dockOpen={dockOpen} onToggleDock={() => setDockOpen((current) => !current)} />
     <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
     {loginSuccessNotice !== undefined && <LoginSuccessCard notice={loginSuccessNotice} onClose={() => setLoginSuccessNotice(undefined)} onOpenCache={openLoginCache} />}
+    <UpdateCard state={updateState} dismissedVersion={dismissedUpdateVersion} hiddenDuringDownloadVersion={hiddenDownloadVersion} onDownload={downloadUpdate} onInstall={installUpdate} onDismiss={dismissUpdate} />
+    {updateDismissPrompt && updateState.state === "downloading" && <UpdateCancelDialog version={updateState.update?.version} busy={updateCancelBusy} onContinue={continueUpdateDownload} onHide={hideUpdateDuringDownload} onStop={stopUpdateDownload} />}
   </main>;
 }
 
