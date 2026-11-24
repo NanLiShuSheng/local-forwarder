@@ -239,6 +239,17 @@ test("server-rendered log panel exposes log type filter options", async () => {
   assert.doesNotMatch(markup, /<option value="\/newzt\/components\/StepBtns\/StepBtns\.html">\/newzt\/components\/StepBtns\/StepBtns\.html<\/option>/);
 });
 
+test("log filter selects keep text clear of the dropdown arrow", async () => {
+  const [panelSource, styles] = await Promise.all([
+    readFile("src/renderer/components/LogPanel.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+
+  assert.match(panelSource, /<select[^>]*className="select-control"[^>]*aria-label="日志类型"/);
+  assert.match(panelSource, /<select[^>]*className="select-control"[^>]*aria-label="日志级别"/);
+  assert.match(styles, /\.app-shell select\.select-control\s*\{[^}]*padding-right:\s*3[0-9]px;/);
+});
+
 test("log panel initializes the log type selection from local storage", () => {
   const storage = createMemoryLogTypeStorage("/reqreadmap");
   const logs: LogEntry[] = [

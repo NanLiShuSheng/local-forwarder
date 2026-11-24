@@ -20,12 +20,13 @@ import { getUpdateDismissalStorage, readDismissedUpdateVersion, writeDismissedUp
 import { createManualCheckTracker, createUpdateStateSynchronizer, resolveManualCheckResult } from "./update-state";
 import { useTheme } from "./useTheme";
 import { workspaceGroups, workspaceRouteMeta, type WorkspaceGroupKey, type WorkspaceRoute } from "./workspace-navigation";
+import { formatShortcut, isShortcutModifierPressed } from "./shortcut-labels";
 
 const initialStatus: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
 const initialUpdateState: UpdateState = { state: "idle", currentVersion: "" };
 const initialConfig: AppConfig = { server: { bindHost: "127.0.0.1", port: 8080, timeoutMs: 30000, loggingEnabled: true }, httpRules: [], tcpTargets: createDefaultForwardingTargets(), localValues: {}, mapValues: {}, accounts: {}, cache: { rootDir: "", downloadTarget: "", decryptEnabled: false, autoDownload: false }, request: { host: DEFAULT_REQUEST_HOST, port: DEFAULT_REQUEST_PORT, paramsText: DEFAULT_REQUEST_PARAMS_TEXT }, stringTool: { inputText: "", outputText: "", operation: "replace", findText: "", replaceText: "" } };
 const workspaceShortcutGroups: Record<string, WorkspaceGroupKey> = { "1": "run", "2": "data", "3": "build", "4": "tools", "5": "settings" };
-const workspaceGroupShortcuts = Object.fromEntries(Object.entries(workspaceShortcutGroups).map(([key, group]) => [group, `⌘${key}`])) as Partial<Record<WorkspaceGroupKey, string>>;
+const workspaceGroupShortcuts = Object.fromEntries(Object.entries(workspaceShortcutGroups).map(([key, group]) => [group, formatShortcut(key)])) as Partial<Record<WorkspaceGroupKey, string>>;
 
 export function createVersionedLogReader(readLogs: () => Promise<LogEntry[]>, applyLogs: (logs: LogEntry[]) => void) {
   let version = 0;
@@ -138,7 +139,7 @@ function AppContent() {
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
-      const command = event.metaKey || event.ctrlKey;
+      const command = isShortcutModifierPressed(event);
       if (command && event.key.toLocaleLowerCase() === "k") {
         event.preventDefault();
         setCommandOpen((current) => !current);
@@ -545,9 +546,9 @@ function AppContent() {
     })),
     { id: "start-all", label: "启动全部环境", detail: "启动所有已停止的代理实例", group: "操作", run: () => { void startAll(); } },
     { id: "stop-all", label: "停止全部环境", detail: "停止当前所有运行中的代理实例", group: "操作", run: () => { void stopAll(); } },
-    { id: "toggle-dock", label: "切换日志控制台", detail: "显示或收起底部日志、缓存与请求详情", group: "操作", shortcut: "⌘J", run: () => setDockOpen((current) => !current) },
+    { id: "toggle-dock", label: "切换日志控制台", detail: "显示或收起底部日志、缓存与请求详情", group: "操作", shortcut: formatShortcut("J"), run: () => setDockOpen((current) => !current) },
     { id: "check-update", label: "检查更新", detail: "立即查询是否有可用版本", group: "设置", run: () => { void checkForUpdates(); } },
-    { id: "toggle-theme", label: theme === "dark" ? "切换到浅色外观" : "切换到深色外观", detail: "立即切换工作台配色", group: "设置", shortcut: "⌘L", run: () => setMode(theme === "dark" ? "light" : "dark") },
+    { id: "toggle-theme", label: theme === "dark" ? "切换到浅色外观" : "切换到深色外观", detail: "立即切换工作台配色", group: "设置", shortcut: formatShortcut("L"), run: () => setMode(theme === "dark" ? "light" : "dark") },
   ];
   const createBuildTask = (task: BuildTask) => setBuildTasks((current) => [task, ...current].slice(0, BUILD_TASK_HISTORY_LIMIT));
   const updateBuildTask = (id: string, patch: Partial<BuildTask>) => setBuildTasks((current) => current.map((task) => task.id === id ? { ...task, ...patch } : task));

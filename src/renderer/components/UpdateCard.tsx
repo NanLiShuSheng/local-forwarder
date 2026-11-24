@@ -63,7 +63,7 @@ export function UpdateCard({ state, dismissedVersion, hiddenDuringDownloadVersio
       ? state.installerOpened
         ? "安装包已打开，请退出应用后将 Local Forwarder 拖入 Applications"
         : "安装包已下载，打开后将 Local Forwarder 拖入 Applications 完成更新"
-      : "更新已下载"}</p>}
+      : "更新已下载，关闭应用后自动安装"}</p>}
     {state.state === "available" && <p className="update-card-message">{manualInstall ? "准备下载 macOS 安装包" : "准备下载版本"} {version}</p>}
     {isDownloading && <p className="update-card-message">{manualInstall ? "正在下载安装包" : "正在下载更新"} {Math.round(percent)}%</p>}
     <div className="update-card-actions">

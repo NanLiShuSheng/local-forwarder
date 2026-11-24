@@ -477,7 +477,7 @@ test("AppearancePage delegates theme preview colors to CSS", async () => {
   assert.doesNotMatch(source, /style=\{\{\s*background:\s*option\.preview\s*\}\}/);
 });
 
-test("Command+L toggles and persists the resolved appearance", async () => {
+test("the platform shortcut toggles and persists the resolved appearance", async () => {
   const [appSource, chromeSource, pagesSource] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
     readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
@@ -485,9 +485,9 @@ test("Command+L toggles and persists the resolved appearance", async () => {
   ]);
 
   assert.match(appSource, /event\.key\.toLocaleLowerCase\(\) === "l"[\s\S]*?setMode\(theme === "dark" \? "light" : "dark"\)/);
-  assert.match(appSource, /shortcut: "⌘L"/);
-  assert.match(chromeSource, /切换到浅色外观（⌘L）/);
-  assert.match(pagesSource, /<span>切换外观<\/span><kbd>⌘ L<\/kbd>/);
+  assert.match(appSource, /shortcut: formatShortcut\("L"\)/);
+  assert.match(chromeSource, /formatShortcut\("L"\)/);
+  assert.match(pagesSource, /<span>切换外观<\/span><kbd>\{formatShortcut\("L"\)\}<\/kbd>/);
 });
 
 test("useTheme listens for system theme changes and persists the selected mode", async () => {

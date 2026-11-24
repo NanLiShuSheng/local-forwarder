@@ -1,3 +1,5 @@
+import { formatShortcut } from "./shortcut-labels";
+
 export type WorkspaceGroupKey = "run" | "data" | "build" | "tools" | "settings";
 
 export type WorkspaceRoute =
@@ -171,7 +173,7 @@ export const workspaceGroups: Record<WorkspaceGroupKey, WorkspaceGroup> = {
       { route: "string", label: "字符串处理", icon: "string" },
     ],
     noteTitle: "就地打开",
-    note: "按 ⌘4 快速打开日志；应答和日志里的 JSON 可以直接进入工具页。",
+    note: `按 ${formatShortcut("4")} 快速打开日志；应答和日志里的 JSON 可以直接进入工具页。`,
   },
   settings: {
     key: "settings",

@@ -169,8 +169,16 @@ function createHarness(overrides: Partial<UpdateServiceOptions> = {}): {
   return { adapter, service, states, stopAll };
 }
 
-test("configures the updater to require explicit download and install", () => {
+test("configures Windows updates to download explicitly and install on quit", () => {
   const { adapter, service } = createHarness();
+
+  assert.equal(adapter.autoDownload, false);
+  assert.equal(adapter.autoInstallOnAppQuit, true);
+  service.dispose();
+});
+
+test("keeps manual installs from installing on app quit", () => {
+  const { adapter, service } = createHarness({ installMode: "manual" });
 
   assert.equal(adapter.autoDownload, false);
   assert.equal(adapter.autoInstallOnAppQuit, false);
@@ -267,6 +275,50 @@ test("does not download after the click-time refresh reports no update", async (
     state: "not-available",
     currentVersion: "1.0.0",
   });
+  service.dispose();
+});
+
+test("rechecks the manifest before retrying a failed download", async () => {
+  const { adapter, service } = createHarness();
+  const staleUpdate: UpdateInfoSnapshot = { version: "1.1.0" };
+  const latestUpdate: UpdateInfoSnapshot = { version: "1.2.0" };
+
+  const check = service.check();
+  adapter.emitAvailable(staleUpdate);
+  adapter.checkDeferred?.resolve({});
+  await check;
+
+  const firstDownload = service.download();
+  adapter.emitAvailable(staleUpdate);
+  adapter.checkDeferred?.resolve({});
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(adapter.downloadCalls, 1);
+
+  adapter.downloadDeferred?.reject(new Error("download failed"));
+  assert.deepEqual(await firstDownload, { ok: false, error: "下载更新失败" });
+  assert.deepEqual(service.getState(), {
+    state: "error",
+    currentVersion: "1.0.0",
+    update: staleUpdate,
+    error: "下载更新失败",
+  });
+
+  const retry = service.download();
+  assert.equal(adapter.checkCalls, 3);
+  assert.equal(adapter.downloadCalls, 1);
+
+  adapter.emitAvailable(latestUpdate);
+  adapter.checkDeferred?.resolve({});
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(adapter.downloadCalls, 2);
+  assert.deepEqual(service.getState(), {
+    state: "downloading",
+    currentVersion: "1.0.0",
+    update: latestUpdate,
+  });
+
+  adapter.downloadDeferred?.resolve({});
+  assert.deepEqual(await retry, { ok: true });
   service.dispose();
 });
 

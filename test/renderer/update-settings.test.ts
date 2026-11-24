@@ -47,7 +47,7 @@ test("update settings page exposes the current version and state-specific action
   assert.match(idle, /Local Forwarder 1\.0\.0/);
   assert.match(idle, /检查更新/);
   assert.match(idle, /自动检查更新/);
-  assert.match(idle, /下载完成后提示安装/);
+  assert.match(idle, /下载完成后关闭应用自动安装/);
 
   const checking = renderUpdatePage({ state: "checking", currentVersion: "1.0.0" });
   assert.match(checking, /正在检查更新/);
@@ -63,7 +63,7 @@ test("update settings page exposes the current version and state-specific action
   assert.match(downloading, /停止下载/);
 
   const downloaded = renderUpdatePage({ state: "downloaded", currentVersion: "1.0.0", update: { version: "1.1.0" } });
-  assert.match(downloaded, /更新已下载，可以安装/);
+  assert.match(downloaded, /更新已下载，关闭应用后自动安装/);
   assert.match(downloaded, /安装更新/);
 
   const latest = renderUpdatePage({ state: "not-available", currentVersion: "1.0.0" });

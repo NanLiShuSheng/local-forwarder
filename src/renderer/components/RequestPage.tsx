@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AppConfig, ManualRequestConfig, ManualRequestResponse } from "../../shared/contracts";
 import { DEFAULT_REQUEST_HOST, DEFAULT_REQUEST_PARAMS_TEXT, DEFAULT_REQUEST_PORT } from "../../shared/config-defaults";
 import { parseManualRequestParams, parseManualRequestPort } from "../../shared/manual-request";
+import { formatShortcut, isShortcutModifierPressed } from "../shortcut-labels";
 import { useToast } from "./ToastProvider";
 import { WorkspaceIcon } from "./WorkspaceChrome";
 
@@ -118,7 +119,7 @@ export function RequestPage({ config, active = true, onChange, onSendRequest, on
   useEffect(() => {
     if (!active) return;
     const handleShortcut = (event: KeyboardEvent) => {
-      if (!(event.metaKey || event.ctrlKey) || event.key !== "Enter") return;
+      if (!isShortcutModifierPressed(event) || event.key !== "Enter") return;
       event.preventDefault();
       void send();
     };
@@ -161,7 +162,7 @@ export function RequestPage({ config, active = true, onChange, onSendRequest, on
       <label className="lf-field"><span>端口</span><input className="lf-control mono" type="number" value={portText} placeholder="端口" onChange={(event) => setPortText(event.target.value)} onBlur={() => void savePort()} /></label>
       <div className="lf-field"><span>协议</span><div className="lf-segmented compact" role="group" aria-label="请求协议"><button className={transport === "tzt" ? "active" : ""} type="button" onClick={() => { const next = { ...draft, transport: "tzt" as const }; setDraft(next); void saveDraft(next); }}>TZT TCP</button><button className={transport === "http" ? "active" : ""} type="button" onClick={() => { const next = { ...draft, transport: "http" as const }; setDraft(next); void saveDraft(next); }}>HTTP /reqxml</button></div></div>
       <label className="lf-field"><span>解析后的地址</span><input className="lf-control mono" readOnly value={requestAddress} /></label>
-      <button className="lf-btn primary lf-send-button" type="button" disabled={running} onClick={() => void send()}><WorkspaceIcon name="send" className="lf-icon" />{running ? "发送中…" : "发送请求"}<kbd>⌘↵</kbd></button>
+      <button className="lf-btn primary lf-send-button" type="button" disabled={running} onClick={() => void send()}><WorkspaceIcon name="send" className="lf-icon" />{running ? "发送中…" : "发送请求"}<kbd>{formatShortcut("Enter")}</kbd></button>
     </section>
 
     <div className="lf-debug-grid">

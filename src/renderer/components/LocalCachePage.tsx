@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatLocalCacheText, parseLocalCacheText } from "../../shared/local-cache";
 import { describeLocalCacheEntry, filterLocalCacheEntries, formatLocalCacheCharCount, localCacheStats, localCacheTypeBadge, type LocalCacheEntry, type LocalCacheFilter } from "../local-cache-data";
+import { isShortcutModifierPressed } from "../shortcut-labels";
 import { useToast } from "./ToastProvider";
 
 type PageMode = "structured" | "text";
@@ -153,7 +154,7 @@ export function LocalCachePage({ instanceId, active = true }: { instanceId?: str
 
   useEffect(() => {
     const handleFind = (event: KeyboardEvent) => {
-      if (!active || pageMode !== "structured" || (!event.metaKey && !event.ctrlKey) || event.key.toLocaleLowerCase() !== "f") return;
+      if (!active || pageMode !== "structured" || !isShortcutModifierPressed(event) || event.key.toLocaleLowerCase() !== "f") return;
       event.preventDefault();
       searchRef.current?.focus();
     };

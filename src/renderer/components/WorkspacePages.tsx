@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { AppConfig, ForwardingAddressHistory, LogEntry, ProxyInstanceSummary, RuntimeState, RuntimeStatus, UpdateState } from "../../shared/contracts";
 import { parseDirectoryInput } from "../../shared/directory-path";
+import { formatShortcut } from "../shortcut-labels";
 import type { WorkspaceRoute } from "../workspace-navigation";
 import { addressForTarget, appendForwardingAddressHistory, draftsForTargets, forwardingAddressHistoryForTarget, targetFromDraft, type AddressDraft } from "./ConfigPages";
 import { orderProxyInstancesForDisplay } from "./ProxyInstanceSidebar";
@@ -39,6 +40,20 @@ function toneForState(state: RuntimeState): string {
   if (state === "starting" || state === "stopping") return "warning";
   if (state === "error") return "error";
   return "stopped";
+}
+
+export interface WorkbenchProxyAction {
+  label: string;
+  icon: "play" | "stop" | "refresh";
+  busy: boolean;
+  active: boolean;
+}
+
+export function proxyToggleActionForState(state: RuntimeState): WorkbenchProxyAction {
+  if (state === "starting") return { label: "启动中…", icon: "refresh", busy: true, active: false };
+  if (state === "stopping") return { label: "停止中…", icon: "refresh", busy: true, active: true };
+  if (state === "running") return { label: "停止代理", icon: "stop", busy: false, active: true };
+  return { label: "打开代理", icon: "play", busy: false, active: false };
 }
 
 function shortPath(value: string | undefined): string {
@@ -122,6 +137,7 @@ export function WorkbenchPage({ instances, selectedInstance, status, config, log
   const [instanceFilter, setInstanceFilter] = useState<InstanceFilter>("all");
   const [addressDrafts, setAddressDrafts] = useState<AddressDraft[]>(() => draftsForTargets(config.tcpTargets));
   const selectedStatus = selectedInstance?.status ?? status;
+  const proxyAction = selectedInstance === undefined ? undefined : proxyToggleActionForState(selectedInstance.status.state);
   const configLocked = selectedStatus.state !== "stopped" && selectedStatus.state !== "error";
   const orderedInstances = useMemo(() => orderProxyInstancesForDisplay(instances, instances.map((instance) => instance.id)), [instances]);
   const filteredInstances = useMemo(() => orderedInstances.filter((instance) => {
@@ -262,7 +278,7 @@ export function WorkbenchPage({ instances, selectedInstance, status, config, log
       </> : "工作台"}
       badge={selectedInstance ? <><span className={`lf-status-badge ${toneForState(selectedStatus.state)}`}>{instanceStatusLabel(selectedStatus.state)}</span><span className="lf-page-title-hint">点击名称直接编辑</span></> : <span className="lf-live-pill"><i />{running} 个环境运行中</span>}
       description="工作台 · 项目、监听与转发配置集中在上方；当前代理决定调试目标和数据作用域。"
-      actions={<><button className="lf-btn" type="button" onClick={onOpenDock}><WorkspaceIcon name="activity" className="lf-icon" />打开日志</button><button className="lf-btn" type="button" onClick={onCreate}><WorkspaceIcon name="environment" className="lf-icon" />新增环境</button><button className="lf-btn primary" type="button" onClick={() => onNavigate("debug")}><WorkspaceIcon name="send" className="lf-icon" />发送请求</button></>}
+      actions={<><button className="lf-btn" type="button" onClick={onOpenDock}><WorkspaceIcon name="activity" className="lf-icon" />打开日志</button><button className="lf-btn" type="button" onClick={onCreate}><WorkspaceIcon name="environment" className="lf-icon" />新增环境</button><button className={`lf-btn ${proxyAction?.active ? "danger" : "primary"}`} type="button" disabled={selectedInstance === undefined || proxyAction?.busy} title={selectedInstance === undefined ? "请先选择代理" : `${proxyAction?.label ?? "打开代理"}：${selectedInstance.name}`} onClick={() => { if (selectedInstance !== undefined) onToggleInstance(selectedInstance); }}><WorkspaceIcon name={proxyAction?.icon ?? "play"} className={`lf-icon lf-icon-sm lf-env-toggle-icon${proxyAction?.busy ? " spin" : ""}`} />{selectedInstance === undefined ? "未选择代理" : proxyAction?.label}</button></>}
     />
 
     <section className="lf-panel lf-workbench-config" aria-label="项目目录与监听配置">
@@ -433,11 +449,11 @@ export function BuildJobsPage({ tasks, onOpenBuild, onBackfillTask, onNotify }: 
 }
 
 export function UpdateSettingsPage({ appVersion, updateState, onCheck, onDownload, onInstall, onCancel }: { appVersion: string; updateState: UpdateState; onCheck: () => void; onDownload: () => void; onInstall: () => void; onCancel: () => void }) {
-  const stateCopy = updateState.state === "checking" ? "正在检查更新" : updateState.state === "available" ? `发现新版本 ${updateState.update?.version ?? ""}` : updateState.state === "downloading" ? `正在下载 ${Math.round(updateState.progress?.percent ?? 0)}%` : updateState.state === "downloaded" ? "更新已下载，可以安装" : updateState.state === "not-available" ? "当前已是最新版本" : updateState.state === "error" ? updateState.error ?? "检查更新失败" : "尚未检查更新";
+  const stateCopy = updateState.state === "checking" ? "正在检查更新" : updateState.state === "available" ? `发现新版本 ${updateState.update?.version ?? ""}` : updateState.state === "downloading" ? `正在下载 ${Math.round(updateState.progress?.percent ?? 0)}%` : updateState.state === "downloaded" ? "更新已下载，关闭应用后自动安装" : updateState.state === "not-available" ? "当前已是最新版本" : updateState.state === "error" ? updateState.error ?? "检查更新失败" : "尚未检查更新";
   return <section className="lf-view-body">
     <WorkspacePageHeader eyebrow="Settings · Update" title="更新" description="版本更新、下载进度和安装状态集中在设置里，不在工作台抢占视线。" />
     <section className="lf-panel lf-version-card"><div className="lf-version-icon"><WorkspaceIcon name="update" /></div><div className="lf-version-copy"><strong>Local Forwarder {appVersion || updateState.currentVersion || "—"}</strong><span>{stateCopy}</span></div>{updateState.state === "available" ? <button className="lf-btn primary" type="button" onClick={onDownload}>下载更新</button> : updateState.state === "downloading" ? <button className="lf-btn danger" type="button" onClick={onCancel}>停止下载</button> : updateState.state === "downloaded" ? <button className="lf-btn primary" type="button" onClick={onInstall}>安装更新</button> : <button className="lf-btn primary" type="button" disabled={updateState.state === "checking"} onClick={onCheck}>{updateState.state === "checking" ? "正在检查" : "检查更新"}</button>}</section>
-    <section className="lf-panel lf-settings-panel"><h3>更新通道</h3><p>正式版本从发布渠道获取。安装更新前，应用会先停止正在运行的代理。</p><div className="lf-settings-row"><span>自动检查更新</span><span className="lf-status-badge success">已启用</span></div><div className="lf-settings-row"><span>下载完成后提示安装</span><span className="lf-status-badge success">已启用</span></div></section>
+    <section className="lf-panel lf-settings-panel"><h3>更新通道</h3><p>正式版本从发布渠道获取。Windows 下载完成后，关闭应用会自动安装更新；安装前会先停止正在运行的代理。</p><div className="lf-settings-row"><span>自动检查更新</span><span className="lf-status-badge success">已启用</span></div><div className="lf-settings-row"><span>下载完成后关闭应用自动安装</span><span className="lf-status-badge success">已启用</span></div></section>
   </section>;
 }
 
@@ -445,7 +461,7 @@ export function AdvancedSettingsPage({ config, version, onExportConfig, onNotify
   return <section className="lf-view-body">
     <WorkspacePageHeader eyebrow="Settings · Advanced" title="高级" description="数据目录、配置导出和快捷键等低频操作收在这里。" />
     <section className="lf-panel lf-settings-panel"><h3>数据与配置</h3><p>配置文件、日志和缓存保存在本机；导出前不会上传。</p><div className="lf-settings-row"><span>应用数据目录 <code>~/Library/Application Support/Local Forwarder</code></span><button className="lf-btn small" type="button" onClick={() => onNotify("请在系统文件管理器中打开应用数据目录")}>提示</button></div><div className="lf-settings-row"><span>导出全部配置</span><button className="lf-btn small" type="button" onClick={onExportConfig}>导出</button></div><div className="lf-settings-row"><span>当前配置来源</span><code className="lf-mono">{config.projectPath ?? "默认配置"}</code></div></section>
-    <section className="lf-panel lf-settings-panel"><h3>快捷键</h3><p>命令面板与一级分类的常用入口。</p><div className="lf-settings-row"><span>搜索与命令</span><kbd>⌘ K</kbd></div><div className="lf-settings-row"><span>切换环境</span><kbd>⌘ P</kbd></div><div className="lf-settings-row"><span>切换外观</span><kbd>⌘ L</kbd></div><div className="lf-settings-row"><span>打开日志控制台</span><kbd>⌘ J</kbd></div><div className="lf-settings-row"><span>运行</span><kbd>⌘ 1</kbd></div><div className="lf-settings-row"><span>数据</span><kbd>⌘ 2</kbd></div><div className="lf-settings-row"><span>构建</span><kbd>⌘ 3</kbd></div><div className="lf-settings-row"><span>工具</span><kbd>⌘ 4</kbd></div><div className="lf-settings-row"><span>设置</span><kbd>⌘ 5</kbd></div><div className="lf-settings-row"><span>恢复默认快捷键</span><button className="lf-btn small" type="button" onClick={() => onNotify("快捷键已恢复默认")}>恢复</button></div></section>
+    <section className="lf-panel lf-settings-panel"><h3>快捷键</h3><p>命令面板与一级分类的常用入口。</p><div className="lf-settings-row"><span>搜索与命令</span><kbd>{formatShortcut("K")}</kbd></div><div className="lf-settings-row"><span>切换环境</span><kbd>{formatShortcut("P")}</kbd></div><div className="lf-settings-row"><span>切换外观</span><kbd>{formatShortcut("L")}</kbd></div><div className="lf-settings-row"><span>打开日志控制台</span><kbd>{formatShortcut("J")}</kbd></div><div className="lf-settings-row"><span>运行</span><kbd>{formatShortcut("1")}</kbd></div><div className="lf-settings-row"><span>数据</span><kbd>{formatShortcut("2")}</kbd></div><div className="lf-settings-row"><span>构建</span><kbd>{formatShortcut("3")}</kbd></div><div className="lf-settings-row"><span>工具</span><kbd>{formatShortcut("4")}</kbd></div><div className="lf-settings-row"><span>设置</span><kbd>{formatShortcut("5")}</kbd></div><div className="lf-settings-row"><span>恢复默认快捷键</span><button className="lf-btn small" type="button" onClick={() => onNotify("快捷键已恢复默认")}>恢复</button></div></section>
     <section className="lf-panel lf-settings-panel"><h3>关于</h3><p>Local Forwarder {version || "—"} · Electron 本地转发工作区</p><div className="lf-settings-row"><span>配置版本</span><code className="lf-mono">AppConfig v1</code></div></section>
   </section>;
 }

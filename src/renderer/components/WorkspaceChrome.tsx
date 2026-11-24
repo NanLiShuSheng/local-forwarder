@@ -11,6 +11,7 @@ import {
   type WorkspaceRoute,
 } from "../workspace-navigation";
 import { loginCacheCustomerSummary } from "../login-cache-data";
+import { formatShortcut, shortcutModifierLabel } from "../shortcut-labels";
 import { LogRowLabel } from "./LogPanel";
 import { orderProxyInstancesForDisplay } from "./ProxyInstanceSidebar";
 
@@ -116,7 +117,7 @@ export function WorkspaceTitlebar({
         <WorkspaceIcon name="chevron-down" className="lf-icon lf-icon-sm lf-chevron" />
       </button>
       {environmentOpen && <div className="lf-env-popover">
-        <div className="lf-popover-head"><span>切换环境</span><kbd>⌘P</kbd></div>
+        <div className="lf-popover-head"><span>切换环境</span><kbd>{formatShortcut("P")}</kbd></div>
         <div className="lf-env-list" role="listbox" aria-label="切换环境">
           {orderedInstances.map((instance) => {
             const tone = statusTone(instance.status.state);
@@ -143,9 +144,9 @@ export function WorkspaceTitlebar({
       </div>}
     </div>
     <div className="lf-titlebar-spacer" />
-    <button className="lf-cmd-button" type="button" onClick={onOpenCommand}><WorkspaceIcon name="search" className="lf-icon lf-icon-sm" /><span>搜索环境、页面或命令</span><kbd>⌘</kbd><kbd>K</kbd></button>
+    <button className="lf-cmd-button" type="button" onClick={onOpenCommand}><WorkspaceIcon name="search" className="lf-icon lf-icon-sm" /><span>搜索环境、页面或命令</span><kbd>{shortcutModifierLabel()}</kbd><kbd>K</kbd></button>
     <button className={`lf-icon-button ${updateAvailable ? "has-update" : ""}`} type="button" title={updateAvailable ? `发现新版本 ${updateState.update?.version ?? ""}` : "检查更新"} onClick={onCheckForUpdates}><WorkspaceIcon name="update" className="lf-icon" />{updateAvailable && <span className="lf-update-dot" />}</button>
-    <button className="lf-icon-button" type="button" title={theme === "dark" ? "切换到浅色外观（⌘L）" : "切换到深色外观（⌘L）"} onClick={onToggleTheme}><WorkspaceIcon name={theme === "dark" ? "sun" : "moon"} className="lf-icon" /></button>
+    <button className="lf-icon-button" type="button" title={theme === "dark" ? `切换到浅色外观（${formatShortcut("L")}）` : `切换到深色外观（${formatShortcut("L")}）`} onClick={onToggleTheme}><WorkspaceIcon name={theme === "dark" ? "sun" : "moon"} className="lf-icon" /></button>
     <button className="lf-account-chip" type="button" title={customer.hasCustomer ? `当前登录客户 ${customer.code}` : "查看登录缓存"} onClick={onOpenAccount}>{customer.initial}</button>
   </header>;
 }
@@ -219,7 +220,7 @@ export function WorkspaceStatusbar({ selectedInstance, fallbackStatus, logCount,
     <span className="lf-status-item">TCP <code>{status.tcpConnections}</code></span>
     {status.error !== undefined ? <span className="lf-status-item error" title={status.error}>最近错误 · {status.error}</span> : <span className="lf-status-item">最近错误 · <code>无</code></span>}
     <div className="lf-status-spacer" />
-    <button className={`lf-status-dock-button ${dockOpen ? "active" : ""}`} type="button" onClick={onToggleDock}>{dockOpen ? "收起控制台" : `日志控制台 ${logCount > 99 ? "99+" : logCount}`} <kbd>⌘J</kbd></button>
+    <button className={`lf-status-dock-button ${dockOpen ? "active" : ""}`} type="button" onClick={onToggleDock}>{dockOpen ? "收起控制台" : `日志控制台 ${logCount > 99 ? "99+" : logCount}`} <kbd>{formatShortcut("J")}</kbd></button>
     <span className="lf-status-item">v{version || "—"}</span>
   </footer>;
 }

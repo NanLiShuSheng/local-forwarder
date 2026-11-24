@@ -77,7 +77,7 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
 
   if (updater !== undefined) {
     updater.autoDownload = false;
-    updater.autoInstallOnAppQuit = false;
+    updater.autoInstallOnAppQuit = installMode === "automatic";
   }
 
   if (active) {
@@ -131,7 +131,7 @@ export function createUpdateService(options: UpdateServiceOptions): UpdateServic
     const attempt = ++downloadAttempt;
     downloadCanceled = false;
     const operation = (async () => {
-      if (state.state === "available") {
+      if (state.state === "available" || (state.state === "error" && state.update !== undefined)) {
         const refresh = await check();
         if (attempt !== downloadAttempt) return { ok: true };
         if (!refresh.ok || state.state !== "available") return refresh.ok ? { ok: true } : refresh;

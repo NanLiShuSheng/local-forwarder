@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import type { ProxyInstanceSummary } from "../../src/shared/contracts";
+import type { ProxyInstanceSummary, RuntimeState } from "../../src/shared/contracts";
 import { orderProxyInstancesForDisplay } from "../../src/renderer/components/ProxyInstanceSidebar";
 import { workspaceGroups } from "../../src/renderer/workspace-navigation";
 
@@ -16,6 +16,21 @@ function proxySummary(id: string, state: ProxyInstanceSummary["status"]["state"]
     loginCacheCount: 0,
     status: { state, requestCount: 0, tcpConnections: 0 },
   };
+}
+
+type WorkbenchProxyAction = {
+  label: string;
+  icon: "play" | "stop" | "refresh";
+  busy: boolean;
+  active: boolean;
+};
+
+type ProxyToggleActionForState = (state: RuntimeState) => WorkbenchProxyAction;
+
+async function loadProxyToggleActionForState(): Promise<ProxyToggleActionForState> {
+  const module = await import("../../src/renderer/components/WorkspacePages") as unknown as { proxyToggleActionForState?: unknown };
+  assert.equal(typeof module.proxyToggleActionForState, "function");
+  return module.proxyToggleActionForState as ProxyToggleActionForState;
 }
 
 test("proxy sidebar moves started proxies above stopped ones while preserving manual order", () => {
@@ -80,6 +95,26 @@ test("workbench places the project and listener controls above metrics", async (
   assert.ok(page.indexOf("lf-forwarding-settings") < page.indexOf("lf-metrics"));
   assert.doesNotMatch(page, /当前环境配置|Environment details/);
   assert.doesNotMatch(workbench, /未配置|已启用/);
+});
+
+test("workbench proxy toggle reflects the selected proxy runtime state", async () => {
+  const proxyToggleActionForState = await loadProxyToggleActionForState();
+
+  assert.deepEqual(proxyToggleActionForState("running"), { label: "停止代理", icon: "stop", busy: false, active: true });
+  assert.deepEqual(proxyToggleActionForState("stopped"), { label: "打开代理", icon: "play", busy: false, active: false });
+  assert.deepEqual(proxyToggleActionForState("error"), { label: "打开代理", icon: "play", busy: false, active: false });
+  assert.deepEqual(proxyToggleActionForState("starting"), { label: "启动中…", icon: "refresh", busy: true, active: false });
+  assert.deepEqual(proxyToggleActionForState("stopping"), { label: "停止中…", icon: "refresh", busy: true, active: true });
+});
+
+test("workbench header replaces send request with the selected proxy toggle", async () => {
+  const pages = await readFile("src/renderer/components/WorkspacePages.tsx", "utf8");
+  const workbench = pages.match(/export function WorkbenchPage[\s\S]*?export interface ActivityPageProps/)?.[0] ?? "";
+
+  assert.match(workbench, /proxyToggleActionForState\(selectedInstance\.status\.state\)/);
+  assert.match(workbench, /onToggleInstance\(selectedInstance\)/);
+  assert.match(workbench, /proxyAction\?\.label/);
+  assert.doesNotMatch(workbench, /发送请求/);
 });
 
 test("workbench edits the proxy name in the page title", async () => {

@@ -70,7 +70,7 @@
 新增主进程更新服务，职责限定为：
 
 - 在 `app.isPackaged` 且不是 smoke 模式时初始化 `autoUpdater`。
-- 设置 `autoDownload = false` 和 `autoInstallOnAppQuit = false`，禁止无确认下载或退出时静默安装。
+- 设置 `autoDownload = false`；Windows 自动安装模式设置 `autoInstallOnAppQuit = true`，下载完成后关闭应用即安装，macOS 手动安装模式仍保持 `false`。
 - 监听 `checking-for-update`、`update-available`、`update-not-available`、`download-progress`、`update-downloaded` 和 `error`，统一转换为共享更新状态。
 - 对检查和下载操作做并发保护，向所有窗口广播状态，并保存当前状态供新渲染进程读取。
 - 在执行安装前停止所有代理实例。

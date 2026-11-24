@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatLocalCacheText, parseLocalCacheText } from "../../shared/local-cache";
 import { formatLocalCacheCharCount } from "../local-cache-data";
 import { describeLocalVariable, localVariableEntries, localVariableKeyError, localVariableLabel, localVariableStats, normalizeLocalVariableKey, type LocalVariableEntry, type LocalVariableFilter } from "../local-variable-data";
+import { formatShortcut, isShortcutModifierPressed } from "../shortcut-labels";
 import { useToast } from "./ToastProvider";
 
 type PageMode = "structured" | "text";
@@ -293,7 +294,7 @@ export function LocalVariablesPage({ active = true }: { active?: boolean }) {
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       if (!active) return;
-      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "s") {
+      if (isShortcutModifierPressed(event) && event.key.toLocaleLowerCase() === "s") {
         if (busyRef.current) return;
         if (pageMode === "text") {
           event.preventDefault();
@@ -322,7 +323,7 @@ export function LocalVariablesPage({ active = true }: { active?: boolean }) {
 
   useEffect(() => {
     const handleFind = (event: KeyboardEvent) => {
-      if (!active || pageMode !== "structured" || (!event.metaKey && !event.ctrlKey) || event.key.toLocaleLowerCase() !== "f") return;
+      if (!active || pageMode !== "structured" || !isShortcutModifierPressed(event) || event.key.toLocaleLowerCase() !== "f") return;
       event.preventDefault();
       searchRef.current?.focus();
     };
@@ -363,7 +364,7 @@ export function LocalVariablesPage({ active = true }: { active?: boolean }) {
       </div>
       <div className="local-variables-editor-footer">
         {!isAdding && <button type="button" className="local-variables-delete-action" onClick={() => openDelete(selectedEntry!.key)} disabled={busy}>删除变量</button>}
-        <span className="local-variables-shortcut-hint"><kbd>⌘S</kbd> 保存 <kbd>Esc</kbd> 取消</span>
+        <span className="local-variables-shortcut-hint"><kbd>{formatShortcut("S")}</kbd> 保存 <kbd>Esc</kbd> 取消</span>
         <button type="button" className="local-variables-button" onClick={resetDraft} onMouseDown={(event) => event.preventDefault()} disabled={busy}>取消</button>
         <button type="button" className="local-variables-button primary" onClick={() => void (isAdding ? saveNew() : saveEditing())} onMouseDown={(event) => event.preventDefault()} disabled={busy || !dirty}>{isAdding ? "添加并保存" : "保存更改"}</button>
       </div>

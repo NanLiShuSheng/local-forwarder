@@ -1541,6 +1541,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   border-radius: var(--ui-radius);
   padding: 0 10px;
 }
+.app-shell select.select-control { padding-right: 34px; }
 .app-shell textarea { border-radius: var(--ui-radius); padding: 10px 12px; line-height: 1.65; }
 .app-shell input::placeholder,
 .app-shell textarea::placeholder { color: var(--text-muted); }
