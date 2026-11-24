@@ -125,6 +125,7 @@ test("renderer exposes login session in the unified data browser with an editabl
   assert.match(pageSource, /parseLocalCacheText\(text\)/);
   assert.match(pageSource, /className="[^"]*lf-data-shell"/);
   assert.match(pageSource, /登录缓存/);
+  assert.match(pageSource, /tab === "session" \? "action100\/104\/105请求缓存"/);
   assert.match(pageSource, /编辑原文/);
   assert.doesNotMatch(pageSource, /脱敏/);
   assert.doesNotMatch(dataSource, /maskLoginCacheValue/);

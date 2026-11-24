@@ -1,9 +1,35 @@
 ---
 name: latest-only-release
-description: 当用户说“发布”或“发布全版本”，或需要发布 Local Forwarder 安装包、修改更新检查或下载流程、排查重复升级和腾讯云更新目录残留中间版本时使用。
+description: 当用户说“发布”“发布全版本”“打一个最新的win安装包”，或需要发布 Local Forwarder 安装包、保留本地 Windows 安装包到 release 目录、修改更新检查或下载流程、排查重复升级和腾讯云更新目录残留中间版本时使用。
 ---
 
 # Local Forwarder 最新版本发布
+
+## 本地打包口令
+
+“打一个最新的win安装包”只构建当前工作区最新代码对应的 Windows x64 安装包，不递增版本号，不提交、推送或上传腾讯云。
+
+1. 运行 `npm run package:release:win:x64`，完成构建和校验。
+2. 构建成功后，立即把 Windows 安装器及其差分映射复制到项目根目录的 `release/`：
+
+   ```bash
+   version="$(node -p "require('./package.json').version")"
+   mkdir -p release
+   cp -p "dist/Local-Forwarder-Setup-${version}.exe" \
+     "dist/Local-Forwarder-Setup-${version}.exe.blockmap" \
+     release/
+   test -s "release/Local-Forwarder-Setup-${version}.exe"
+   test -s "release/Local-Forwarder-Setup-${version}.exe.blockmap"
+   ```
+
+3. 在结果中报告 `release/Local-Forwarder-Setup-<version>.exe` 的绝对路径。
+
+`release/` 是本地安装包归档，不是临时构建目录：
+
+- 不得清空 `release/`，也不得删除其中已有的安装包；后续构建、测试或常规清理都必须保留这些文件。
+- 重复构建只允许覆盖同一版本的同名文件，不得删除其他版本。
+- 不要只把安装器留在 `dist/`；后续 `npm run build`、`npm test` 或打包会清空 `dist/`。
+- 只有用户明确要求清理本地安装包时，才可删除 `release/` 中的文件。
 
 ## 发布口令
 
@@ -75,6 +101,7 @@ node --import tsx --test test/electron/release-script-contract.test.ts
 
 发布前按口令检查：
 
+- “打一个最新的win安装包”：确认版本号未变化，`release/Local-Forwarder-Setup-<version>.exe` 与同名 `.blockmap` 均存在且非空，且没有提交、推送或上传。
 - “发布”：只确认 `latest.yml` 与 Windows 安装器版本一致；线上 macOS 清单和资产保持原样。
 - “发布全版本”：确认 `latest.yml`、`latest-mac.yml` 和 `mac-update.json` 都指向同一个待发布版本。
 

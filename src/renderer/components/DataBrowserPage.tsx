@@ -340,7 +340,7 @@ export function DataBrowserPage({ tab, selectedInstance, sessionValues, onSaveSe
   };
 
   const scopeLabel = tab === "variables" ? "工作区共享" : selectedInstance?.name ?? "当前环境";
-  const pageTitle = tab === "kv" ? "/reqsavemap" : tab === "files" ? "/reqsavefile" : "数据";
+  const pageTitle = tab === "session" ? "action100/104/105请求缓存" : tab === "kv" ? "/reqsavemap" : tab === "files" ? "/reqsavefile" : tab === "variables" ? "APP原生缓存值" : "数据";
   const selectedDisplay = selectedEntry === undefined ? "" : editing ? draft : displayValue(tab, selectedEntry);
   const selectedMeta = selectedEntry === undefined ? "" : tab === "files" ? decodeFileCacheValue(selectedEntry.value) : selectedEntry.value;
   const selectedVariableLabel = tab === "variables" && selectedEntry !== undefined ? localVariableLabel(selectedEntry.key) : undefined;
