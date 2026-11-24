@@ -88,7 +88,7 @@ test("operation errors use Toast instead of page-flow error boxes", async () => 
     readFile("src/renderer/App.tsx", "utf8"),
     readFile("src/renderer/components/RuntimePanel.tsx", "utf8"),
     readFile("src/renderer/components/ConfigPages.tsx", "utf8"),
-    readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8"),
+    readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
     readFile("src/renderer/components/RequestPage.tsx", "utf8"),
     readFile("src/renderer/components/StringToolPage.tsx", "utf8"),
   ]);

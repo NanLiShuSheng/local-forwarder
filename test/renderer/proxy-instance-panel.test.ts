@@ -45,12 +45,11 @@ test("proxy sidebar keeps the manual order when every proxy is running", () => {
   );
 });
 
-test("environment page renders proxy instance management actions", async () => {
-  const panel = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");
+test("workbench renders proxy instance management actions", async () => {
   const environment = await readFile("src/renderer/components/WorkspacePages.tsx", "utf8");
   const app = await readFile("src/renderer/App.tsx", "utf8");
   const styles = await readFile("src/renderer/styles.css", "utf8");
-  assert.match(environment, /<ProxyInstancePanel/);
+  assert.match(environment, /className="lf-panel lf-workbench-config"/);
   assert.match(environment, /onCreate/);
   assert.match(environment, /onDuplicate/);
   assert.match(environment, /onDelete/);
@@ -58,57 +57,50 @@ test("environment page renders proxy instance management actions", async () => {
   assert.match(app, /selectProxyInstance/);
   assert.match(app, /createProxyInstance/);
   assert.match(app, /duplicateProxyInstance/);
-  assert.match(app, /<EnvironmentPage/);
-  assert.doesNotMatch(panel, /复制当前代理/);
-  assert.doesNotMatch(panel, /登录缓存/);
-  assert.doesNotMatch(panel, /loginCacheCount/);
-  assert.doesNotMatch(panel, /jy 上游地址/);
-  assert.match(panel, /onStart/);
-  assert.doesNotMatch(panel, /代理实例 \/ 概览/);
-  assert.doesNotMatch(panel, /当前代理 ·/);
+  assert.doesNotMatch(app, /<EnvironmentPage/);
+  assert.doesNotMatch(environment, /ProxyInstancePanel|当前环境配置|Environment details/);
   assert.match(environment, /className="lf-mini-action danger"[\s\S]*name="trash"/);
   assert.match(styles, /\.lf-mini-action\s*\{[^}]*place-items:\s*center[^}]*padding:\s*0[^}]*line-height:\s*0/);
   assert.match(styles, /\.lf-mini-action > \.lf-icon\s*\{[^}]*display:\s*block/);
 });
 
-test("overview exposes project directory and editable proxy settings", async () => {
-  const panel = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");
-  assert.match(panel, /项目目录/);
-  assert.match(panel, /选择项目目录/);
-  assert.match(panel, /监听主机/);
-  assert.match(panel, /监听端口/);
-  assert.match(panel, /超时时间（毫秒）/);
-  assert.match(panel, /onChange/);
-  assert.match(panel, /proxy-instance-project-card/);
-  assert.match(panel, /proxy-instance-overview-field/);
-  assert.match(panel, /proxy-instance-overview-fields/);
-  assert.doesNotMatch(panel, /当前代理使用的 H5 项目路径/);
-  assert.doesNotMatch(panel, /<strong>项目目录<\/strong>/);
-  assert.doesNotMatch(panel, /当前实例专属/);
-  assert.doesNotMatch(panel, /aria-label="编辑 jy 上游地址"/);
+test("workbench places the project and listener controls above metrics", async () => {
+  const page = await readFile("src/renderer/components/WorkspacePages.tsx", "utf8");
+  const workbench = page.match(/export function WorkbenchPage[\s\S]*?export interface ActivityPageProps/)?.[0] ?? "";
+  assert.match(page, /项目目录/);
+  assert.match(page, /选择项目目录/);
+  assert.match(page, /监听主机/);
+  assert.match(page, /监听端口/);
+  assert.match(page, /超时时间（毫秒）/);
+  assert.match(page, /onChange/);
+  assert.match(page, /lf-project-bar/);
+  assert.match(page, /proxy-instance-overview-field/);
+  assert.match(page, /proxy-instance-overview-fields/);
+  assert.ok(page.indexOf("lf-workbench-config") < page.indexOf("lf-forwarding-settings"));
+  assert.ok(page.indexOf("lf-forwarding-settings") < page.indexOf("lf-metrics"));
+  assert.doesNotMatch(page, /当前环境配置|Environment details/);
+  assert.doesNotMatch(workbench, /未配置|已启用/);
 });
 
-test("overview places the proxy name and status above the project directory", async () => {
-  const panel = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");
-  assert.ok(panel.indexOf("proxy-instance-overview-heading") < panel.indexOf("proxy-instance-project-card"));
-  assert.ok(panel.indexOf("status-pill") < panel.indexOf("编辑代理名称"));
-  assert.doesNotMatch(panel, /proxy-instance-overview-footer/);
-  assert.match(panel, /proxy-instance-overview-heading[\s\S]*proxy-instance-actions/);
-  assert.match(panel, /status\.state === "running" \? "停止代理" : "启动代理"/);
-  assert.doesNotMatch(panel, /切换左侧代理后，右侧内容会跟随当前选中实例更新/);
+test("workbench edits the proxy name in the page title", async () => {
+  const page = await readFile("src/renderer/components/WorkspacePages.tsx", "utf8");
+  assert.match(page, /aria-label="编辑代理名称"/);
+  assert.match(page, /className="lf-page-title-input"/);
+  assert.match(page, /className="lf-page-title-context">当前代理/);
+  assert.match(page, /const commitName = async \(\) =>/);
+  assert.ok(page.indexOf("编辑代理名称") < page.indexOf("lf-workbench-config"));
+  assert.doesNotMatch(page, /proxy-instance-overview-heading|>停止代理<|>启动代理</);
 });
 
-test("overview disables editable data while the proxy is running", async () => {
-  const panel = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");
-  assert.match(panel, /const overviewLocked = running \|\| busy;/);
-  assert.match(panel, /if \(notifyOverviewLocked\(\)\) return; set/);
-  assert.match(panel, /<input(?=[^>]*aria-label="编辑代理名称")(?=[^>]*readOnly=\{overviewLocked\})(?=[^>]*aria-readonly=\{overviewLocked\})(?=[^>]*aria-disabled=\{overviewLocked\})[^>]*>/);
-  assert.match(panel, /<input(?=[^>]*aria-label="项目目录")(?=[^>]*readOnly=\{overviewLocked\})(?=[^>]*aria-readonly=\{overviewLocked\})(?=[^>]*aria-disabled=\{overviewLocked\})[^>]*>/);
-  assert.match(panel, /<button(?=[^>]*aria-disabled=\{overviewLocked\})[^>]*>选择项目目录<\/button>/);
-  assert.match(panel, /<input(?=[^>]*aria-label="监听主机")(?=[^>]*readOnly=\{overviewLocked\})(?=[^>]*aria-readonly=\{overviewLocked\})(?=[^>]*aria-disabled=\{overviewLocked\})[^>]*>/);
-  assert.match(panel, /<input(?=[^>]*aria-label="监听端口")(?=[^>]*readOnly=\{overviewLocked\})(?=[^>]*aria-readonly=\{overviewLocked\})(?=[^>]*aria-disabled=\{overviewLocked\})[^>]*>/);
-  assert.match(panel, /<input(?=[^>]*aria-label="超时时间")(?=[^>]*readOnly=\{overviewLocked\})(?=[^>]*aria-readonly=\{overviewLocked\})(?=[^>]*aria-disabled=\{overviewLocked\})[^>]*>/);
-  assert.match(panel, /className=\{`proxy-instance-sidebar-action \$\{running \? "stop" : "start"\}`\} type="button" disabled=\{busy\}/);
+test("workbench locks project and listener settings while the proxy is running", async () => {
+  const page = await readFile("src/renderer/components/WorkspacePages.tsx", "utf8");
+  assert.match(page, /const configLocked = selectedStatus\.state !== "stopped" && selectedStatus\.state !== "error";/);
+  assert.match(page, /if \(notifyConfigLocked\(\)\) return; set/);
+  assert.match(page, /aria-label="项目目录"[\s\S]*?readOnly=\{configLocked\}[\s\S]*?aria-readonly=\{configLocked\}[\s\S]*?aria-disabled=\{configLocked\}/);
+  assert.match(page, /<button(?=[^>]*disabled=\{configLocked\})[^>]*>[\s\S]*?选择项目目录<\/button>/);
+  assert.match(page, /aria-label="监听主机"[\s\S]*?readOnly=\{configLocked\}[\s\S]*?aria-readonly=\{configLocked\}[\s\S]*?aria-disabled=\{configLocked\}/);
+  assert.match(page, /aria-label="监听端口"[\s\S]*?readOnly=\{configLocked\}[\s\S]*?aria-readonly=\{configLocked\}[\s\S]*?aria-disabled=\{configLocked\}/);
+  assert.match(page, /aria-label="超时时间"[\s\S]*?readOnly=\{configLocked\}[\s\S]*?aria-readonly=\{configLocked\}[\s\S]*?aria-disabled=\{configLocked\}/);
 });
 
 test("settings pages are grouped in the redesign and legacy import is removed", async () => {
@@ -120,10 +112,11 @@ test("settings pages are grouped in the redesign and legacy import is removed", 
 
 test("request debugging and the unified build workspace remain available", async () => {
   const app = await readFile("src/renderer/App.tsx", "utf8");
-  assert.deepEqual(workspaceGroups.debug.items.map((item) => item.route), ["debug", "history"]);
+  assert.deepEqual(workspaceGroups.run.items.map((item) => item.route), ["workbench", "debug", "activity"]);
   assert.deepEqual(workspaceGroups.build.items.map((item) => item.route), ["build", "jobs"]);
   assert.match(app, /<BuildPage onCreateTask=\{createBuildTask\}/);
   assert.match(app, /onSendRequest/);
+  assert.doesNotMatch(app, /RequestHistoryPage|route === "history"|请求历史/);
 });
 
 test("overview does not repeat runtime status and configuration panels", async () => {
@@ -147,7 +140,9 @@ test("environment selection lives in the titlebar and context sidebar", async ()
   assert.match(app, /<WorkspaceTitlebar/);
   assert.match(app, /<WorkspaceContext/);
   assert.match(chrome, /instances\.map/);
-  assert.match(chrome, /Manage environments|onManageEnvironments/);
+  assert.match(chrome, /onDuplicateCurrent/);
+  assert.match(chrome, />复制当前<\/button>/);
+  assert.doesNotMatch(chrome, /onManageEnvironments|管理全部环境/);
   assert.match(chrome, /instance\.target/);
   assert.match(styles, /\.lf-shell-body\s*\{[^}]*grid-template-columns:/);
   assert.match(styles, /\.lf-context-nav\s*\{[^}]*overflow-y:\s*auto/);
@@ -170,38 +165,38 @@ test("titlebar environment list keeps port-only labels and inline runtime toggle
   assert.match(styles, /\.lf-env-toggle\s*\{[^}]*width:\s*28px/);
 });
 
-test("workbench proxy list reuses the titlebar runtime toggle", async () => {
+test("workbench proxy list reuses the runtime toggle, removes the status column, and supports deletion", async () => {
   const [pages, chrome, styles] = await Promise.all([
     readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
     readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
     readFile("src/renderer/styles.css", "utf8"),
   ]);
+  const workbench = pages.match(/export function WorkbenchPage[\s\S]*?export interface ActivityPageProps/)?.[0] ?? "";
 
   assert.match(chrome, /export function InstanceToggleButton/);
   assert.match(chrome, /event\.stopPropagation\(\); onToggle\(instance\);/);
-  assert.match(pages, /orderProxyInstancesForDisplay\(instances, instances\.map\(\(instance\) => instance\.id\)\)/);
-  assert.match(pages, /workbenchInstances\.map/);
-  assert.match(pages, /<th className="lf-wb-port">端口<\/th>/);
-  assert.match(pages, /<td className="lf-cell-mono lf-wb-port">:\{instance\.port\}<\/td>/);
-  assert.doesNotMatch(pages, /<td className="lf-cell-mono lf-wb-port">\{instance\.bindHost\}/);
-  assert.match(pages, /<th className="lf-cell-toggle">开关<\/th>/);
-  assert.match(pages, /<td className="lf-cell-toggle"><InstanceToggleButton instance=\{instance\} onToggle=\{onToggleInstance\} \/><\/td>/);
-  assert.match(pages, /<colgroup><col className="lf-wb-col-env" \/><col className="lf-wb-col-port" \/><col className="lf-wb-col-upstream" \/><col className="lf-wb-col-status" \/><col className="lf-wb-col-requests" \/><col className="lf-wb-col-toggle" \/><\/colgroup>/);
-  assert.match(pages, /<th className="lf-wb-status">状态<\/th>/);
-  assert.match(pages, /<th className="lf-wb-requests">请求<\/th>/);
+  assert.match(workbench, /orderProxyInstancesForDisplay\(instances, instances\.map\(\(instance\) => instance\.id\)\)/);
+  assert.match(workbench, /filteredInstances\.map/);
+  assert.match(workbench, /<th className="lf-wb-port">端口<\/th>/);
+  assert.match(workbench, /<td className="lf-cell-mono lf-wb-port">:\{instance\.port\}<\/td>/);
+  assert.doesNotMatch(workbench, /<td className="lf-cell-mono lf-wb-port">\{instance\.bindHost\}/);
+  assert.doesNotMatch(workbench, /lf-wb-col-status|lf-wb-status|>状态<\/th>/);
+  assert.match(workbench, /<th className="lf-wb-actions">操作<\/th>/);
+  assert.match(workbench, /<td className="lf-cell-actions" onClick=\{\(event\) => event\.stopPropagation\(\)\}><div className="lf-row-actions"><InstanceToggleButton instance=\{instance\} onToggle=\{onToggleInstance\} \/><button className="lf-mini-action danger"[^>]*title="删除代理"/);
+  assert.match(workbench, /<colgroup><col className="lf-wb-col-env" \/><col className="lf-wb-col-port" \/><col className="lf-wb-col-upstream" \/><col className="lf-wb-col-requests" \/><col className="lf-wb-col-login" \/><col className="lf-wb-col-actions" \/><\/colgroup>/);
+  assert.match(workbench, /<th className="lf-wb-requests">请求<\/th>/);
   assert.match(styles, /\.lf-workbench-table \.lf-wb-col-env\s*\{[^}]*width:\s*23%/);
   assert.match(styles, /\.lf-workbench-table \.lf-wb-col-port\s*\{[^}]*width:\s*60px/);
-  assert.match(styles, /\.lf-workbench-table \.lf-wb-col-status\s*\{[^}]*width:\s*74px/);
   assert.match(styles, /\.lf-workbench-table \.lf-wb-col-requests\s*\{[^}]*width:\s*56px/);
-  assert.match(styles, /\.lf-workbench-table \.lf-wb-col-toggle\s*\{[^}]*width:\s*48px/);
+  assert.match(styles, /\.lf-workbench-table \.lf-wb-col-login\s*\{[^}]*width:\s*56px/);
+  assert.match(styles, /\.lf-workbench-table \.lf-wb-col-actions\s*\{[^}]*width:\s*82px/);
   assert.match(styles, /\.lf-workbench-table th\.lf-wb-port,[\s\S]*?\.lf-workbench-table td\.lf-wb-port[\s\S]*?text-align:\s*center/);
-  assert.match(styles, /\.lf-workbench-table th\.lf-cell-toggle,[\s\S]*?\.lf-workbench-table td\.lf-cell-toggle\s*\{[^}]*text-align:\s*center/);
-  assert.match(styles, /\.lf-workbench-table td\.lf-cell-toggle \.lf-env-toggle\s*\{[^}]*margin-right:\s*auto/);
+  assert.match(styles, /\.lf-workbench-table th\.lf-wb-actions,[\s\S]*?\.lf-workbench-table td\.lf-cell-actions\s*\{[^}]*text-align:\s*right/);
   assert.match(styles, /\.lf-workbench-table\s*\{[^}]*table-layout:\s*fixed/);
   assert.match(styles, /\.lf-workbench-table-wrap\s*\{[^}]*overflow-x:\s*clip/);
 });
 
-test("titlebar and environment page sort active proxy instances first", async () => {
+test("titlebar and workbench sort active proxy instances first", async () => {
   const [pages, chrome] = await Promise.all([
     readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
     readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
@@ -210,23 +205,22 @@ test("titlebar and environment page sort active proxy instances first", async ()
   assert.match(chrome, /import \{ orderProxyInstancesForDisplay \} from "\.\/ProxyInstanceSidebar"/);
   assert.match(chrome, /const orderedInstances = useMemo\(\s*\(\) => orderProxyInstancesForDisplay\(instances, instances\.map\(\(instance\) => instance\.id\)\),\s*\[instances\],\s*\)/);
   assert.match(chrome, /<div className="lf-env-list"[\s\S]*?\{orderedInstances\.map\(\(instance\) =>/);
-  assert.match(pages, /export function EnvironmentPage[\s\S]*?const orderedInstances = useMemo\(\s*\(\) => orderProxyInstancesForDisplay\(instances, instances\.map\(\(instance\) => instance\.id\)\),\s*\[instances\],\s*\);/);
-  assert.match(pages, /const filtered = useMemo\(\(\) => orderedInstances\.filter\(\(instance\) =>/);
+  assert.match(pages, /export function WorkbenchPage[\s\S]*?const orderedInstances = useMemo\(\(\) => orderProxyInstancesForDisplay\(instances, instances\.map\(\(instance\) => instance\.id\)\), \[instances\]\);/);
+  assert.match(pages, /const filteredInstances = useMemo\(\(\) => orderedInstances\.filter\(\(instance\) =>/);
 });
 
-test("environment table selects proxies from the full environment cell without a redundant action", async () => {
+test("workbench proxy table selects from the row and keeps actions separate", async () => {
   const [pages, styles] = await Promise.all([
     readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
     readFile("src/renderer/styles.css", "utf8"),
   ]);
-  const environment = pages.match(/export function EnvironmentPage[\s\S]*?export interface ActivityPageProps/)?.[0] ?? "";
+  const workbench = pages.match(/export function WorkbenchPage[\s\S]*?export interface ActivityPageProps/)?.[0] ?? "";
 
-  assert.match(environment, /<td className="lf-cell-select"><button className="lf-cell-env as-button" type="button" aria-pressed=\{instance\.selected\} onClick=\{\(\) => onSelectInstance\(instance\.id\)\}>/);
-  assert.match(environment, /<InstanceToggleButton instance=\{instance\} onToggle=\{onToggleInstance\} \/>/);
-  assert.doesNotMatch(environment, />设为当前</);
-  assert.doesNotMatch(environment, /instance\.status\.state === "running" \? "停止" : "启动"/);
-  assert.match(styles, /\.lf-data-table td\.lf-cell-select\s*\{[^}]*padding:\s*0/);
-  assert.match(styles, /\.lf-cell-env\.as-button\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*min-height:\s*41px[^}]*padding:\s*0 13px[^}]*cursor:\s*pointer/);
+  assert.match(workbench, /<tr className=\{instance\.selected \? "selected" : ""\} key=\{instance\.id\} onClick=\{\(\) => onSelectInstance\(instance\.id\)\}>/);
+  assert.match(workbench, /<InstanceToggleButton instance=\{instance\} onToggle=\{onToggleInstance\} \/>/);
+  assert.match(workbench, /<td className="lf-cell-actions" onClick=\{\(event\) => event\.stopPropagation\(\)\}>/);
+  assert.doesNotMatch(workbench, />设为当前</);
+  assert.doesNotMatch(workbench, /instance\.status\.state === "running" \? "停止" : "启动"/);
   assert.match(styles, /\.lf-row-actions \.lf-env-toggle\s*\{[^}]*margin-right:\s*0/);
 });
 
@@ -281,9 +275,9 @@ test("proxy sidebar leaves room for the port to stay at the far right", async ()
 });
 
 test("proxy sidebar supports editing names and bulk runtime actions", async () => {
-  const [app, panel, sidebar, styles] = await Promise.all([
+  const [app, pages, sidebar, styles] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
-    readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8"),
+    readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
     readFile("src/renderer/components/ProxyInstanceSidebar.tsx", "utf8"),
     readFile("src/renderer/styles.css", "utf8"),
   ]);
@@ -291,11 +285,10 @@ test("proxy sidebar supports editing names and bulk runtime actions", async () =
   assert.match(app, /startAll/);
   assert.match(app, /stopAll/);
   assert.match(app, /onRename={renameProxyInstance}/);
-  assert.match(panel, /编辑代理名称/);
-  assert.match(panel, /onRename/);
-  assert.match(panel, /<button className=\{`proxy-instance-sidebar-action \$\{running \? "stop" : "start"\}`\} type="button" disabled=\{busy\}/);
-  assert.match(panel, /if \(status\.state === "running"\) void onStop\(\);/);
-  assert.match(panel, /else void onStart\(\);/);
+  assert.match(pages, /编辑代理名称/);
+  assert.match(pages, /onRename/);
+  assert.doesNotMatch(app, /onStart=\{start\}|onStop=\{stop\}/);
+  assert.doesNotMatch(pages, />停止代理<|>启动代理</);
   assert.doesNotMatch(sidebar, /proxy-instance-sidebar-name-input/);
   assert.match(sidebar, /onStartAll/);
   assert.match(sidebar, /onStopAll/);

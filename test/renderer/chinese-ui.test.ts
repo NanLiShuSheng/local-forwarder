@@ -48,31 +48,35 @@ test("environment details exposes hq, jy, and zx forwarding address settings", a
   }
 });
 
-test("renderer places forwarding address editing inside environment details without a separate route", async () => {
+test("renderer places forwarding address editing inside the workbench without a separate route", async () => {
   const [appSource, pageSource, styleSource] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
     readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
     readFile("src/renderer/styles.css", "utf8"),
   ]);
   assert.doesNotMatch(appSource, /route === "addresses"/);
-  assert.match(pageSource, /<ProxyInstancePanel[\s\S]*?<section className="lf-panel lf-forwarding-settings"/);
+  assert.doesNotMatch(appSource, /EnvironmentPage|route === "environment"/);
+  assert.match(pageSource, /export function WorkbenchPage/);
+  assert.ok(pageSource.indexOf("lf-workbench-config") < pageSource.indexOf("lf-forwarding-settings"));
+  assert.ok(pageSource.indexOf("lf-forwarding-settings") < pageSource.indexOf("lf-metrics"));
+  assert.doesNotMatch(pageSource, /只读 · 当前环境/);
   assert.match(styleSource, /\.lf-address-grid[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
 });
 
 test("renderer exposes manual login cache and project directory controls", async () => {
   const source = (await Promise.all(rendererFiles.map((file) => readFile(file, "utf8")))).join("\n");
-  const panelSource = await readFile("src/renderer/components/ProxyInstancePanel.tsx", "utf8");
+  const pageSource = await readFile("src/renderer/components/WorkspacePages.tsx", "utf8");
   for (const label of ["登录缓存", "选择项目目录"]) {
-    assert.equal(source.includes(label) || panelSource.includes(label), true, `missing manual configuration control: ${label}`);
+    assert.equal(source.includes(label) || pageSource.includes(label), true, `missing manual configuration control: ${label}`);
   }
   assert.equal(source.includes("粘贴登录缓存"), false);
   assert.equal(source.includes("保存登录缓存"), false);
   assert.match(source, /parseLocalCacheText/);
   assert.match(source, /selectProjectDirectory/);
-  assert.match(panelSource, /parseDirectoryInput/);
-  assert.match(panelSource, /projectPathDraft/);
-  assert.match(panelSource, /proxy-instance-project-field/);
-  assert.doesNotMatch(panelSource, /<input value=\{config\.projectPath \?\? ""\} readOnly/);
+  assert.match(pageSource, /parseDirectoryInput/);
+  assert.match(pageSource, /projectPathDraft/);
+  assert.match(pageSource, /lf-project-bar/);
+  assert.doesNotMatch(pageSource, /<input value=\{config\.projectPath \?\? ""\} readOnly/);
 });
 
 test("renderer exposes local variables as a structured editable page", async () => {

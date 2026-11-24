@@ -32,7 +32,7 @@ const tabs: Array<{ tab: DataTab; label: string; route: WorkspaceRoute }> = [
   { tab: "session", label: "登录缓存", route: "session" },
   { tab: "kv", label: "本地缓存", route: "kv" },
   { tab: "files", label: "文件缓存", route: "files" },
-  { tab: "variables", label: "工作区变量", route: "variables" },
+  { tab: "variables", label: "本地变量", route: "variables" },
 ];
 
 const sourceCopy: Record<DataTab, string> = {
@@ -191,7 +191,7 @@ export function DataBrowserPage({ tab, selectedInstance, sessionValues, onSaveSe
         if (!result.ok) throw new Error(result.error ?? "本地缓存保存失败");
       } else if (tab === "variables") {
         const result = await window.forwarder.saveSharedValues(next);
-        if (!result.ok) throw new Error(result.error ?? "工作区变量保存失败");
+        if (!result.ok) throw new Error(result.error ?? "本地变量保存失败");
       } else {
         const removed = Object.keys(valuesRef.current).filter((key) => next[key] === undefined);
         for (const key of removed) {
@@ -350,7 +350,7 @@ export function DataBrowserPage({ tab, selectedInstance, sessionValues, onSaveSe
       <div>
         <p className="lf-page-eyebrow">{`Data · ${tabs.find((item) => item.tab === tab)?.label ?? "Browser"}`}</p>
         <div className="lf-page-title-line"><h1>{pageTitle}</h1><span className="lf-scope-pill"><span className={`lf-status-dot ${tab === "variables" ? "" : selectedInstance?.status.state === "running" ? "running" : "stopped"}`} />{tab === "variables" ? <><strong>工作区</strong><span>· 全局共享</span></> : <><strong>{scopeLabel}</strong><span>· 数据随环境切换</span></>}</span></div>
-        <p className="lf-page-sub">登录缓存、本地缓存、文件缓存与工作区变量共用一套浏览、筛选和编辑体验。</p>
+        <p className="lf-page-sub">登录缓存、本地缓存、文件缓存与本地变量共用一套浏览、筛选和编辑体验。</p>
       </div>
       <div className="lf-page-actions">
         <input ref={importRef} hidden type="file" accept=".json,.txt,text/plain,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file !== undefined) void importData(file); event.target.value = ""; }} />

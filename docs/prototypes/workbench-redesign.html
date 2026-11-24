@@ -841,7 +841,7 @@
 
           <section class="view" data-view="data">
             <header class="page-head">
-              <div><p class="page-eyebrow">Data · Browser</p><div class="page-title-line"><h1>数据</h1><span class="scope-pill"><span class="status-dot running"></span>当前环境 <strong>华东生产</strong></span></div><p class="page-sub">登录会话、键值缓存、资源文件与工作区变量共用一套浏览、筛选和编辑体验。</p></div>
+              <div><p class="page-eyebrow">Data · Browser</p><div class="page-title-line"><h1>数据</h1><span class="scope-pill"><span class="status-dot running"></span>当前环境 <strong>华东生产</strong></span></div><p class="page-sub">登录会话、键值缓存、资源文件与本地变量共用一套浏览、筛选和编辑体验。</p></div>
               <div class="page-actions"><button class="btn" type="button" data-toast="导入数据入口">导入</button><button class="btn primary" type="button" data-toast="新增数据项">＋ 新增</button></div>
             </header>
             <section class="panel data-shell">
@@ -850,9 +850,9 @@
                   <button class="data-tab" type="button" data-data-tab="session">登录会话 <span class="tab-count">74</span></button>
                   <button class="data-tab active" type="button" data-data-tab="kv">键值缓存 <span class="tab-count">126</span></button>
                   <button class="data-tab" type="button" data-data-tab="files">资源文件 <span class="tab-count">38</span></button>
-                  <button class="data-tab" type="button" data-data-tab="variables">工作区变量 <span class="tab-count">18</span></button>
+                  <button class="data-tab" type="button" data-data-tab="variables">本地变量 <span class="tab-count">18</span></button>
                 </div>
-                <div class="data-scope"><span class="status-dot running"></span><strong>华东生产</strong><span>· 工作区变量为全局共享</span></div>
+                <div class="data-scope"><span class="status-dot running"></span><strong>华东生产</strong><span>· 本地变量为全局共享</span></div>
               </div>
               <div class="data-toolbar">
                 <div class="search-control"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16.5 16.5 4 4"/></svg><input type="search" placeholder="搜索键名或值" /></div>
@@ -1013,7 +1013,7 @@
         <div class="command-group-label">页面</div>
         <button class="command-result" type="button" data-route="workbench"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg><span class="cmd-result-copy"><strong>工作台</strong><small>环境状态、指标与最近活动</small></span><kbd>⌘1</kbd></button>
         <button class="command-result" type="button" data-route="debug"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19 19 5"/><path d="M9 5h10v10"/></svg><span class="cmd-result-copy"><strong>请求调试</strong><small>TZT TCP / HTTP 请求与应答</small></span><kbd>⌘2</kbd></button>
-        <button class="command-result" type="button" data-route="kv"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4c-2 0-3 1-3 3v2c0 2-1 3-2 3 1 0 2 1 2 3v2c0 2 1 3 3 3"/><path d="M15 4c2 0 3 1 3 3v2c0 2 1 3 2 3-1 0-2 1-2 3v2c0 2-1 3-3 3"/></svg><span class="cmd-result-copy"><strong>数据浏览器</strong><small>登录会话、缓存与工作区变量</small></span><kbd>⌘3</kbd></button>
+        <button class="command-result" type="button" data-route="kv"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4c-2 0-3 1-3 3v2c0 2-1 3-2 3 1 0 2 1 2 3v2c0 2 1 3 3 3"/><path d="M15 4c2 0 3 1 3 3v2c0 2 1 3 2 3-1 0-2 1-2 3v2c0 2-1 3-3 3"/></svg><span class="cmd-result-copy"><strong>数据浏览器</strong><small>登录会话、缓存与本地变量</small></span><kbd>⌘3</kbd></button>
         <div class="command-group-label">命令</div>
         <button class="command-result" type="button" data-toast="已启动全部环境"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7z"/></svg><span class="cmd-result-copy"><strong>启动全部环境</strong><small>批量运行当前工作区中的代理实例</small></span></button>
         <button class="command-result" type="button" data-toast="登录会话已导出"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg><span class="cmd-result-copy"><strong>导出登录会话</strong><small>将当前环境的会话字段导出为文本</small></span></button>
@@ -1080,7 +1080,7 @@
           { route: 'session', label: '登录会话', icon: 'session', badge: '74' },
           { route: 'kv', label: '键值缓存', icon: 'kv', badge: '126' },
           { route: 'files', label: '资源文件', icon: 'files', badge: '38' },
-          { route: 'variables', label: '工作区变量', icon: 'variables', badge: '18', global: true }
+          { route: 'variables', label: '本地变量', icon: 'variables', badge: '18', global: true }
         ],
         note: '<strong>作用域</strong>登录会话、缓存和文件属于当前环境；变量全局共享'
       },
@@ -1168,7 +1168,7 @@
         ]
       },
       variables: {
-        label: '工作区变量', total: 18, items: [
+        label: '本地变量', total: 18, items: [
           { key: 'SOFTVERSION', badge: '全局', badgeClass: 'global', meta: '10 字符', preview: '7.03.039', detailMeta: '10 字符 · 1 行 · 工作区共享 · 所有环境', source: 'local variables', value: '7.03.039' },
           { key: 'MOBILECODE', badge: '全局', badgeClass: 'global', meta: '11 字符', preview: '17000000000', detailMeta: '11 字符 · 1 行 · 工作区共享 · 所有环境', source: 'local variables', value: '17000000000' },
           { key: 'USER_CODE', badge: '全局', badgeClass: 'global', meta: '9 字符', preview: '600554432', detailMeta: '9 字符 · 1 行 · 工作区共享 · 所有环境', source: 'local variables', value: '600554432' },

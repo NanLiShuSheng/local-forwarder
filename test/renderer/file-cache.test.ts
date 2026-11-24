@@ -11,7 +11,7 @@ test("unified data browser exposes reqsavefile viewing, adding, editing, deletio
   ]);
 
   assert.deepEqual(workspaceGroups.data.items.map((item) => item.route), ["session", "kv", "files", "variables"]);
-  assert.deepEqual(workspaceGroups.data.items.map((item) => item.label), ["登录缓存", "本地缓存", "文件缓存", "工作区变量"]);
+  assert.deepEqual(workspaceGroups.data.items.map((item) => item.label), ["登录缓存", "本地缓存", "文件缓存", "本地变量"]);
   assert.match(appSource, /const isDataRoute = route === "session" \|\| route === "kv" \|\| route === "files" \|\| route === "variables"/);
   assert.match(appSource, /<PagePane active=\{isDataRoute\}>[\s\S]*?<DataBrowserPage tab=\{dataTab\}/);
   assert.match(pageSource, /window\.forwarder\.getFileValues\(instanceId\)/);

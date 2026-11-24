@@ -3,12 +3,12 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { workspaceGroups, workspaceIconPaths, workspaceRailGroups } from "../../src/renderer/workspace-navigation";
 
-test("navigation exposes the six redesign categories and their page order", () => {
-  assert.deepEqual(workspaceRailGroups, ["run", "debug", "data", "build", "tools"]);
-  assert.deepEqual(Object.keys(workspaceGroups), ["run", "debug", "data", "build", "tools", "settings"]);
-  assert.deepEqual(workspaceGroups.run.items.map((item) => item.label), ["工作台", "环境", "活动"]);
-  assert.deepEqual(workspaceGroups.debug.items.map((item) => item.label), ["请求调试", "请求历史"]);
-  assert.deepEqual(workspaceGroups.data.items.map((item) => item.label), ["登录缓存", "本地缓存", "文件缓存", "工作区变量"]);
+test("navigation exposes the redesign categories and their page order", () => {
+  assert.deepEqual(workspaceRailGroups, ["run", "data", "build", "tools"]);
+  assert.deepEqual(Object.keys(workspaceGroups), ["run", "data", "build", "tools", "settings"]);
+  assert.deepEqual(workspaceGroups.run.items.map((item) => item.label), ["工作台", "请求调试", "活动"]);
+  assert.equal("debug" in workspaceGroups, false);
+  assert.deepEqual(workspaceGroups.data.items.map((item) => item.label), ["登录缓存", "本地缓存", "文件缓存", "本地变量"]);
   assert.deepEqual(workspaceGroups.build.items.map((item) => item.label), ["资源构建", "任务记录"]);
   assert.deepEqual(workspaceGroups.tools.items.map((item) => item.label), ["日志", "JSON 可视化", "字符串处理"]);
   assert.deepEqual(workspaceGroups.settings.items.map((item) => item.label), ["外观", "更新", "高级"]);
@@ -29,34 +29,38 @@ test("every workspace group and page has a defined icon", () => {
   }
 });
 
-test("tools navigation places logs first, exposes the JSON page second, and binds logs to Command+5", async () => {
+test("tools navigation places logs first and Command shortcuts follow the top-level tab order", async () => {
   const source = await readFile("src/renderer/App.tsx", "utf8");
   assert.deepEqual(workspaceGroups.tools.items.map((item) => item.route), ["logs", "json", "string"]);
   assert.deepEqual(workspaceGroups.tools.items[0], { route: "logs", label: "日志", icon: "activity" });
   assert.deepEqual(workspaceGroups.tools.items[1], { route: "json", label: "JSON 可视化", icon: "json" });
   assert.match(source, /\^\[1-5\]\$/);
-  assert.match(source, /"5": "logs"/);
-  assert.match(source, /item\.route === "logs" \? "⌘5"/);
+  assert.match(source, /const workspaceShortcutGroups: Record<string, WorkspaceGroupKey> = \{ "1": "run", "2": "data", "3": "build", "4": "tools", "5": "settings" \}/);
+  assert.match(source, /workspaceGroups\[groupKey\]\.items\[0\]!\.route/);
+  assert.match(source, /shortcut: index === 0 \? workspaceGroupShortcuts\[group\.key\] : undefined/);
   assert.match(source, /<LogPanel logs=\{logs\} selected=\{selectedLog\} onSelect=\{setSelectedLog\}/);
   assert.match(source, /<JsonPreviewPage prefillText=\{jsonPrefill\}/);
   assert.match(source, /<KeepAlivePane active=\{route === "json"\}><JsonPreviewPage/);
 });
 
-test("workbench uses a pastable project directory field with directory selection", async () => {
+test("workbench integrates project directory and editable proxy settings", async () => {
   const [appSource, pageSource] = await Promise.all([
     readFile("src/renderer/App.tsx", "utf8"),
     readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
   ]);
 
   assert.doesNotMatch(pageSource, /lf-env-hero/);
-  assert.match(pageSource, /className="lf-panel lf-project-bar" aria-label="项目目录"/);
-  assert.match(pageSource, /aria-label="项目目录路径"/);
-  assert.match(pageSource, /parseDirectoryInput\(draft\)/);
-  assert.match(pageSource, /onBlur=\{\(\) => \{ void saveProjectPath\(\); \}\}/);
-  assert.match(pageSource, /event\.key === "Enter"[\s\S]*?void saveProjectPath\(\)/);
+  assert.doesNotMatch(pageSource, /export function EnvironmentPage/);
+  assert.match(pageSource, /className="lf-panel lf-workbench-config"/);
+  assert.match(pageSource, /className="lf-panel lf-forwarding-settings"/);
+  assert.match(pageSource, /onBlur=\{\(\) => void saveAddresses\(addressDrafts\)\}/);
+  assert.match(pageSource, /aria-label="项目目录"/);
+  assert.match(pageSource, /parseDirectoryInput\(projectPathDraft\)/);
   assert.match(pageSource, />选择项目目录<\/button>/);
+  assert.ok(pageSource.indexOf("lf-project-bar") < pageSource.indexOf("监听主机"));
   assert.match(appSource, /<WorkbenchPage[\s\S]*?onChooseProjectDirectory=\{chooseProjectDirectory\}/);
-  assert.match(appSource, /onChangeProjectPath=\{\(projectPath\) => save\(\{ \.\.\.config, projectPath \}\)\}/);
+  assert.match(appSource, /<WorkbenchPage[\s\S]*?onChange=\{save\}/);
+  assert.doesNotMatch(appSource, /EnvironmentPage|route === "environment"/);
 });
 
 test("App wires log clearing and JSON response fill actions", async () => {

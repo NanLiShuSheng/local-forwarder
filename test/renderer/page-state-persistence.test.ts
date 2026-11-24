@@ -9,9 +9,10 @@ test("workspace pages stay mounted after their first visit so runtime results su
   assert.match(source, /const \[hasOpened, setHasOpened\] = useState\(active\)/);
   assert.match(source, /className="lf-view" hidden=\{!active\}/);
 
-  for (const route of ["workbench", "environment", "activity", "debug", "history", "build", "jobs", "appearance", "update", "advanced"]) {
+  for (const route of ["workbench", "activity", "debug", "build", "jobs", "appearance", "update", "advanced"]) {
     assert.match(source, new RegExp(`<PagePane active=\\{route === "${route}"\\}>`), `missing persistent route: ${route}`);
   }
+  assert.doesNotMatch(source, /EnvironmentPage|route === "environment"/);
   assert.match(source, /<PagePane active=\{isDataRoute\}>/);
   assert.match(source, /<PagePane active=\{route === "json" \|\| route === "logs" \|\| route === "string"\}>/);
   assert.doesNotMatch(source, /route === "debug" && <RequestPage/);

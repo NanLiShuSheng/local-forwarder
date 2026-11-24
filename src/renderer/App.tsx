@@ -13,7 +13,7 @@ import { ToastProvider, useToast } from "./components/ToastProvider";
 import { UpdateCancelDialog } from "./components/UpdateCancelDialog";
 import { UpdateCard } from "./components/UpdateCard";
 import { CommandPalette, WorkspaceContext, WorkspaceDock, WorkspaceIcon, WorkspaceRail, WorkspaceStatusbar, WorkspaceTitlebar, type DockTab, type SaveState, type WorkspaceCommand } from "./components/WorkspaceChrome";
-import { AdvancedSettingsPage, ActivityPage, BuildJobsPage, EnvironmentPage, RequestHistoryPage, UpdateSettingsPage, WorkbenchPage, WorkspacePageHeader, type BuildTask } from "./components/WorkspacePages";
+import { AdvancedSettingsPage, ActivityPage, BuildJobsPage, UpdateSettingsPage, WorkbenchPage, WorkspacePageHeader, type BuildTask } from "./components/WorkspacePages";
 import { loginCacheCustomerSummary } from "./login-cache-data";
 import { getUpdateDismissalStorage, readDismissedUpdateVersion, writeDismissedUpdateVersion } from "./update-dismissal";
 import { createManualCheckTracker, createUpdateStateSynchronizer, resolveManualCheckResult } from "./update-state";
@@ -23,6 +23,8 @@ import { workspaceGroups, workspaceRouteMeta, type WorkspaceGroupKey, type Works
 const initialStatus: RuntimeStatus = { state: "stopped", requestCount: 0, tcpConnections: 0 };
 const initialUpdateState: UpdateState = { state: "idle", currentVersion: "" };
 const initialConfig: AppConfig = { server: { bindHost: "127.0.0.1", port: 8080, timeoutMs: 30000, loggingEnabled: true }, httpRules: [], tcpTargets: createDefaultForwardingTargets(), localValues: {}, mapValues: {}, accounts: {}, cache: { rootDir: "", downloadTarget: "", decryptEnabled: false, autoDownload: false }, request: { host: DEFAULT_REQUEST_HOST, port: DEFAULT_REQUEST_PORT, paramsText: DEFAULT_REQUEST_PARAMS_TEXT }, stringTool: { inputText: "", outputText: "", operation: "replace", findText: "", replaceText: "" } };
+const workspaceShortcutGroups: Record<string, WorkspaceGroupKey> = { "1": "run", "2": "data", "3": "build", "4": "tools", "5": "settings" };
+const workspaceGroupShortcuts = Object.fromEntries(Object.entries(workspaceShortcutGroups).map(([key, group]) => [group, `⌘${key}`])) as Partial<Record<WorkspaceGroupKey, string>>;
 
 export function createVersionedLogReader(readLogs: () => Promise<LogEntry[]>, applyLogs: (logs: LogEntry[]) => void) {
   let version = 0;
@@ -155,9 +157,8 @@ function AppContent() {
       }
       if (command && /^[1-5]$/.test(event.key)) {
         event.preventDefault();
-        const shortcuts: Record<string, WorkspaceRoute> = { "1": "workbench", "2": "debug", "3": "kv", "4": "build", "5": "logs" };
-        const nextRoute = shortcuts[event.key];
-        if (nextRoute !== undefined) navigate(nextRoute);
+        const groupKey = workspaceShortcutGroups[event.key];
+        if (groupKey !== undefined) navigate(workspaceGroups[groupKey].items[0]!.route);
         return;
       }
       if (event.key === "Escape") {
@@ -457,25 +458,6 @@ function AppContent() {
     }
   };
 
-  const start = async () => {
-    try {
-      setStatus(await window.forwarder.start());
-      setInstances(await window.forwarder.listProxyInstances());
-    } catch (cause) {
-      notifyError(cause, "代理启动失败");
-      await refresh();
-    }
-  };
-
-  const stop = async () => {
-    try {
-      setStatus(await window.forwarder.stop());
-      setInstances(await window.forwarder.listProxyInstances());
-    } catch (cause) {
-      notifyError(cause, "代理停止失败");
-    }
-  };
-
   const clearLogs = async (): Promise<boolean> => {
     try {
       const result = await window.forwarder.clearLogs();
@@ -528,7 +510,6 @@ function AppContent() {
   const isDataRoute = route === "session" || route === "kv" || route === "files" || route === "variables";
   const dataTab = route === "session" || route === "kv" || route === "files" || route === "variables" ? route : "session";
   const badges = useMemo<Partial<Record<WorkspaceRoute, number>>>(() => ({
-    environment: instances.length,
     activity: logs.length,
     logs: logs.length,
     session: Object.keys(loginCache).length,
@@ -537,10 +518,6 @@ function AppContent() {
     setSelectedLog(entry);
     setDockTab("request");
     setDockOpen(true);
-  };
-  const inspectHistoryLog = (entry: LogEntry) => {
-    inspectLog(entry);
-    navigate("debug");
   };
   const exportConfig = () => {
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
@@ -553,12 +530,12 @@ function AppContent() {
     notify({ kind: "success", message: "配置已导出" });
   };
   const commands: WorkspaceCommand[] = [
-    ...Object.values(workspaceGroups).flatMap((group) => group.items.map((item) => ({
+    ...Object.values(workspaceGroups).flatMap((group) => group.items.map((item, index) => ({
       id: `route-${item.route}`,
       label: item.label,
       detail: group.subtitle,
       group: group.label,
-      shortcut: item.route === "workbench" ? "⌘1" : item.route === "debug" ? "⌘2" : item.route === "kv" ? "⌘3" : item.route === "build" ? "⌘4" : item.route === "logs" ? "⌘5" : undefined,
+      shortcut: index === 0 ? workspaceGroupShortcuts[group.key] : undefined,
       run: () => navigate(item.route),
     }))),
     ...instances.map((instance) => ({
@@ -592,7 +569,7 @@ function AppContent() {
       onCloseEnvironment={() => setEnvironmentOpen(false)}
       onSelectInstance={(id) => { void selectProxyInstance(id); }}
       onToggleInstance={(instance) => { void toggleProxyInstance(instance); }}
-      onManageEnvironments={() => navigate("environment")}
+      onDuplicateCurrent={() => { void duplicateProxyInstance(); }}
       onOpenCommand={() => setCommandOpen(true)}
       onCheckForUpdates={() => { void checkForUpdates(); }}
       onToggleTheme={() => setMode(theme === "dark" ? "light" : "dark")}
@@ -604,11 +581,7 @@ function AppContent() {
       <div className={`lf-workspace ${dockOpen ? "dock-open" : ""}`}>
         <main className="lf-main">
           <PagePane active={route === "workbench"}>
-            <WorkbenchPage instances={instances} selectedInstance={selectedInstance} status={status} config={config} loginCache={loginCache} logs={logs} bulkBusy={bulkRuntimeAction !== undefined} onNavigate={navigate} onSelectInstance={(id) => { void selectProxyInstance(id); }} onToggleInstance={(instance) => { void toggleProxyInstance(instance); }} onStartAll={() => { void startAll(); }} onStopAll={() => { void stopAll(); }} onOpenDock={() => setDockOpen(true)} onChooseProjectDirectory={chooseProjectDirectory} onChangeProjectPath={(projectPath) => save({ ...config, projectPath })} />
-          </PagePane>
-
-          <PagePane active={route === "environment"}>
-            <EnvironmentPage instances={instances} selectedInstance={selectedInstance} status={status} config={config} bulkBusy={bulkRuntimeAction !== undefined} onSelectInstance={(id) => { void selectProxyInstance(id); }} onToggleInstance={(instance) => { void toggleProxyInstance(instance); }} onCreate={() => { void createProxyInstance(); }} onDuplicate={() => { void duplicateProxyInstance(); }} onDelete={(id) => { void deleteProxyInstance(id); }} onStartAll={() => { void startAll(); }} onStopAll={() => { void stopAll(); }} onChange={save} onChooseProjectDirectory={chooseProjectDirectory} onRename={renameProxyInstance} onStart={start} onStop={stop} />
+            <WorkbenchPage instances={instances} selectedInstance={selectedInstance} status={status} config={config} loginCache={loginCache} logs={logs} bulkBusy={bulkRuntimeAction !== undefined} onNavigate={navigate} onSelectInstance={(id) => { void selectProxyInstance(id); }} onToggleInstance={(instance) => { void toggleProxyInstance(instance); }} onCreate={() => { void createProxyInstance(); }} onDuplicate={() => { void duplicateProxyInstance(); }} onDelete={(id) => { void deleteProxyInstance(id); }} onStartAll={() => { void startAll(); }} onStopAll={() => { void stopAll(); }} onOpenDock={() => setDockOpen(true)} onChange={save} onChooseProjectDirectory={chooseProjectDirectory} onRename={renameProxyInstance} />
           </PagePane>
 
           <PagePane active={route === "activity"}>
@@ -617,13 +590,9 @@ function AppContent() {
 
           <PagePane active={route === "debug"}>
             <section className="lf-view-body lf-debug-view">
-              <WorkspacePageHeader eyebrow="Debug · Request" title="请求调试" badge={<span className="lf-scope-pill"><span className={`lf-status-dot ${selectedInstance?.status.state === "running" ? "running" : "stopped"}`} />当前环境 <strong>{selectedInstance?.name ?? "—"}</strong></span>} description="目标由当前环境提供，支持 TZT TCP 与 HTTP /reqxml；应答和日志在同一个工作区内查看。" actions={<button className="lf-btn" type="button" onClick={() => navigate("history")}><WorkspaceIcon name="history" className="lf-icon" />请求历史</button>} />
+              <WorkspacePageHeader eyebrow="Runtime · Request" title="请求调试" badge={<span className="lf-scope-pill"><span className={`lf-status-dot ${selectedInstance?.status.state === "running" ? "running" : "stopped"}`} />当前环境 <strong>{selectedInstance?.name ?? "—"}</strong></span>} description="目标由当前环境提供，支持 TZT TCP 与 HTTP /reqxml；应答和日志在同一个工作区内查看。" />
               <RequestPage config={config} active={route === "debug"} onChange={save} onSendRequest={sendRequest} onFillJson={fillJsonPreview} onOpenSession={() => navigate("session")} />
             </section>
-          </PagePane>
-
-          <PagePane active={route === "history"}>
-            <RequestHistoryPage logs={logs} instanceName={selectedInstance?.name ?? "当前环境"} onInspect={inspectHistoryLog} onFillJson={fillJsonPreview} onOpenDebug={() => navigate("debug")} />
           </PagePane>
 
           <PagePane active={isDataRoute}>

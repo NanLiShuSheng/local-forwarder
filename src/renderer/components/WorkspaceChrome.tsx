@@ -70,7 +70,7 @@ export interface WorkspaceTitlebarProps {
   onCloseEnvironment: () => void;
   onSelectInstance: (id: string) => void;
   onToggleInstance: (instance: ProxyInstanceSummary) => void;
-  onManageEnvironments: () => void;
+  onDuplicateCurrent: () => void;
   onOpenCommand: () => void;
   onCheckForUpdates: () => void;
   onToggleTheme: () => void;
@@ -91,7 +91,7 @@ export function WorkspaceTitlebar({
   onCloseEnvironment,
   onSelectInstance,
   onToggleInstance,
-  onManageEnvironments,
+  onDuplicateCurrent,
   onOpenCommand,
   onCheckForUpdates,
   onToggleTheme,
@@ -143,7 +143,7 @@ export function WorkspaceTitlebar({
           })}
           {instances.length === 0 && <p className="lf-popover-empty">还没有代理环境</p>}
         </div>
-        <div className="lf-popover-foot"><button type="button" onClick={() => { onManageEnvironments(); onCloseEnvironment(); }}>管理全部环境 <WorkspaceIcon name="arrow-right" className="lf-icon lf-icon-sm" /></button></div>
+        <div className="lf-popover-foot"><button type="button" disabled={instances.length === 0} onClick={() => { onDuplicateCurrent(); onCloseEnvironment(); }}>复制当前</button></div>
       </div>}
     </div>
     <div className="lf-titlebar-spacer" />
@@ -304,11 +304,21 @@ export function CommandPalette({ open, commands, onClose }: { open: boolean; com
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const results = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     if (normalized === "") return commands;
     return commands.filter((command) => `${command.label} ${command.detail} ${command.group}`.toLocaleLowerCase().includes(normalized));
   }, [commands, query]);
+  const resultGroups = useMemo(() => {
+    const groups = new Map<string, Array<{ command: WorkspaceCommand; index: number }>>();
+    results.forEach((command, index) => {
+      const items = groups.get(command.group) ?? [];
+      items.push({ command, index });
+      groups.set(command.group, items);
+    });
+    return Array.from(groups, ([label, items]) => ({ label, items }));
+  }, [results]);
 
   useEffect(() => {
     if (!open) return;
@@ -321,6 +331,11 @@ export function CommandPalette({ open, commands, onClose }: { open: boolean; com
     if (selectedIndex >= results.length) setSelectedIndex(Math.max(0, results.length - 1));
   }, [results.length, selectedIndex]);
 
+  useEffect(() => {
+    if (!open) return;
+    resultsRef.current?.querySelector<HTMLElement>(`[data-command-index="${selectedIndex}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [open, selectedIndex]);
+
   if (!open) return null;
   const run = (command: WorkspaceCommand | undefined) => {
     if (command === undefined) return;
@@ -329,16 +344,19 @@ export function CommandPalette({ open, commands, onClose }: { open: boolean; com
   };
   return <div className="lf-command-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="lf-command-dialog" role="dialog" aria-modal="true" aria-label="命令面板">
-      <div className="lf-command-input-row"><WorkspaceIcon name="search" className="lf-icon" /><input ref={inputRef} aria-label="搜索命令" placeholder="搜索环境、页面或命令" value={query} onChange={(event) => { setQuery(event.target.value); setSelectedIndex(0); }} onKeyDown={(event) => {
+      <div className="lf-command-input-row"><WorkspaceIcon name="search" className="lf-icon" /><input ref={inputRef} aria-label="搜索命令" aria-autocomplete="list" aria-controls="lf-command-results" aria-activedescendant={results.length === 0 ? undefined : `lf-command-option-${selectedIndex}`} placeholder="搜索页面、环境或操作" value={query} onChange={(event) => { setQuery(event.target.value); setSelectedIndex(0); }} onKeyDown={(event) => {
         if (event.key === "ArrowDown") { event.preventDefault(); setSelectedIndex((current) => Math.min(results.length - 1, current + 1)); }
         else if (event.key === "ArrowUp") { event.preventDefault(); setSelectedIndex((current) => Math.max(0, current - 1)); }
         else if (event.key === "Enter") { event.preventDefault(); run(results[selectedIndex]); }
         else if (event.key === "Escape") { event.preventDefault(); onClose(); }
       }} /><kbd>esc</kbd></div>
-      <div className="lf-command-results" role="listbox" aria-label="命令结果">
-        {results.length === 0 ? <p className="lf-command-empty">没有匹配的命令</p> : results.map((command, index) => <button className={`lf-command-result ${index === selectedIndex ? "selected" : ""}`} role="option" aria-selected={index === selectedIndex} type="button" key={command.id} onMouseEnter={() => setSelectedIndex(index)} onClick={() => run(command)}><span className="lf-command-group">{command.group}</span><span className="lf-command-copy"><strong>{command.label}</strong><small>{command.detail}</small></span>{command.shortcut !== undefined && <kbd>{command.shortcut}</kbd>}</button>)}
+      <div ref={resultsRef} id="lf-command-results" className="lf-command-results" role="listbox" aria-label="命令结果">
+        {results.length === 0 ? <p className="lf-command-empty">没有匹配的命令</p> : resultGroups.map((group) => <section className="lf-command-section" role="group" aria-label={group.label} key={group.label}>
+          <p className="lf-command-section-title">{group.label}</p>
+          {group.items.map(({ command, index }) => <button data-command-index={index} id={`lf-command-option-${index}`} className={`lf-command-result ${index === selectedIndex ? "selected" : ""}`} role="option" aria-selected={index === selectedIndex} type="button" key={command.id} onMouseEnter={() => setSelectedIndex(index)} onClick={() => run(command)}><span className="lf-command-copy"><strong>{command.label}</strong><small>{command.detail}</small></span>{command.shortcut !== undefined && <kbd>{command.shortcut}</kbd>}</button>)}
+        </section>)}
       </div>
-      <div className="lf-command-footer"><span>↑↓ 选择 · ↵ 打开 · esc 关闭</span><span>Local Forwarder</span></div>
+      <div className="lf-command-footer"><span>↑↓ 选择 · ↵ 执行 · esc 关闭</span><span>{results.length} 个结果</span></div>
     </section>
   </div>;
 }

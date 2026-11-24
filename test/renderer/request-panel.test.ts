@@ -4,9 +4,11 @@ import test from "node:test";
 import { parseManualRequestPort } from "../../src/shared/manual-request";
 import { workspaceGroups } from "../../src/renderer/workspace-navigation";
 
-test("workspace navigation exposes request debugging and request history", () => {
-  assert.deepEqual(workspaceGroups.debug.items.map((item) => item.route), ["debug", "history"]);
-  assert.deepEqual(workspaceGroups.debug.items.map((item) => item.label), ["请求调试", "请求历史"]);
+test("workspace navigation places request debugging under the workbench and removes request history", () => {
+  assert.deepEqual(workspaceGroups.run.items.map((item) => item.route), ["workbench", "debug", "activity"]);
+  assert.deepEqual(workspaceGroups.run.items.map((item) => item.label), ["工作台", "请求调试", "活动"]);
+  assert.equal("debug" in workspaceGroups, false);
+  assert.doesNotMatch(JSON.stringify(workspaceGroups), /请求历史/);
 });
 
 test("request page keeps endpoint fields, parameters and responses in the new workspace layout", async () => {
@@ -54,7 +56,8 @@ test("workspace header owns the page title instead of repeating it inside the re
     readFile("src/renderer/App.tsx", "utf8"),
     readFile("src/renderer/components/RequestPage.tsx", "utf8"),
   ]);
-  assert.match(appSource, /<WorkspacePageHeader eyebrow="Debug · Request" title="请求调试"/);
+  assert.match(appSource, /<WorkspacePageHeader eyebrow="Runtime · Request" title="请求调试"/);
+  assert.doesNotMatch(appSource, /请求历史/);
   assert.doesNotMatch(requestSource, /<WorkspacePageHeader/);
   assert.doesNotMatch(requestSource, /<h1>/);
   assert.doesNotMatch(appSource, /<header className="topbar">/);

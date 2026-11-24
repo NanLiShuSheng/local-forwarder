@@ -1,11 +1,9 @@
-export type WorkspaceGroupKey = "run" | "debug" | "data" | "build" | "tools" | "settings";
+export type WorkspaceGroupKey = "run" | "data" | "build" | "tools" | "settings";
 
 export type WorkspaceRoute =
   | "workbench"
-  | "environment"
   | "activity"
   | "debug"
-  | "history"
   | "session"
   | "kv"
   | "files"
@@ -115,32 +113,17 @@ export const workspaceGroups: Record<WorkspaceGroupKey, WorkspaceGroup> = {
     key: "run",
     label: "运行",
     title: "运行",
-    subtitle: "环境、状态与实时活动",
+    subtitle: "环境、请求与实时活动",
     eyebrow: "Runtime",
     section: "工作区",
     icon: "workbench",
     items: [
       { route: "workbench", label: "工作台", icon: "workbench" },
-      { route: "environment", label: "环境", icon: "environment" },
+      { route: "debug", label: "请求调试", icon: "debug" },
       { route: "activity", label: "活动", icon: "activity" },
     ],
     noteTitle: "当前环境",
     note: "当前环境的监听地址、请求量和最近事件会同步刷新。",
-  },
-  debug: {
-    key: "debug",
-    label: "调试",
-    title: "调试",
-    subtitle: "请求、应答与调用记录",
-    eyebrow: "Debug",
-    section: "请求",
-    icon: "debug",
-    items: [
-      { route: "debug", label: "请求调试", icon: "debug" },
-      { route: "history", label: "请求历史", icon: "history" },
-    ],
-    noteTitle: "快捷发送",
-    note: "在请求页按 ⌘ ↵ 发送当前请求，⌘ J 随时打开日志控制台。",
   },
   data: {
     key: "data",
@@ -154,10 +137,10 @@ export const workspaceGroups: Record<WorkspaceGroupKey, WorkspaceGroup> = {
       { route: "session", label: "登录缓存", icon: "session" },
       { route: "kv", label: "本地缓存", icon: "kv" },
       { route: "files", label: "文件缓存", icon: "files" },
-      { route: "variables", label: "工作区变量", icon: "variables" },
+      { route: "variables", label: "本地变量", icon: "variables" },
     ],
     noteTitle: "作用域",
-    note: "登录缓存、本地缓存和文件缓存属于当前环境；工作区变量全局共享。",
+    note: "登录缓存、本地缓存和文件缓存属于当前环境；本地变量全局共享。",
   },
   build: {
     key: "build",
@@ -188,7 +171,7 @@ export const workspaceGroups: Record<WorkspaceGroupKey, WorkspaceGroup> = {
       { route: "string", label: "字符串处理", icon: "string" },
     ],
     noteTitle: "就地打开",
-    note: "按 ⌘5 快速打开日志；应答和日志里的 JSON 可以直接进入工具页。",
+    note: "按 ⌘4 快速打开日志；应答和日志里的 JSON 可以直接进入工具页。",
   },
   settings: {
     key: "settings",
@@ -208,14 +191,12 @@ export const workspaceGroups: Record<WorkspaceGroupKey, WorkspaceGroup> = {
   },
 };
 
-export const workspaceRailGroups: WorkspaceGroupKey[] = ["run", "debug", "data", "build", "tools"];
+export const workspaceRailGroups: WorkspaceGroupKey[] = ["run", "data", "build", "tools"];
 
 export const workspaceRouteMeta: Record<WorkspaceRoute, { group: WorkspaceGroupKey }> = {
   workbench: { group: "run" },
-  environment: { group: "run" },
   activity: { group: "run" },
-  debug: { group: "debug" },
-  history: { group: "debug" },
+  debug: { group: "run" },
   session: { group: "data" },
   kv: { group: "data" },
   files: { group: "data" },
