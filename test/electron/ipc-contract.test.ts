@@ -7,6 +7,7 @@ test("IPC channels expose stable runtime commands", () => {
   assert.deepEqual(IPC_CHANNELS, {
     getConfig: "config:get",
     getAppVersion: "app:version:get",
+    openOfficialWebsite: "app:official-website:open",
     getUpdateState: "update:state:get",
     checkForUpdates: "update:check",
     downloadUpdate: "update:download",

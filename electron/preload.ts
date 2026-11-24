@@ -4,6 +4,7 @@ import type { AppConfig, DecryptionDirectoryKind, DecryptionPreferencesPatch, De
 const IPC_CHANNELS = {
   getConfig: "config:get",
   getAppVersion: "app:version:get",
+  openOfficialWebsite: "app:official-website:open",
   getUpdateState: "update:state:get",
   checkForUpdates: "update:check",
   downloadUpdate: "update:download",
@@ -52,6 +53,7 @@ const IPC_CHANNELS = {
 const api: ForwarderApi = {
   getConfig: () => ipcRenderer.invoke(IPC_CHANNELS.getConfig),
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),
+  openOfficialWebsite: () => ipcRenderer.invoke(IPC_CHANNELS.openOfficialWebsite),
   getUpdateState: () => ipcRenderer.invoke(IPC_CHANNELS.getUpdateState),
   checkForUpdates: () => ipcRenderer.invoke(IPC_CHANNELS.checkForUpdates),
   downloadUpdate: () => ipcRenderer.invoke(IPC_CHANNELS.downloadUpdate),

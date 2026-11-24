@@ -4,10 +4,10 @@
 
   const versionNodes = [...document.querySelectorAll("[data-version]")];
   const windowsLink = document.querySelector('[data-download="windows"]');
-  const macIntelLink = document.querySelector('[data-download="mac-intel"]');
-  const macArm64Link = document.querySelector('[data-download="mac-arm64"]');
   const downloadStatus = document.querySelector("[data-download-status]");
   const nav = document.querySelector("[data-nav]");
+  const reduceMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const prefersReducedMotion = () => reduceMotionQuery.matches;
 
   const setVersion = (version) => {
     if (!version) return;
@@ -72,18 +72,6 @@
     return { version, fileName: fileName.trim(), releaseDate };
   };
 
-  const parseMacManifest = (text) => {
-    const manifest = JSON.parse(text);
-    const files = Array.isArray(manifest.files) ? manifest.files : [];
-    if (!manifest.version || files.length === 0) throw new Error("Invalid mac-update.json");
-    return {
-      version: String(manifest.version),
-      releaseDate: manifest.releaseDate,
-      intel: files.find((file) => file.arch === "x64"),
-      arm64: files.find((file) => file.arch === "arm64"),
-    };
-  };
-
   const formatReleaseDate = (value) => {
     if (!value) return "";
     const date = new Date(value);
@@ -107,92 +95,170 @@
   };
 
   const loadDownloads = async () => {
-    const [windowsResult, macResult] = await Promise.allSettled([
-      fetchText("latest.yml"),
-      fetchText("mac-update.json"),
-    ]);
+    try {
+      const windowsManifest = parseWindowsManifest(await fetchText("latest.yml"));
+      setVersion(windowsManifest.version);
+      setLinkReady(
+        windowsLink,
+        resolveAssetUrl(windowsManifest.fileName),
+        "下载 Windows x64 安装包",
+      );
+      windowsLink?.setAttribute("download", "");
 
-    let windowsManifest = null;
-    let macManifest = null;
-
-    if (windowsResult.status === "fulfilled") {
-      try {
-        windowsManifest = parseWindowsManifest(windowsResult.value);
-        setVersion(windowsManifest.version);
-        setLinkReady(
-          windowsLink,
-          resolveAssetUrl(windowsManifest.fileName),
-          "下载 Windows x64 安装包",
-        );
-        windowsLink?.setAttribute("download", "");
-      } catch {
-        setLinkUnavailable(windowsLink, "Windows 版本信息不可用");
-      }
-    } else {
-      setLinkUnavailable(windowsLink, "Windows 版本读取失败");
-    }
-
-    if (macResult.status === "fulfilled") {
-      try {
-        macManifest = parseMacManifest(macResult.value);
-        setVersion(macManifest.version);
-
-        if (macManifest.intel?.name) {
-          setLinkReady(
-            macIntelLink,
-            resolveAssetUrl(macManifest.intel.name),
-            "DMG · Intel 安装包",
-          );
-          macIntelLink?.setAttribute("download", "");
-        } else {
-          setLinkUnavailable(macIntelLink, "Intel 安装包不可用");
-        }
-
-        if (macManifest.arm64?.name) {
-          setLinkReady(
-            macArm64Link,
-            resolveAssetUrl(macManifest.arm64.name),
-            "DMG · Apple Silicon",
-          );
-          macArm64Link?.setAttribute("download", "");
-        } else {
-          setLinkUnavailable(macArm64Link, "Apple Silicon 安装包不可用");
-        }
-      } catch {
-        setLinkUnavailable(macIntelLink, "Intel 安装包读取失败");
-        setLinkUnavailable(macArm64Link, "Apple Silicon 读取失败");
-      }
-    } else {
-      setLinkUnavailable(macIntelLink, "Intel 安装包读取失败");
-      setLinkUnavailable(macArm64Link, "Apple Silicon 读取失败");
-    }
-
-    const versions = [windowsManifest?.version, macManifest?.version].filter(Boolean);
-    if (versions.length > 0) {
-      setVersion(versions[0]);
-    } else {
+      const releaseDate = formatReleaseDate(windowsManifest.releaseDate);
+      setStatus(
+        releaseDate
+          ? `最新 Windows 版本已就绪 · 发布于 ${releaseDate}`
+          : "最新 Windows 版本已就绪",
+      );
+    } catch {
       versionNodes.forEach((node) => {
         node.textContent = VERSION_PLACEHOLDER;
       });
+      setLinkUnavailable(windowsLink, "Windows 版本读取失败");
+      setStatus("无法读取最新版本信息，请稍后刷新页面", true);
     }
-
-    const releaseDate = formatReleaseDate(windowsManifest?.releaseDate ?? macManifest?.releaseDate);
-    if (windowsManifest && macManifest) {
-      setStatus(releaseDate ? `最新版本已就绪 · 发布于 ${releaseDate}` : "最新版本已就绪");
-      return;
-    }
-    if (windowsManifest || macManifest) {
-      setStatus("部分平台信息暂不可用，请刷新页面重试", true);
-      return;
-    }
-    setStatus("无法读取最新版本信息，请稍后刷新页面", true);
   };
 
-  const setNavState = () => {
-    nav?.classList.toggle("is-scrolled", window.scrollY > 12);
+  const setupImageLoadState = () => {
+    const images = document.querySelectorAll(
+      ".page-download .product-screen img, .page-download .scene-window img, .page-download .latest-window img",
+    );
+
+    images.forEach((image) => {
+      const markLoaded = () => image.classList.add("is-loaded");
+      if (image.complete) {
+        markLoaded();
+        return;
+      }
+      image.addEventListener("load", markLoaded, { once: true });
+      image.addEventListener("error", markLoaded, { once: true });
+    });
   };
 
-  setNavState();
-  window.addEventListener("scroll", setNavState, { passive: true });
-  loadDownloads().catch(() => setStatus("无法读取最新版本信息，请稍后刷新页面", true));
+  const setupReveals = () => {
+    const nodes = [...document.querySelectorAll("[data-reveal]")];
+    if (nodes.length === 0) return;
+
+    const showAll = () => {
+      nodes.forEach((node) => node.classList.add("is-revealed"));
+    };
+
+    if (prefersReducedMotion() || !("IntersectionObserver" in window)) {
+      showAll();
+      return;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-revealed");
+          return;
+        }
+        if (entry.boundingClientRect.top > 0 || entry.boundingClientRect.bottom < 0) {
+          entry.target.classList.remove("is-revealed");
+        }
+      });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+
+    nodes.forEach((node) => observer.observe(node));
+    reduceMotionQuery.addEventListener?.("change", (event) => {
+      if (!event.matches) return;
+      observer.disconnect();
+      showAll();
+    });
+  };
+
+  const setupPointerParallax = () => {
+    const host = document.querySelector("[data-pointer-parallax]");
+    const frame = host?.querySelector(".product-frame");
+    if (!host || !frame) return;
+
+    let frameRequest = 0;
+    let pointerX = 0;
+    let pointerY = 0;
+
+    const clamp = (value) => Math.max(-1, Math.min(1, value));
+
+    const render = () => {
+      frameRequest = 0;
+      frame.style.setProperty("--frame-rotate-y", `${(pointerX * 2.4).toFixed(2)}deg`);
+      frame.style.setProperty("--frame-rotate-x", `${(-pointerY * 1.6).toFixed(2)}deg`);
+      frame.style.setProperty("--frame-shift-x", `${(pointerX * 4).toFixed(2)}px`);
+      frame.style.setProperty("--frame-shift-y", `${(pointerY * 3).toFixed(2)}px`);
+    };
+
+    const scheduleRender = () => {
+      if (frameRequest) return;
+      frameRequest = window.requestAnimationFrame(render);
+    };
+
+    const reset = () => {
+      if (frameRequest) window.cancelAnimationFrame(frameRequest);
+      frameRequest = 0;
+      pointerX = 0;
+      pointerY = 0;
+      frame.style.removeProperty("--frame-rotate-y");
+      frame.style.removeProperty("--frame-rotate-x");
+      frame.style.removeProperty("--frame-shift-x");
+      frame.style.removeProperty("--frame-shift-y");
+    };
+
+    host.addEventListener("pointermove", (event) => {
+      if (prefersReducedMotion() || event.pointerType === "touch") return;
+      const bounds = host.getBoundingClientRect();
+      pointerX = clamp(((event.clientX - bounds.left) / bounds.width - 0.5) * 2);
+      pointerY = clamp(((event.clientY - bounds.top) / bounds.height - 0.5) * 2);
+      scheduleRender();
+    }, { passive: true });
+
+    host.addEventListener("pointerleave", reset);
+    reduceMotionQuery.addEventListener?.("change", (event) => {
+      if (event.matches) reset();
+    });
+  };
+
+  const setupNav = () => {
+    const links = [...document.querySelectorAll(".nav-links a[href^='#']")];
+    const sections = links
+      .map((link) => ({ link, section: document.querySelector(link.getAttribute("href")) }))
+      .filter((item) => item.section);
+    let frameRequest = 0;
+
+    const update = () => {
+      frameRequest = 0;
+      nav?.classList.toggle("is-scrolled", window.scrollY > 12);
+      if (sections.length === 0) return;
+
+      const marker = window.scrollY + window.innerHeight * 0.7;
+      let activeLink = null;
+      sections.forEach(({ link, section }) => {
+        const sectionTop = section.getBoundingClientRect().top + window.scrollY;
+        if (sectionTop <= marker) activeLink = link;
+      });
+
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 8) {
+        activeLink = sections[sections.length - 1].link;
+      }
+
+      links.forEach((link) => {
+        link.classList.toggle("is-active", link === activeLink);
+      });
+    };
+
+    const requestUpdate = () => {
+      if (frameRequest) return;
+      frameRequest = window.requestAnimationFrame(update);
+    };
+
+    window.addEventListener("scroll", requestUpdate, { passive: true });
+    window.addEventListener("resize", requestUpdate, { passive: true });
+    update();
+  };
+
+  setupImageLoadState();
+  setupReveals();
+  setupPointerParallax();
+  setupNav();
+  loadDownloads();
 })();

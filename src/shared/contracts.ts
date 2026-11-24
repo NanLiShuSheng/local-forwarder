@@ -256,6 +256,7 @@ export interface DecryptionProgress {
 export interface ForwarderApi {
   getConfig(): Promise<AppConfig>;
   getAppVersion(): Promise<string>;
+  openOfficialWebsite(): Promise<void>;
   getUpdateState(): Promise<UpdateState>;
   checkForUpdates(): Promise<UpdateOperationResult>;
   downloadUpdate(): Promise<UpdateOperationResult>;
@@ -304,6 +305,7 @@ export interface ForwarderApi {
 export const IPC_CHANNELS = {
   getConfig: "config:get",
   getAppVersion: "app:version:get",
+  openOfficialWebsite: "app:official-website:open",
   getUpdateState: "update:state:get",
   checkForUpdates: "update:check",
   downloadUpdate: "update:download",

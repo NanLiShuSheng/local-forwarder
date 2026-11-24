@@ -208,9 +208,10 @@ export interface WorkspaceStatusbarProps {
   version: string;
   dockOpen: boolean;
   onToggleDock: () => void;
+  onOpenOfficialWebsite: () => void;
 }
 
-export function WorkspaceStatusbar({ selectedInstance, fallbackStatus, logCount, version, dockOpen, onToggleDock }: WorkspaceStatusbarProps) {
+export function WorkspaceStatusbar({ selectedInstance, fallbackStatus, logCount, version, dockOpen, onToggleDock, onOpenOfficialWebsite }: WorkspaceStatusbarProps) {
   const status = selectedStatus(selectedInstance, fallbackStatus);
   const address = selectedInstance === undefined ? "—" : `:${selectedInstance.port}`;
   return <footer className="lf-statusbar">
@@ -222,6 +223,7 @@ export function WorkspaceStatusbar({ selectedInstance, fallbackStatus, logCount,
     <div className="lf-status-spacer" />
     <button className={`lf-status-dock-button ${dockOpen ? "active" : ""}`} type="button" onClick={onToggleDock}>{dockOpen ? "收起控制台" : `日志控制台 ${logCount > 99 ? "99+" : logCount}`} <kbd>{formatShortcut("J")}</kbd></button>
     <span className="lf-status-item">v{version || "—"}</span>
+    <button className="lf-status-site" type="button" title="打开官网" aria-label="打开 Local Forwarder 官网" onClick={onOpenOfficialWebsite}><WorkspaceIcon name="external-link" className="lf-icon lf-icon-sm" /><span>官网首页</span></button>
   </footer>;
 }
 

@@ -22,6 +22,7 @@ import { createMacManualUpdateAdapter, createMacUpdateUrls } from "./mac-manual-
 const IPC_CHANNELS = {
   getConfig: "config:get",
   getAppVersion: "app:version:get",
+  openOfficialWebsite: "app:official-website:open",
   getUpdateState: "update:state:get",
   checkForUpdates: "update:check",
   downloadUpdate: "update:download",
@@ -67,6 +68,7 @@ const IPC_CHANNELS = {
   clearLogs: "runtime:logs:clear",
 } as const;
 
+const OFFICIAL_WEBSITE_URL = "https://www.finbr.asia/";
 const smokeMode = process.argv.includes("--smoke");
 const macUpdateUrls = createMacUpdateUrls();
 let manager: ForwardingServiceManager;
@@ -98,6 +100,7 @@ async function getExistingDirectoryPath(value: string | undefined): Promise<stri
 function registerIpcHandlers(policy: RendererSecurityPolicy): void {
   registerIpcHandler(policy, IPC_CHANNELS.getConfig, () => manager.getConfig());
   registerIpcHandler(policy, IPC_CHANNELS.getAppVersion, () => app.getVersion());
+  registerIpcHandler(policy, IPC_CHANNELS.openOfficialWebsite, () => shell.openExternal(OFFICIAL_WEBSITE_URL));
   registerIpcHandler(policy, IPC_CHANNELS.getUpdateState, () => getCurrentUpdateState());
   registerIpcHandler(policy, IPC_CHANNELS.checkForUpdates, () => updateService?.check() ?? { ok: true, skipped: true });
   registerIpcHandler(policy, IPC_CHANNELS.downloadUpdate, () => updateService?.download() ?? { ok: true, skipped: true });

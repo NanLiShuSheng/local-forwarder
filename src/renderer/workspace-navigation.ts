@@ -52,6 +52,7 @@ export type WorkspaceIconName =
   | "trash"
   | "refresh"
   | "more"
+  | "external-link"
   | "arrow-right";
 
 export const workspaceIconPaths: Record<WorkspaceIconName, string[]> = {
@@ -87,6 +88,7 @@ export const workspaceIconPaths: Record<WorkspaceIconName, string[]> = {
   trash: ["M4 7h16", "M9 7V4h6v3", "M6 7l1 13h10l1-13", "M10 11v5", "M14 11v5"],
   refresh: ["M20 7v5h-5", "M4 17v-5h5", "M6.1 8.5A7 7 0 0 1 19 12", "M17.9 15.5A7 7 0 0 1 5 12"],
   more: ["M6 12h.01", "M12 12h.01", "M18 12h.01"],
+  "external-link": ["M14 4h6v6", "M20 4 11 13", "M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"],
   "arrow-right": ["M5 12h14", "m14 7 5 5-5 5"],
 };
 

@@ -8,6 +8,7 @@ import { BUILD_TASK_HISTORY_LIMIT, getBuildTaskHistoryStorage, readBuildTaskHist
 import { DataBrowserPage } from "./components/DataBrowserPage";
 import { JsonPreviewPage } from "./components/JsonPreviewPage";
 import { LogPanel } from "./components/LogPanel";
+import { RequestHistoryMenu } from "./components/RequestHistoryMenu";
 import { RequestPage } from "./components/RequestPage";
 import { StringToolPage } from "./components/StringToolPage";
 import { ToastProvider, useToast } from "./components/ToastProvider";
@@ -16,6 +17,7 @@ import { UpdateCard } from "./components/UpdateCard";
 import { CommandPalette, WorkspaceContext, WorkspaceDock, WorkspaceIcon, WorkspaceRail, WorkspaceStatusbar, WorkspaceTitlebar, type DockTab, type WorkspaceCommand } from "./components/WorkspaceChrome";
 import { AdvancedSettingsPage, ActivityPage, BuildJobsPage, UpdateSettingsPage, WorkbenchPage, WorkspacePageHeader, type BuildTask } from "./components/WorkspacePages";
 import { loginCacheCustomerSummary } from "./login-cache-data";
+import { getRequestHistoryStorage, readRequestHistory, rememberRequestHistory, writeRequestHistory, type RequestHistoryEntry } from "./request-history";
 import { getUpdateDismissalStorage, readDismissedUpdateVersion, writeDismissedUpdateVersion } from "./update-dismissal";
 import { createManualCheckTracker, createUpdateStateSynchronizer, resolveManualCheckResult } from "./update-state";
 import { useTheme } from "./useTheme";
@@ -87,6 +89,8 @@ function AppContent() {
   const [status, setStatus] = useState(initialStatus);
   const [instances, setInstances] = useState<ProxyInstanceSummary[]>([]);
   const [config, setConfig] = useState(initialConfig);
+  const requestHistoryStorage = useMemo(() => getRequestHistoryStorage(), []);
+  const [requestHistory, setRequestHistory] = useState<RequestHistoryEntry[]>(() => readRequestHistory(requestHistoryStorage));
   const [loginCache, setLoginCache] = useState<Record<string, string>>({});
   const [loginSuccessNotice, setLoginSuccessNotice] = useState<LoginSuccessNotice>();
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -136,6 +140,10 @@ function AppContent() {
   useEffect(() => {
     writeBuildTaskHistory(getBuildTaskHistoryStorage(), buildTasks);
   }, [buildTasks]);
+
+  useEffect(() => {
+    writeRequestHistory(requestHistoryStorage, requestHistory);
+  }, [requestHistory, requestHistoryStorage]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -480,6 +488,7 @@ function AppContent() {
   };
 
   const sendRequest = async (request: ManualRequestConfig): Promise<ManualRequestResponse> => {
+    setRequestHistory((current) => rememberRequestHistory(current, request));
     const result = await window.forwarder.sendRequest(request);
     if (!result.ok) notifyError(result.error ?? "请求失败", "请求失败");
     else {
@@ -498,9 +507,20 @@ function AppContent() {
     return result;
   };
 
+  const restoreRequestHistoryEntry = async (entry: RequestHistoryEntry) => {
+    const restored = await save({ ...config, request: entry.request });
+    if (restored) notify({ kind: "success", message: "已恢复请求填充，未自动发送" });
+    return restored;
+  };
+
   const openLoginCache = () => {
     setLoginSuccessNotice(undefined);
     navigate("session");
+  };
+  const openOfficialWebsite = () => {
+    void window.forwarder.openOfficialWebsite().catch((cause) => {
+      notifyError(cause, "无法打开官网");
+    });
   };
 
   const selectedInstance = instances.find((instance) => instance.selected) ?? instances[0];
@@ -588,7 +608,7 @@ function AppContent() {
 
           <PagePane active={route === "debug"}>
             <section className="lf-view-body lf-debug-view">
-              <WorkspacePageHeader eyebrow="Runtime · Request" title="请求调试" badge={<span className="lf-scope-pill"><span className={`lf-status-dot ${selectedInstance?.status.state === "running" ? "running" : "stopped"}`} />当前环境 <strong>{selectedInstance?.name ?? "—"}</strong></span>} description="目标由当前环境提供，支持 TZT TCP 与 HTTP /reqxml；应答和日志在同一个工作区内查看。" />
+              <WorkspacePageHeader eyebrow="Runtime · Request" title="请求调试" badge={<span className="lf-scope-pill"><span className={`lf-status-dot ${selectedInstance?.status.state === "running" ? "running" : "stopped"}`} />当前环境 <strong>{selectedInstance?.name ?? "—"}</strong></span>} description="目标由当前环境提供，支持 TZT TCP 与 HTTP /reqxml；应答和日志在同一个工作区内查看。" actions={<RequestHistoryMenu history={requestHistory} currentRequest={config.request} onRestore={restoreRequestHistoryEntry} />} />
               <RequestPage config={config} active={route === "debug"} onChange={save} onSendRequest={sendRequest} onFillJson={fillJsonPreview} onOpenSession={() => navigate("session")} />
             </section>
           </PagePane>
@@ -633,7 +653,7 @@ function AppContent() {
         {dockOpen && <WorkspaceDock logs={logs} selected={selectedLog} tab={dockTab} onTabChange={setDockTab} onSelectLog={setSelectedLog} onClear={() => { void clearLogs(); }} onClose={() => setDockOpen(false)} onFillJson={fillJsonPreview} />}
       </div>
     </div>
-    <WorkspaceStatusbar selectedInstance={selectedInstance} fallbackStatus={status} logCount={logs.length} version={appVersion || updateState.currentVersion} dockOpen={dockOpen} onToggleDock={() => setDockOpen((current) => !current)} />
+    <WorkspaceStatusbar selectedInstance={selectedInstance} fallbackStatus={status} logCount={logs.length} version={appVersion || updateState.currentVersion} dockOpen={dockOpen} onToggleDock={() => setDockOpen((current) => !current)} onOpenOfficialWebsite={openOfficialWebsite} />
     <CommandPalette open={commandOpen} commands={commands} onClose={() => setCommandOpen(false)} />
     {loginSuccessNotice !== undefined && <LoginSuccessCard notice={loginSuccessNotice} onClose={() => setLoginSuccessNotice(undefined)} onOpenCache={openLoginCache} />}
     <UpdateCard state={updateState} dismissedVersion={dismissedUpdateVersion} hiddenDuringDownloadVersion={hiddenDownloadVersion} onDownload={downloadUpdate} onInstall={installUpdate} onDismiss={dismissUpdate} />

@@ -2,13 +2,13 @@
 
 官网源码位于 `website/`，通过腾讯云 Caddy 直接提供静态文件：
 
-- 页面入口：`https://www.finbr.asia/`
-- 完整下载页：`https://www.finbr.asia/local/download/`（保留 macOS 下载；根首页仅开放 Windows 下载）
+- 生产首页：`https://www.finbr.asia/`（主下载入口，仅开放 Windows 下载；macOS 入口为不可用状态）
+- 兼容入口：`https://www.finbr.asia/local/download/`（与生产首页内容一致，不再作为独立发布目标）
 - 静态根目录：`/srv/local-forwarder-updates/public`
 - 更新清单：`https://www.finbr.asia/local-forwarder/latest.yml`
 - macOS 清单：`https://www.finbr.asia/local-forwarder/mac-update.json`
 
-页面运行时会读取以上两个清单，动态展示最新版本号、Windows 安装包和两种 macOS DMG 下载地址。站点不提供历史版本入口。
+页面运行时会读取 `latest.yml`，动态展示最新 Windows 版本号与安装包；macOS 入口保持禁用。站点不提供历史版本入口。
 
 ## 部署
 
@@ -30,13 +30,15 @@ TENCENT_SSH_KEY=/Users/hdw/.ssh/finbr_update_deploy_20261114_ed25519 \
 - `website/favicon.svg`：浏览器 Tab 图标源文件
 - `website/favicon-32.png`：PNG fallback
 - `website/apple-touch-icon.png`：Safari / iOS 图标
-- `website/assets/app-overview.png`：首屏产品截图
-- `website/assets/app-request.png`：请求工作台截图
+- `website/assets/app-workbench-prototype.png`：首屏工作台白板原型图
+- `website/assets/app-request-prototype.png`：请求调试白板原型图
+- `website/assets/app-cache-prototype.png`：action100/104/105 请求缓存白板原型图
 
 部署后应确认：
 
-- 首页、favicon 和产品截图返回 `200`
-- `/local/download/` 返回 `200`，且样式、脚本、图片和 macOS 下载入口正常
-- 页面显示线上最新版本，三个下载地址与更新清单一致
+- 生产首页、favicon 和三张白板原型图返回 `200`
+- 首页在 1440 / 768 / 390 宽度下无横向溢出，三张原型图保持 16:10 且不被裁切
+- `/local/download/` 作为兼容入口返回 `200`，内容与生产首页一致
+- 页面显示线上最新版本，Windows 下载地址与 `latest.yml` 一致
 - `latest.yml`、`latest-mac.yml`、`mac-update.json` 保持 `Cache-Control: no-store`
 - 安装包 Range 请求返回 `206 Partial Content`
