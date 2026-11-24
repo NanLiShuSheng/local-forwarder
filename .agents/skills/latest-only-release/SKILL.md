@@ -1,9 +1,48 @@
 ---
 name: latest-only-release
-description: 当发布 Local Forwarder 安装包、修改更新检查或下载流程，或排查重复升级、腾讯云更新目录残留中间版本时使用。
+description: 当用户说“发布”或“发布全版本”，或需要发布 Local Forwarder 安装包、修改更新检查或下载流程、排查重复升级和腾讯云更新目录残留中间版本时使用。
 ---
 
 # Local Forwarder 最新版本发布
+
+## 发布口令
+
+“发布”和“发布全版本”都是完整发布流程：版本号递增、验证、提交并推送、构建、上传腾讯云。不要只构建不上传，也不要在推送成功前发布。
+
+- **发布**：只发布 Windows x64。
+- **发布全版本**：发布 Windows x64 + macOS x64/arm64。
+
+每次发布都把 `package.json` 和 `package-lock.json` 的版本号增加 `0.0.2`，例如 `2.0.7` → `2.0.9`。不要按常规只增加 `0.0.1`。
+
+### 执行顺序
+
+1. 检查工作区，确认本次要提交的改动。
+2. 递增版本号：
+
+   ```bash
+   new_version="$(node -e 'const v=require("./package.json").version.split(".").map(Number); v[2]+=2; process.stdout.write(v.join("."))')"
+   npm version "$new_version" --no-git-tag-version --force
+   ```
+
+3. 运行 `npm test`；失败时停止，不提交、不发布。
+4. 提交发布相关改动并推送到 `origin` 当前分支；推送失败时停止。
+5. 构建并校验发布资产：
+   - “发布”：`npm run package:release:win:x64`
+   - “发布全版本”：先运行 `npm run package:release:win:x64`，再运行 `npm run package:release:mac:x64-arm64`
+6. 把本次平台对应的当前版本资产复制到独立暂存目录，再运行 `scripts/publish-tencent.sh <staging-dir>`。
+
+### 腾讯云资产范围
+
+- “发布”只上传当前版本的 `Local-Forwarder-Setup-<version>.exe`、同版本 `.exe.blockmap` 和 `latest.yml`。暂存目录不要放 `latest-mac.yml`、`mac-update.json`、DMG 或 ZIP。
+- “发布全版本”额外上传当前版本的 Intel/Apple Silicon DMG、macOS ZIP 及其 `.blockmap`、`latest-mac.yml` 和 `mac-update.json`。
+- 只上传当前版本文件，避免旧版本进入暂存目录；服务端脚本会按线上清单清理旧资产。
+- 发布 Windows 单平台时，不要删除腾讯云上仍由 `latest-mac.yml` 或 `mac-update.json` 引用的 macOS 文件。
+
+### 边界
+
+- 发布口令不创建或推送 `v*` Tag，也不创建 GitHub Release；Tag 会触发 `.github/workflows/release.yml` 发布全平台。
+- 不部署官网，除非用户明确要求。
+- 腾讯云凭据缺失或发布脚本失败时停止并报告；不得跳过验证或伪造发布成功。
 
 ## 目标
 
@@ -34,4 +73,9 @@ node --import tsx --test test/electron/update-service.test.ts
 node --import tsx --test test/electron/release-script-contract.test.ts
 ```
 
-发布前确认 `latest.yml`、`latest-mac.yml` 和 `mac-update.json` 都指向同一个待发布版本；发布后确认目标版本文件存在，旧版本安装包已删除。
+发布前按口令检查：
+
+- “发布”：只确认 `latest.yml` 与 Windows 安装器版本一致；线上 macOS 清单和资产保持原样。
+- “发布全版本”：确认 `latest.yml`、`latest-mac.yml` 和 `mac-update.json` 都指向同一个待发布版本。
+
+发布后确认目标版本文件存在，本次未发布的平台仍可下载，旧版本安装包已按线上清单清理。

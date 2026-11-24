@@ -14,7 +14,6 @@ import { loginCacheCustomerSummary } from "../login-cache-data";
 import { LogRowLabel } from "./LogPanel";
 import { orderProxyInstancesForDisplay } from "./ProxyInstanceSidebar";
 
-export type SaveState = "saved" | "saving" | "error";
 export type DockTab = "logs" | "cache" | "request";
 
 export function WorkspaceIcon({ name, className = "lf-icon" }: { name: WorkspaceIconName; className?: string }) {
@@ -63,7 +62,6 @@ export interface WorkspaceTitlebarProps {
   loginCache: Record<string, string>;
   theme: ResolvedTheme;
   appVersion: string;
-  saveState: SaveState;
   updateState: UpdateState;
   environmentOpen: boolean;
   onToggleEnvironment: () => void;
@@ -84,7 +82,6 @@ export function WorkspaceTitlebar({
   loginCache,
   theme,
   appVersion,
-  saveState,
   updateState,
   environmentOpen,
   onToggleEnvironment,
@@ -100,7 +97,6 @@ export function WorkspaceTitlebar({
   const status = selectedStatus(selectedInstance, fallbackStatus);
   const customer = loginCacheCustomerSummary(loginCache);
   const updateAvailable = updateState.state === "available" || updateState.state === "downloaded";
-  const saveCopy = saveState === "saving" ? "正在保存" : saveState === "error" ? "保存失败" : "配置已保存";
   const versionLabel = appVersion || updateState.currentVersion;
   const orderedInstances = useMemo(
     () => orderProxyInstancesForDisplay(instances, instances.map((instance) => instance.id)),
@@ -148,7 +144,6 @@ export function WorkspaceTitlebar({
     </div>
     <div className="lf-titlebar-spacer" />
     <button className="lf-cmd-button" type="button" onClick={onOpenCommand}><WorkspaceIcon name="search" className="lf-icon lf-icon-sm" /><span>搜索环境、页面或命令</span><kbd>⌘</kbd><kbd>K</kbd></button>
-    <span className={`lf-save-state ${saveState}`}><WorkspaceIcon name={saveState === "saving" ? "refresh" : "check"} className="lf-icon" />{saveCopy}</span>
     <button className={`lf-icon-button ${updateAvailable ? "has-update" : ""}`} type="button" title={updateAvailable ? `发现新版本 ${updateState.update?.version ?? ""}` : "检查更新"} onClick={onCheckForUpdates}><WorkspaceIcon name="update" className="lf-icon" />{updateAvailable && <span className="lf-update-dot" />}</button>
     <button className="lf-icon-button" type="button" title={theme === "dark" ? "切换到浅色外观（⌘L）" : "切换到深色外观（⌘L）"} onClick={onToggleTheme}><WorkspaceIcon name={theme === "dark" ? "sun" : "moon"} className="lf-icon" /></button>
     <button className="lf-account-chip" type="button" title={customer.hasCustomer ? `当前登录客户 ${customer.code}` : "查看登录缓存"} onClick={onOpenAccount}>{customer.initial}</button>

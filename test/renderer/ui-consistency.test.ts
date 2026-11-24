@@ -89,3 +89,13 @@ test("the 11px type size is reserved for eyebrow labels", async () => {
   assert.match(styles, /\.app-shell :is\(\.proxy-instance-sidebar-status,[\s\S]*?font-size:\s*var\(--ui-font-xs\)/);
   assert.match(styles, /\.appearance-theme-card-copy > span:not\(\.appearance-theme-card-label\)\s*\{[^}]*font-size:\s*var\(--ui-font-xs\)/);
 });
+
+test("titlebar does not show configuration save status", async () => {
+  const [titlebar, styles] = await Promise.all([
+    readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+
+  assert.doesNotMatch(titlebar, /配置已保存|lf-save-state|saveState/);
+  assert.doesNotMatch(styles, /\.lf-save-state/);
+});

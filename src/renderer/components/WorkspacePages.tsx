@@ -418,7 +418,7 @@ export function BuildJobsPage({ tasks, onOpenBuild, onBackfillTask, onNotify }: 
     onNotify?.("任务记录已导出");
   };
   return <section className="lf-view-body">
-    <WorkspacePageHeader eyebrow="Build · Jobs" title="任务记录" badge={<span className="lf-count-pill">{tasks.length} 条</span>} description="构建任务全局保留；进度、日志和失败文件不会因为切换环境而丢失。" actions={<><button className="lf-btn" type="button" disabled={tasks.length === 0} onClick={exportTasks}>导出记录</button><button className="lf-btn primary" type="button" onClick={onOpenBuild}>新建任务</button></>} />
+    <WorkspacePageHeader eyebrow="Build · Jobs" title="任务记录" badge={<span className="lf-count-pill">{tasks.length} 条</span>} description="最近 20 条构建任务保存在本机；切换环境不会丢失，逐文件日志仅保留在本次运行中。" actions={<><button className="lf-btn" type="button" disabled={tasks.length === 0} onClick={exportTasks}>导出记录</button><button className="lf-btn primary" type="button" onClick={onOpenBuild}>新建任务</button></>} />
     <section className="lf-panel lf-simple-table-panel">
       <div className="lf-simple-toolbar"><div className="lf-filter-chips">{([['all', `全部 ${counts.all}`], ['running', `运行中 ${counts.running}`], ['success', `已完成 ${counts.success}`], ['failed', `失败 ${counts.failed}`]] as const).map(([value, label]) => <button className={`lf-chip ${filter === value ? "active" : ""}`} type="button" key={value} onClick={() => setFilter(value)}>{label}</button>)}</div><div className="lf-toolbar-spacer" /><span className="lf-faint lf-small">全局任务中心</span></div>
       <div className="lf-table-wrap"><table className="lf-data-table"><thead><tr><th>任务</th><th>方向</th><th>模式</th><th>文件</th><th>状态</th><th>开始时间</th><th>耗时</th><th>操作</th></tr></thead><tbody>

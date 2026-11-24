@@ -4,6 +4,7 @@ import type { AppConfig, LogEntry, ManualRequestConfig, ManualRequestResponse, P
 import { responseTextToJsonPreview } from "../shared/json-preview";
 import { AppearancePage } from "./components/AppearancePage";
 import { BuildPage } from "./components/BuildPage";
+import { BUILD_TASK_HISTORY_LIMIT, getBuildTaskHistoryStorage, readBuildTaskHistory, writeBuildTaskHistory } from "./build-task-history";
 import { DataBrowserPage } from "./components/DataBrowserPage";
 import { JsonPreviewPage } from "./components/JsonPreviewPage";
 import { LogPanel } from "./components/LogPanel";
@@ -12,7 +13,7 @@ import { StringToolPage } from "./components/StringToolPage";
 import { ToastProvider, useToast } from "./components/ToastProvider";
 import { UpdateCancelDialog } from "./components/UpdateCancelDialog";
 import { UpdateCard } from "./components/UpdateCard";
-import { CommandPalette, WorkspaceContext, WorkspaceDock, WorkspaceIcon, WorkspaceRail, WorkspaceStatusbar, WorkspaceTitlebar, type DockTab, type SaveState, type WorkspaceCommand } from "./components/WorkspaceChrome";
+import { CommandPalette, WorkspaceContext, WorkspaceDock, WorkspaceIcon, WorkspaceRail, WorkspaceStatusbar, WorkspaceTitlebar, type DockTab, type WorkspaceCommand } from "./components/WorkspaceChrome";
 import { AdvancedSettingsPage, ActivityPage, BuildJobsPage, UpdateSettingsPage, WorkbenchPage, WorkspacePageHeader, type BuildTask } from "./components/WorkspacePages";
 import { loginCacheCustomerSummary } from "./login-cache-data";
 import { getUpdateDismissalStorage, readDismissedUpdateVersion, writeDismissedUpdateVersion } from "./update-dismissal";
@@ -93,8 +94,7 @@ function AppContent() {
   const [dockTab, setDockTab] = useState<DockTab>("logs");
   const [commandOpen, setCommandOpen] = useState(false);
   const [environmentOpen, setEnvironmentOpen] = useState(false);
-  const [saveState, setSaveState] = useState<SaveState>("saved");
-  const [buildTasks, setBuildTasks] = useState<BuildTask[]>([]);
+  const [buildTasks, setBuildTasks] = useState<BuildTask[]>(() => readBuildTaskHistory(getBuildTaskHistoryStorage()));
   const [buildBackfillTask, setBuildBackfillTask] = useState<BuildTask>();
   const [bulkRuntimeAction, setBulkRuntimeAction] = useState<"start" | "stop">();
   const [jsonPrefill, setJsonPrefill] = useState<string>();
@@ -131,6 +131,10 @@ function AppContent() {
     navigate("build");
   }, [navigate]);
   const clearBuildBackfillTask = useCallback(() => setBuildBackfillTask(undefined), []);
+
+  useEffect(() => {
+    writeBuildTaskHistory(getBuildTaskHistoryStorage(), buildTasks);
+  }, [buildTasks]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
@@ -341,29 +345,23 @@ function AppContent() {
   }, [loginSuccessNotice]);
 
   const save = async (nextConfig: AppConfig) => {
-    setSaveState("saving");
     const result = await window.forwarder.saveConfig(nextConfig);
     if (!result.ok) {
-      setSaveState("error");
       notifyError(result.error ?? "配置保存失败", "配置保存失败");
       return false;
     }
     setConfig(nextConfig);
-    setSaveState("saved");
     return true;
   };
 
   const saveLoginCache = async (values: Record<string, string>) => {
-    setSaveState("saving");
     const result = await window.forwarder.saveLoginCache(values);
     if (!result.ok) {
-      setSaveState("error");
       notifyError(result.error ?? "登录缓存保存失败", "登录缓存保存失败");
       return false;
     }
     setLoginCache(values);
     setInstances(await window.forwarder.listProxyInstances());
-    setSaveState("saved");
     return true;
   };
 
@@ -551,7 +549,7 @@ function AppContent() {
     { id: "check-update", label: "检查更新", detail: "立即查询是否有可用版本", group: "设置", run: () => { void checkForUpdates(); } },
     { id: "toggle-theme", label: theme === "dark" ? "切换到浅色外观" : "切换到深色外观", detail: "立即切换工作台配色", group: "设置", shortcut: "⌘L", run: () => setMode(theme === "dark" ? "light" : "dark") },
   ];
-  const createBuildTask = (task: BuildTask) => setBuildTasks((current) => [task, ...current].slice(0, 50));
+  const createBuildTask = (task: BuildTask) => setBuildTasks((current) => [task, ...current].slice(0, BUILD_TASK_HISTORY_LIMIT));
   const updateBuildTask = (id: string, patch: Partial<BuildTask>) => setBuildTasks((current) => current.map((task) => task.id === id ? { ...task, ...patch } : task));
 
   return <main className="app-shell lf-app" data-theme={theme}>
@@ -562,7 +560,6 @@ function AppContent() {
       loginCache={loginCache}
       theme={theme}
       appVersion={appVersion}
-      saveState={saveState}
       updateState={updateState}
       environmentOpen={environmentOpen}
       onToggleEnvironment={() => setEnvironmentOpen((current) => !current)}
