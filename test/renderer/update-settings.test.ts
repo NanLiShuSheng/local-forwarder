@@ -135,5 +135,5 @@ test("appearance page contains only appearance controls while update controls li
   assert.match(updateSource, /停止下载/);
   assert.match(styles, /\.lf-version-card\s*\{/);
   assert.match(styles, /--accent:\s*#0f9f76/);
-  assert.match(styles, /--accent:\s*#4d9375/);
+  assert.match(styles, /--accent:\s*#54c091/);
 });

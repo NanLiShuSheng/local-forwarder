@@ -45,7 +45,7 @@ test("button hover states keep semantic label colors and transition smoothly", a
 
   assert.match(styles, /\.lf-app button\s*\{[^}]*transition:[^}]*color 140ms ease[^}]*\}/s);
   assert.doesNotMatch(neutralHover, /(?:^|;)\s*color:/);
-  assert.match(primaryHover, /color:\s*var\(--text-on-accent\)/);
+  assert.match(primaryHover, /color:\s*var\(--button-primary-text\)/);
   assert.match(dangerHover, /color:\s*var\(--danger\)/);
 });
 

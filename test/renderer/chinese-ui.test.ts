@@ -174,7 +174,7 @@ test("forwarding address and request controls use the shared green light and dar
   assert.match(pageSource, /className="lf-control mono"/);
   assert.match(requestSource, /className="lf-control mono"/);
   assert.match(styleSource, /\.lf-control\s*\{[^}]*color:\s*var\(--text-primary\);[^}]*background:\s*var\(--lf-panel-2\)/);
-  assert.match(styleSource, /\.app-shell\s*\{[\s\S]*?--accent:\s*#4d9375;/);
+  assert.match(styleSource, /\.app-shell\s*\{[\s\S]*?--accent:\s*#54c091;/);
   assert.match(styleSource, /\.app-shell\[data-theme="light"\]\s*\{[\s\S]*?--accent:\s*#0f9f76;/);
   assert.doesNotMatch(styleSource, /#111e32|#e8effa/i);
 });

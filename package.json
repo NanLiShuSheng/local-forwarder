@@ -1,6 +1,6 @@
 {
   "name": "local-forwarder",
-  "version": "2.1.7",
+  "version": "2.1.9",
   "description": "A local HTTP, HTTPS, and TZT forwarding service",
   "author": "Local Forwarder",
   "private": true,

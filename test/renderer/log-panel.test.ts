@@ -474,7 +474,7 @@ test("log panel keeps the request method inside the log detail", () => {
 test("log panel styles the reqxml action number in both themes", async () => {
   const styles = await readFile("src/renderer/styles.css", "utf8");
   assert.match(styles, /\.log-request-action\s*\{[^}]*color:\s*var\(--log-request-action-text\);/);
-  assert.match(styles, /--log-request-action-text:\s*#5eaab5;/);
+  assert.match(styles, /--log-request-action-text:\s*#9bbff2;/);
   assert.match(styles, /\.app-shell\[data-theme="light"\][\s\S]*?--log-request-action-text:\s*#2563eb;/);
 });
 

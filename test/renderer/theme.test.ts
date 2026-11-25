@@ -39,6 +39,7 @@ const themeTokens = [
   "text-muted",
   "text-success",
   "text-accent",
+  "text-action",
   "text-selected",
   "text-description",
   "border-default",
@@ -69,6 +70,10 @@ const themeTokens = [
   "accent-hover",
   "accent-soft",
   "accent-faint",
+  "button-primary-background",
+  "button-primary-hover",
+  "button-primary-text",
+  "button-primary-shadow",
   "success",
   "warning",
   "danger",
@@ -562,22 +567,27 @@ test("themes use the approved green workbench palettes", async () => {
   const lightRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
 
   const darkExpected = {
-    "app-background": "#121212",
-    "sidebar-background": "#161616",
-    "panel-background": "#1a1a1a",
-    "text-primary": "#dbd7ca",
-    "border-default": "#303030",
-    "border-selected": "#4d9375",
-    "selection-border": "#4d9375",
-    "selection-tab-text": "#82b69d",
-    "selection-tab-underline": "#4d9375",
-    "selection-row-text": "#dbd7ca",
-    "selection-row-accent": "#4d9375",
-    "accent": "#4d9375",
-    "accent-hover": "#5da994",
-    "text-accent": "#82b69d",
-    "focus-ring": "#4d9375",
-    "success": "#4d9375",
+    "app-background": "#050505",
+    "sidebar-background": "#080808",
+    "panel-background": "#0d0d0d",
+    "text-primary": "#bdb8ae",
+    "button-primary-background": "#659f87",
+    "button-primary-hover": "#72a791",
+    "button-primary-text": "#06120c",
+    "border-default": "#252525",
+    "border-selected": "#54c091",
+    "selection-border": "#54c091",
+    "selection-tab-text": "#63ad8e",
+    "selection-tab-underline": "#54c091",
+    "selection-row-text": "#bdb8ae",
+    "selection-row-accent": "#54c091",
+    "accent": "#54c091",
+    "accent-hover": "#63ad8e",
+    "text-accent": "#63ad8e",
+    "text-action": "#63ad8e",
+    "text-success": "#63ad8e",
+    "focus-ring": "#54c091",
+    "success": "#54c091",
   };
   const lightExpected = {
     "app-background": "#edf1f5",
@@ -594,6 +604,8 @@ test("themes use the approved green workbench palettes", async () => {
     "accent": "#0f9f76",
     "accent-hover": "#087f5c",
     "text-accent": "#087f5c",
+    "text-action": "#0f9f76",
+    "text-success": "#087f5c",
     "focus-ring": "#087f5c",
     "success": "#0f9f76",
   };
@@ -604,7 +616,23 @@ test("themes use the approved green workbench palettes", async () => {
   assert.match(lightRule, /color-scheme:\s*light/);
 });
 
-test("dark theme uses warm Vitesse surfaces instead of blue slate", async () => {
+test("light theme primary actions use a muted jade fill with softer white text", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+  const lightRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
+  const buttonRule = extractCssRule(source, ".lf-btn.primary");
+  const hoverRule = extractCssRule(source, ".lf-btn.primary:hover:not(:disabled)");
+
+  assert.equal(extractCssToken(lightRule, "button-primary-background"), "#267965");
+  assert.equal(extractCssToken(lightRule, "button-primary-hover"), "#1f6655");
+  assert.equal(extractCssToken(lightRule, "button-primary-text"), "#f5faf7");
+  assert.match(buttonRule, /border-color:\s*var\(--button-primary-background\)/);
+  assert.match(buttonRule, /color:\s*var\(--button-primary-text\)/);
+  assert.match(buttonRule, /background:\s*var\(--button-primary-background\)/);
+  assert.match(buttonRule, /box-shadow:\s*var\(--button-primary-shadow\)/);
+  assert.match(hoverRule, /background:\s*var\(--button-primary-hover\)/);
+});
+
+test("dark theme uses neutral obsidian surfaces with warm text", async () => {
   const source = await readFile("src/renderer/styles.css", "utf8");
   const darkRule = extractCssRule(source, ".app-shell");
   const surfaceTokens = [
@@ -623,11 +651,57 @@ test("dark theme uses warm Vitesse surfaces instead of blue slate", async () => 
 
   for (const token of surfaceTokens) {
     const color = parseCssColor(extractCssToken(darkRule, token));
-    assert.ok(color.red >= color.green && color.green >= color.blue, `${token} must keep a warm neutral hue`);
+    assert.ok(color.red === color.green && color.green === color.blue, `${token} must stay neutral black`);
   }
-  assert.equal(extractCssToken(darkRule, "warning"), "#d4976c");
-  assert.equal(extractCssToken(darkRule, "info"), "#5eaab5");
-  assert.equal(extractCssToken(darkRule, "log-request-action-text"), "#5eaab5");
+  const text = parseCssColor(extractCssToken(darkRule, "text-primary"));
+  assert.ok(text.red > text.green && text.green > text.blue, "text-primary must keep the warm ivory hue");
+  assert.equal(extractCssToken(darkRule, "warning"), "#e4b967");
+  assert.equal(extractCssToken(darkRule, "info"), "#9bbff2");
+  assert.equal(extractCssToken(darkRule, "log-request-action-text"), "#9bbff2");
+});
+
+test("dark theme keeps primary and selected text on one softened warm-ivory level", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+  const darkRule = extractCssRule(source, ".app-shell");
+  const primaryTokens = [
+    "text-primary",
+    "text-bright",
+    "selection-card-text",
+    "selection-row-text",
+    "text-selected",
+    "inverse",
+  ] as const;
+
+  for (const token of primaryTokens) {
+    assert.equal(extractCssToken(darkRule, token), "#bdb8ae", `unexpected dark primary text token: ${token}`);
+  }
+  const text = parseCssColor(extractCssToken(darkRule, "text-primary"));
+  assert.ok(text.red > text.green && text.green > text.blue, "softened dark text must keep the warm ivory hue");
+  const panel = parseCssColor(extractCssToken(darkRule, "panel-background"));
+  assert.ok(contrastRatio(text, panel) >= 9.5, "softened dark text must retain strong readability");
+  assert.match(source, /\.lf-context-head h1\s*\{[^}]*color:\s*var\(--text-primary\)/);
+});
+
+test("dark theme keeps green labels on a softer jade text level", async () => {
+  const source = await readFile("src/renderer/styles.css", "utf8");
+  const darkRule = extractCssRule(source, ".app-shell");
+  const textTokens = [
+    "accent-hover",
+    "text-accent",
+    "text-action",
+    "text-success",
+    "selection-tab-text",
+    "progress-percent-text",
+  ] as const;
+
+  for (const token of textTokens) {
+    assert.equal(extractCssToken(darkRule, token), "#63ad8e", `unexpected dark green text token: ${token}`);
+  }
+  for (const selector of [".lf-text-button", ".lf-popover-foot button", ".lf-metric-sub.good", ".lf-status-site"]) {
+    assert.match(extractCssRule(source, selector), /color:\s*var\(--text-action\)/, `${selector} must use the softer green text level`);
+  }
+  assert.equal(extractCssToken(darkRule, "accent"), "#54c091");
+  assert.equal(extractCssToken(darkRule, "button-primary-hover"), "#72a791");
 });
 
 test("light theme uses white panels, subtle gray surfaces, and green selected states", async () => {
@@ -727,9 +801,9 @@ test("encryption and decryption progress cards use the green workbench palette",
   const decryptionFill = source.match(/^\.decryption-progress-bar span \{[^}]*\}/m)?.[0] ?? "";
   const decryptionStat = extractCssRule(source, ".decryption-stat-grid div");
 
-  assert.equal(extractCssToken(darkRule, "progress-card-border"), "rgb(77 147 117 / 28%)");
-  assert.equal(extractCssToken(darkRule, "progress-track-background"), "#242424");
-  assert.equal(extractCssToken(darkRule, "progress-percent-text"), "#82b69d");
+  assert.equal(extractCssToken(darkRule, "progress-card-border"), "rgb(84 192 145 / 28%)");
+  assert.equal(extractCssToken(darkRule, "progress-track-background"), "#171717");
+  assert.equal(extractCssToken(darkRule, "progress-percent-text"), "#63ad8e");
   assert.equal(extractCssToken(lightRule, "progress-card-border"), "#a9e5d0");
   assert.equal(extractCssToken(lightRule, "progress-track-background"), "#dbe3ec");
   assert.equal(extractCssToken(lightRule, "progress-percent-text"), "#087f5c");
@@ -767,8 +841,8 @@ test("overview config fields use a green-tinted dark surface and a soft light su
   const fieldRule = extractCssRule(source, ".proxy-instance-overview-field");
   const inputRule = source.match(/^\.proxy-instance-overview-field \.overview-config-input \{[^}]*\}/m)?.[0] ?? "";
 
-  assert.match(extractCssToken(darkRule, "overview-field-background"), /radial-gradient\([^;]*rgb\(77 147 117 \/ 7%\)/);
-  assert.match(extractCssToken(darkRule, "overview-field-background"), /linear-gradient\([^;]*#1e1e1e/);
+  assert.match(extractCssToken(darkRule, "overview-field-background"), /radial-gradient\([^;]*rgb\(84 192 145 \/ 7%\)/);
+  assert.match(extractCssToken(darkRule, "overview-field-background"), /linear-gradient\([^;]*#111111/);
   assert.match(extractCssToken(lightRule, "overview-field-background"), /linear-gradient\([^;]*#f7f9fb/);
   assert.match(fieldRule, /background:\s*var\(--overview-field-background\)/);
   assert.match(fieldRule, /box-shadow:\s*var\(--overview-field-shadow\)/);
@@ -825,6 +899,12 @@ test("theme text tokens meet reading contrast on actual dark and light backgroun
       const accentBackground = parseCssColor(extractCssToken(theme.rule, accentBackgroundToken));
       const ratio = contrastRatio(accentText, accentBackground);
       assert.ok(ratio >= 3, `${theme.name} text-on-accent on ${accentBackgroundToken}: ${ratio.toFixed(2)}`);
+    }
+    const buttonText = parseCssColor(extractCssToken(theme.rule, "button-primary-text"));
+    for (const buttonBackgroundToken of ["button-primary-background", "button-primary-hover"]) {
+      const buttonBackground = parseCssColor(extractCssToken(theme.rule, buttonBackgroundToken));
+      const ratio = contrastRatio(buttonText, buttonBackground);
+      assert.ok(ratio >= 4.5, `${theme.name} button-primary-text on ${buttonBackgroundToken}: ${ratio.toFixed(2)}`);
     }
   }
 });

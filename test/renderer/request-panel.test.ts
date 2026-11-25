@@ -35,7 +35,7 @@ test("request page keeps endpoint fields, parameters and responses in the new wo
   assert.match(styles, /\.lf-endpoint-bar\s*\{[^}]*display:\s*grid;/);
   assert.match(styles, /\.lf-debug-grid\s*\{[^}]*grid-template-columns:/);
   assert.match(styles, /\.lf-app \.lf-request-textarea:focus\s*\{[^}]*box-shadow:\s*inset 0 0 0 2px var\(--accent\)/);
-  assert.match(styles, /\.lf-btn\.primary\s*\{[^}]*background:\s*var\(--accent\)/);
+  assert.match(styles, /\.lf-btn\.primary\s*\{[^}]*background:\s*var\(--button-primary-background\)/);
   assert.match(styles, /@media \(max-width: 820px\)[\s\S]*?\.lf-debug-view \.request-endpoint/);
 });
 
