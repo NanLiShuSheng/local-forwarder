@@ -1,5 +1,6 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { createTztCodec, getNode16BinaryCandidates } from "../../../src/core/tcp/tzt-codec";
 
@@ -48,6 +49,24 @@ test("codec accepts frames larger than 1 MiB", async () => {
   const frame = await codec.encode({ Action: "100", message: "x".repeat(1_500_000) }, 12);
 
   assert.equal(String((await codec.decode(frame)).message).length, 1_500_000);
+});
+
+test("helper omits decoder-only fields before sending large frames back to Node", async () => {
+  const frame = await codec.encode({ Action: "100", message: "x".repeat(64 * 1024) }, 12);
+  const protocolDir = path.resolve("resources/protocol");
+  const node16Binary = getNode16BinaryCandidates(protocolDir, process.platform, process.arch, process.env)[0];
+  if (node16Binary === undefined) throw new Error("bundled Node 16 runtime not found");
+  const output = execFileSync(node16Binary, [path.join(protocolDir, "tzt-node16-helper.js")], {
+    input: JSON.stringify({ method: "tztljson", data: frame.toString("base64"), host: "test" }),
+    encoding: "utf8",
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  const response = JSON.parse(output) as { data: Record<string, unknown>[] };
+
+  assert.equal(response.data.length, 1);
+  assert.equal("zzkeyByte" in response.data[0], false);
+  assert.equal("zzbytes" in response.data[0], false);
+  assert.ok(output.length < frame.length * 2, `helper response was ${output.length} bytes for a ${frame.length}-byte frame`);
 });
 
 test("codec decodes a legacy frame and preserves its serial number", async () => {

@@ -15,6 +15,19 @@ function loadLegacyModule() {
   return mod.exports;
 }
 
+function compactDecodedFrame(frame) {
+  if (frame === null || typeof frame !== "object" || Array.isArray(frame)) return frame;
+  if (!("zzkeyByte" in frame) && !("zzbytes" in frame)) return frame;
+  const compact = { ...frame };
+  delete compact.zzkeyByte;
+  delete compact.zzbytes;
+  return compact;
+}
+
+function compactDecodedFrames(frames) {
+  return Array.isArray(frames) ? frames.map(compactDecodedFrame) : frames;
+}
+
 function executeRequest(tzt, request) {
   if (request.method === "rc4") {
     const data = Buffer.from(request.data, "base64");
@@ -34,7 +47,7 @@ function executeRequest(tzt, request) {
   }
   if (request.method === "tztljson") {
     const data = Buffer.from(request.data, "base64");
-    return { data: tzt.tztljson(data, request.host) };
+    return { data: compactDecodedFrames(tzt.tztljson(data, request.host)) };
   }
   throw new Error(`Unknown TZT protocol method: ${request.method}`);
 }
