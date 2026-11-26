@@ -1544,7 +1544,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .app-shell .login-cache-customer-name-line h3 { font-size: 1.0625rem; line-height: 1.3; }
 .app-shell :is(.encryption-heading > div > p:last-child, .decryption-heading > div > p:last-child, .login-cache-description, .local-variables-heading-copy > p, .appearance-page > .muted, .appearance-update-version, .proxy-instance-subtitle) { font-size: var(--ui-font-sm); line-height: 1.6; }
 
-.app-shell input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(.proxy-instance-overview-name-input):not(.lf-page-title-input),
+.app-shell input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(.proxy-instance-overview-name-input):not(.lf-page-title-input):not(.lf-search-input),
 .app-shell select {
   height: var(--ui-control);
   min-height: var(--ui-control);
@@ -2172,8 +2172,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 
 .lf-simple-toolbar { display: flex; align-items: center; gap: 7px; padding: 8px 11px; border-bottom: 1px solid var(--border-subtle); background: var(--lf-panel-2); }
 .lf-search-control { position: relative; width: 250px; flex: 0 1 250px; }
-.lf-search-control .lf-icon { position: absolute; top: 9px; left: 8px; width: 13px; height: 13px; color: var(--text-subtle); }
-.lf-search-control input { width: 100%; height: 30px; border: 1px solid var(--border-default); border-radius: 7px; padding: 0 9px 0 27px; color: var(--text-primary); background: var(--panel-background); font-size: 12px; }
+.lf-search-control .lf-icon { position: absolute; top: 8px; left: 10px; width: 13px; height: 13px; color: var(--text-subtle); }
+.lf-search-control input { width: 100%; height: 30px; border: 1px solid var(--border-default); border-radius: 7px; padding: 0 10px 0 34px; color: var(--text-primary); background: var(--panel-background); font-size: 12px; }
 .lf-search-control input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px var(--lf-accent-ring); }
 .lf-filter-chips { display: flex; flex: 0 0 auto; align-items: center; gap: 3px; }
 .lf-chip { height: 26px; flex: 0 0 auto; border: 1px solid transparent; border-radius: 6px; padding: 0 7px; color: var(--text-subtle); background: transparent; font-size: 11px; white-space: nowrap; }
@@ -2410,8 +2410,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .lf-data-scope strong { color: var(--text-secondary); font-weight: 600; }
 .lf-data-toolbar { display: flex; align-items: center; gap: 7px; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); background: var(--lf-panel-2); }
 .lf-search-control { position: relative; width: 250px; flex: 0 1 250px; }
-.lf-search-control .lf-icon { position: absolute; top: 9px; left: 8px; width: 13px; height: 13px; color: var(--text-subtle); }
-.lf-search-control input { width: 100%; height: 30px; border: 1px solid var(--border-default); border-radius: 7px; padding: 0 9px 0 27px; color: var(--text-primary); background: var(--panel-background); font-size: 12px; outline: none; }
+.lf-search-control .lf-icon { position: absolute; top: 8px; left: 10px; width: 13px; height: 13px; color: var(--text-subtle); }
+.lf-search-control input { width: 100%; height: 30px; border: 1px solid var(--border-default); border-radius: 7px; padding: 0 10px 0 34px; color: var(--text-primary); background: var(--panel-background); font-size: 12px; outline: none; }
 .lf-search-control input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--lf-accent-ring); }
 .lf-filter-chips { display: flex; align-items: center; gap: 3px; }
 .lf-chip { height: 26px; border: 1px solid transparent; border-radius: 6px; padding: 0 7px; color: var(--text-subtle); background: transparent; font-size: 11.5px; font-weight: 500; }

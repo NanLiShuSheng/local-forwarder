@@ -367,7 +367,7 @@ export function DataBrowserPage({ tab, selectedInstance, sessionValues, onSaveSe
         <div className="lf-data-scope"><span className={`lf-status-dot ${tab === "variables" ? "" : selectedInstance?.status.state === "running" ? "running" : "stopped"}`} /><strong>{scopeLabel}</strong><span>· {tab === "variables" ? "所有环境共享" : "数据随环境切换"}</span></div>
       </div>
       <div className="lf-data-toolbar">
-        <label className="lf-search-control"><WorkspaceIcon name="search" className="lf-icon" /><input type="search" placeholder={tab === "variables" ? "搜索变量名、业务标签或值" : "搜索键名或值"} value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+        <label className="lf-search-control"><WorkspaceIcon name="search" className="lf-icon" /><input className="lf-search-input" type="search" placeholder={tab === "variables" ? "搜索变量名、业务标签或值" : "搜索键名或值"} value={query} onChange={(event) => setQuery(event.target.value)} /></label>
         <div className="lf-filter-chips">
           {([['all', `全部 ${stats.total}`], ['value', `有值 ${stats.nonEmpty}`], ['json', `JSON ${stats.json}`], ['empty', `空值 ${stats.empty}`]] as const).map(([value, label]) => <button className={`lf-chip ${filter === value ? "active" : ""}`} type="button" key={value} onClick={() => setFilter(value)}>{label}</button>)}
         </div>

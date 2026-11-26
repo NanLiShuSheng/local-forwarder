@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { AppConfig, ForwardingAddressHistory, LogEntry, ProxyInstanceSummary, RuntimeState, RuntimeStatus, UpdateState } from "../../shared/contracts";
 import { parseDirectoryInput } from "../../shared/directory-path";
 import { formatShortcut } from "../shortcut-labels";
+import {
+  getWorkbenchFilterStorage,
+  readWorkbenchInstanceFilter,
+  writeWorkbenchInstanceFilter,
+  type WorkbenchInstanceFilter,
+} from "../workbench-filter-preference";
 import type { WorkspaceRoute } from "../workspace-navigation";
 import { addressForTarget, appendForwardingAddressHistory, draftsForTargets, forwardingAddressHistoryForTarget, targetFromDraft, type AddressDraft } from "./ConfigPages";
 import { orderProxyInstancesForDisplay } from "./ProxyInstanceSidebar";
@@ -124,8 +130,6 @@ export interface WorkbenchPageProps {
   onRename: (id: string, name: string) => Promise<boolean>;
 }
 
-type InstanceFilter = "all" | "running" | "stopped" | "error";
-
 export function WorkbenchPage({ instances, selectedInstance, status, config, loginCache, logs, bulkBusy, onNavigate, onSelectInstance, onToggleInstance, onCreate, onDuplicate, onDelete, onStartAll, onStopAll, onOpenDock, onChange, onChooseProjectDirectory, onRename }: WorkbenchPageProps) {
   const { notify, notifyError } = useToast();
   const [nameDraft, setNameDraft] = useState(selectedInstance?.name ?? "");
@@ -134,7 +138,7 @@ export function WorkbenchPage({ instances, selectedInstance, status, config, log
   const [portDraft, setPortDraft] = useState(String(config.server.port));
   const [timeoutDraft, setTimeoutDraft] = useState(String(config.server.timeoutMs));
   const [instanceQuery, setInstanceQuery] = useState("");
-  const [instanceFilter, setInstanceFilter] = useState<InstanceFilter>("all");
+  const [instanceFilter, setInstanceFilter] = useState<WorkbenchInstanceFilter>(() => readWorkbenchInstanceFilter(getWorkbenchFilterStorage()));
   const [addressDrafts, setAddressDrafts] = useState<AddressDraft[]>(() => draftsForTargets(config.tcpTargets));
   const selectedStatus = selectedInstance?.status ?? status;
   const proxyAction = selectedInstance === undefined ? undefined : proxyToggleActionForState(selectedInstance.status.state);
@@ -171,6 +175,11 @@ export function WorkbenchPage({ instances, selectedInstance, status, config, log
     if (!configLocked) return false;
     notify({ kind: "warning", title: "请先停止代理", message: "代理运行期间不能修改项目目录与监听参数" });
     return true;
+  };
+
+  const selectInstanceFilter = (filter: WorkbenchInstanceFilter) => {
+    setInstanceFilter(filter);
+    writeWorkbenchInstanceFilter(getWorkbenchFilterStorage(), filter);
   };
 
   const commitName = async () => {
@@ -329,8 +338,8 @@ export function WorkbenchPage({ instances, selectedInstance, status, config, log
       <section className="lf-panel lf-simple-table-panel">
         <div className="lf-panel-head"><div><h3>环境</h3><span>{instances.length} 个代理实例</span></div><div className="lf-panel-head-actions"><button className="lf-text-button" type="button" disabled={bulkBusy || instances.length === 0} onClick={onStartAll}>启动全部</button><button className="lf-text-button" type="button" disabled={bulkBusy || instances.length === 0} onClick={onStopAll}>停止全部</button><button className="lf-text-button" type="button" disabled={instances.length === 0} onClick={onDuplicate}>复制当前</button></div></div>
         <div className="lf-simple-toolbar lf-workbench-table-toolbar">
-          <label className="lf-search-control"><WorkspaceIcon name="search" className="lf-icon" /><input type="search" aria-label="搜索环境" placeholder="搜索名称、端口或上游" value={instanceQuery} onChange={(event) => setInstanceQuery(event.target.value)} /></label>
-          <div className="lf-filter-chips">{([["all", `全部 ${instances.length}`], ["running", `运行中 ${running}`], ["stopped", `已停止 ${instances.filter((instance) => instance.status.state === "stopped").length}`], ["error", `异常 ${errors}`]] as const).map(([value, label]) => <button className={`lf-chip ${instanceFilter === value ? "active" : ""}`} type="button" key={value} onClick={() => setInstanceFilter(value)}>{label}</button>)}</div>
+          <label className="lf-search-control"><WorkspaceIcon name="search" className="lf-icon" /><input className="lf-search-input" type="search" aria-label="搜索环境" placeholder="搜索名称、端口或上游" value={instanceQuery} onChange={(event) => setInstanceQuery(event.target.value)} /></label>
+          <div className="lf-filter-chips">{([["all", `全部 ${instances.length}`], ["running", `运行中 ${running}`], ["stopped", `已停止 ${instances.filter((instance) => instance.status.state === "stopped").length}`], ["error", `异常 ${errors}`]] as const).map(([value, label]) => <button className={`lf-chip ${instanceFilter === value ? "active" : ""}`} type="button" key={value} onClick={() => selectInstanceFilter(value)}>{label}</button>)}</div>
           <div className="lf-toolbar-spacer" />
           <span className="lf-faint lf-small">{filteredInstances.length} 个</span>
         </div>
@@ -399,7 +408,7 @@ export function ActivityPage({ logs, instanceName, onClear, onInspect, onFillJso
   return <section className="lf-view-body">
     <WorkspacePageHeader eyebrow="Runtime · Activity" title="活动" badge={<span className="lf-scope-pill"><span className="lf-status-dot running" /><strong>实时</strong></span>} description="代理生命周期、请求结果、缓存写入和错误统一进入活动流。选择请求事件可查看完整参数，带应答的记录可直接进入 JSON 可视化。" actions={<><button className="lf-btn" type="button" onClick={exportLogs} disabled={filtered.length === 0}>导出</button><button className="lf-btn danger" type="button" onClick={() => { if (window.confirm("确定清空全部日志吗？")) void onClear(); }} disabled={logs.length === 0}>清空</button></>} />
     <section className="lf-panel lf-simple-table-panel">
-      <div className="lf-simple-toolbar"><label className="lf-search-control"><WorkspaceIcon name="search" className="lf-icon" /><input type="search" placeholder="搜索路径、Action 或消息" value={query} onChange={(event) => setQuery(event.target.value)} /></label><div className="lf-filter-chips">{([['all', '全部'], ['request', '请求'], ['cache', '缓存'], ['error', '错误']] as const).map(([value, label]) => <button className={`lf-chip ${kind === value ? "active" : ""}`} type="button" key={value} onClick={() => setKind(value)}>{label}</button>)}</div><div className="lf-toolbar-spacer" /><span className="lf-faint lf-small">最近 {filtered.length} 条</span></div>
+      <div className="lf-simple-toolbar"><label className="lf-search-control"><WorkspaceIcon name="search" className="lf-icon" /><input className="lf-search-input" type="search" placeholder="搜索路径、Action 或消息" value={query} onChange={(event) => setQuery(event.target.value)} /></label><div className="lf-filter-chips">{([['all', '全部'], ['request', '请求'], ['cache', '缓存'], ['error', '错误']] as const).map(([value, label]) => <button className={`lf-chip ${kind === value ? "active" : ""}`} type="button" key={value} onClick={() => setKind(value)}>{label}</button>)}</div><div className="lf-toolbar-spacer" /><span className="lf-faint lf-small">最近 {filtered.length} 条</span></div>
       <div className="lf-table-wrap"><table className="lf-data-table"><thead><tr><th>时间</th><th>级别</th><th>环境</th><th>事件</th><th>详情</th><th>耗时</th><th>操作</th></tr></thead><tbody>
         {filtered.length === 0 ? <tr><td colSpan={7}><div className="lf-table-empty">暂无活动记录。</div></td></tr> : filtered.map((entry, index) => <tr key={`${entry.timestamp}-${index}`}><td className="lf-cell-mono">{formatClock(entry.timestamp)}</td><td><span className={`lf-status-badge ${levelClass(entry.level)}`}>{entry.level.toUpperCase()}</span></td><td>{instanceName}</td><td><LogRowLabel message={entry.message} requestParams={entry.requestParams} /></td><td className="lf-cell-mono lf-cell-ellipsis" title={logDetail(entry)}>{logDetail(entry)}</td><td className="lf-cell-mono">{entry.durationMs === undefined ? "—" : `${entry.durationMs} ms`}</td><td><div className="lf-row-actions">{isRequestLog(entry) && <button className="lf-text-button" type="button" onClick={() => onInspect(entry)}>查看</button>}{hasResponseData(entry) && <button className="lf-text-button" type="button" onClick={() => onFillJson(entry.responseData!)}>JSON 可视化</button>}{!isRequestLog(entry) && !hasResponseData(entry) && <span className="lf-faint">—</span>}</div></td></tr>)}
       </tbody></table></div>

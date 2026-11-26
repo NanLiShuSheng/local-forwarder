@@ -69,6 +69,30 @@ test("workspace typography keeps a restrained heading hierarchy", async () => {
   assert.match(styles, /\.lf-metric-value\s*\{[^}]*font-size:\s*18px/);
 });
 
+test("workspace search fields leave room between the icon and placeholder", async () => {
+  const styles = await readFile("src/renderer/styles.css", "utf8");
+  const iconRules = [...styles.matchAll(/\.lf-search-control \.lf-icon\s*\{([^}]*)\}/g)].map((match) => match[1]);
+  const inputRules = [...styles.matchAll(/\.lf-search-control input\s*\{([^}]*)\}/g)].map((match) => match[1]);
+
+  assert.ok(iconRules.length > 0);
+  assert.ok(inputRules.length > 0);
+  for (const rule of iconRules) assert.match(rule, /left:\s*10px/);
+  for (const rule of inputRules) assert.match(rule, /padding:\s*0 10px 0 34px/);
+});
+
+test("workspace search fields opt out of the shared input padding override", async () => {
+  const [styles, workspacePages, dataBrowser] = await Promise.all([
+    readFile("src/renderer/styles.css", "utf8"),
+    readFile("src/renderer/components/WorkspacePages.tsx", "utf8"),
+    readFile("src/renderer/components/DataBrowserPage.tsx", "utf8"),
+  ]);
+  const sharedInputRule = styles.match(/\.app-shell input:not\(\[type="checkbox"\]\)[\s\S]*?\{\s*height:[\s\S]*?padding:\s*0 10px;\s*\}/)?.[0] ?? "";
+
+  assert.match(sharedInputRule, /:not\(\.lf-search-input\)/);
+  assert.equal((workspacePages.match(/className="lf-search-input"/g) ?? []).length, 2);
+  assert.equal((dataBrowser.match(/className="lf-search-input"/g) ?? []).length, 1);
+});
+
 test("metadata badges stay visually subordinate to primary text", async () => {
   const styles = await readFile("src/renderer/styles.css", "utf8");
 
