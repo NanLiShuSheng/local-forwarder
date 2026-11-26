@@ -6,7 +6,7 @@ import path from "node:path";
 import net from "node:net";
 import { createDefaultConfig } from "../../../src/core/config/model";
 import { ForwardingService } from "../../../src/core/runtime/forwarding-service";
-import type { LogEntry } from "../../../src/shared/contracts";
+import type { AppConfig, LogEntry } from "../../../src/shared/contracts";
 
 async function freePort(): Promise<number> {
   const server = net.createServer();
@@ -122,6 +122,38 @@ test("merges manually captured login values into the active service and config",
   const service = new ForwardingService({ config });
   service.mergeLocalValues({ TOKEN: "captured-token" });
   assert.deepEqual(service.getConfig().localValues, { OLD: "value", TOKEN: "captured-token" });
+});
+
+test("allows request-only config changes while running and rejects runtime changes", async () => {
+  const config = createDefaultConfig();
+  config.server.port = await freePort();
+  config.cache.rootDir = await mkdtemp(path.join(os.tmpdir(), "forwarder-request-config-"));
+  const persisted: AppConfig[] = [];
+  const service = new ForwardingService({
+    config,
+    configStore: { save: async (next) => { persisted.push(structuredClone(next)); } },
+  });
+
+  try {
+    await service.start();
+    const requestOnly = service.getConfig();
+    requestOnly.request = { host: "127.0.0.1", port: 6064, paramsText: "Action=100", transport: "http" };
+
+    await service.saveConfig(requestOnly);
+
+    assert.equal(service.status().state, "running");
+    assert.deepEqual(service.getConfig().request, requestOnly.request);
+    assert.deepEqual(persisted.at(-1)?.request, requestOnly.request);
+
+    const runtimeChange = service.getConfig();
+    runtimeChange.server.timeoutMs += 1;
+    await assert.rejects(
+      () => service.saveConfig(runtimeChange),
+      /stop the service before changing configuration/,
+    );
+  } finally {
+    await service.stop();
+  }
 });
 
 test("reads and replaces map values before and during runtime", async () => {

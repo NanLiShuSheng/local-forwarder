@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type { AppConfig, LogEntry, RuntimeStatus } from "../../shared/contracts";
 import { getAppConfigValidationError, isValidAppConfig } from "../../shared/validation";
 import { FileCache } from "../cache/file-cache";
@@ -31,6 +32,12 @@ export interface ForwardingServiceOptions {
 
 function cloneConfig(config: AppConfig): AppConfig {
   return JSON.parse(JSON.stringify(config)) as AppConfig;
+}
+
+function withoutRequest(config: AppConfig): AppConfig {
+  const runtimeConfig = cloneConfig(config);
+  delete runtimeConfig.request;
+  return runtimeConfig;
 }
 
 export class ForwardingService {
@@ -229,7 +236,9 @@ export class ForwardingService {
 
   public async saveConfig(config: AppConfig): Promise<void> {
     if (!isValidAppConfig(config)) throw new Error(`Invalid configuration: ${getAppConfigValidationError(config) ?? "unknown field"}`);
-    if (this.state === "running") throw new Error("stop the service before changing configuration");
+    if (this.state === "running" && !isDeepStrictEqual(withoutRequest(this.config), withoutRequest(config))) {
+      throw new Error("stop the service before changing configuration");
+    }
     this.config = cloneConfig(config);
     await this.configStore?.save(this.config);
   }
