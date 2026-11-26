@@ -128,13 +128,13 @@ test("sends pasted request parameters as a TZT frame when the target is a native
   const codec = createTztCodec();
   const target = net.createServer((socket) => {
     let buffer = Buffer.alloc(0);
-    socket.on("data", (chunk: Buffer) => {
+    socket.on("data", async (chunk: Buffer) => {
       buffer = Buffer.concat([buffer, chunk]);
       if (buffer.length < 6) return;
       const frameLength = buffer.readUInt32LE(2) + 6;
       if (buffer.length < frameLength) return;
-      const request = codec.decode(buffer.subarray(0, frameLength));
-      const response = codec.encode({ Action: request.Action ?? "", ERRORNO: "0", ACCOUNT: request.account ?? "" }, Number(request.HandleSerialNo));
+      const request = await codec.decode(buffer.subarray(0, frameLength));
+      const response = await codec.encode({ Action: request.Action ?? "", ERRORNO: "0", ACCOUNT: request.account ?? "" }, Number(request.HandleSerialNo));
       socket.write(response);
     });
   });
@@ -159,5 +159,6 @@ test("sends pasted request parameters as a TZT frame when the target is a native
     assert.equal(result.body, "Action = 100\nERRORNO = 0\nACCOUNT = 600554432");
   } finally {
     await new Promise<void>((resolve) => target.close(() => resolve()));
+    await codec.close?.();
   }
 });

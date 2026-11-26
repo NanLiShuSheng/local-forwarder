@@ -35,10 +35,10 @@ button { cursor: pointer; }
   --text-code: #b7bdc8;
   --text-disabled: #656c76;
   --text-on-accent: #06120c;
-  --button-primary-background: #659f87;
-  --button-primary-hover: #72a791;
+  --button-primary-background: #74c4a3;
+  --button-primary-hover: #82d0b0;
   --button-primary-text: #06120c;
-  --button-primary-shadow: 0 7px 16px rgb(101 159 135 / 15%);
+  --button-primary-shadow: 0 7px 16px rgb(116 196 163 / 15%);
   --text-button: #d1d7e0;
   --border-default: #2f3742;
   --border-card: #2f3742;
@@ -1874,6 +1874,9 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 .lf-status-dot.error { background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 12%, transparent); }
 .lf-status-dot.stopped { background: var(--text-subtle); }
 .lf-titlebar-spacer { flex: 1 1 auto; }
+.lf-titlebar-actions { display: flex; align-items: center; flex: none; gap: 14px; margin-left: 4px; }
+.lf-titlebar-actions .lf-icon-button,
+.lf-titlebar-actions .lf-account-chip { width: 32px; height: 32px; }
 .lf-cmd-button { height: 32px; width: 252px; display: flex; align-items: center; gap: 7px; border: 1px solid var(--border-default); border-radius: 8px; padding: 0 9px; color: var(--text-muted); background: var(--lf-panel-2); font-size: 12px; text-align: left; }
 .lf-cmd-button:hover { border-color: var(--lf-line-strong); color: var(--text-secondary); }
 .lf-cmd-button span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

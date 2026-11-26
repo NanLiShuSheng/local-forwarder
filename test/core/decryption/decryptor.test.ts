@@ -3,13 +3,17 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
 import { crc32, gzipSync } from "node:zlib";
 import { collectEncryptedFiles, decryptDirectory } from "../../../src/core/decryption/decryptor";
 import { createTztCodec } from "../../../src/core/tcp/tzt-codec";
 
 const codec = createTztCodec();
 const scriptExtensions = new Set([".js", ".html", ".htm", ".css"]);
+
+after(async () => {
+  await codec.close?.();
+});
 
 interface FixtureEntry {
   relativePath: string;
@@ -35,7 +39,7 @@ async function makeEncryptedFixture() {
     { relativePath: path.join("docs", "page.HTML"), content: Buffer.from("<p>uppercase extension</p>") },
   ];
   const scriptBodies = entries.map((entry) => scriptExtensions.has(path.extname(entry.relativePath).toLowerCase()) ? gzipSync(entry.content) : undefined);
-  const encryptedScripts = codec.rc4Batch(
+  const encryptedScripts = await codec.rc4Batch(
     scriptBodies.filter((entry): entry is Buffer => entry !== undefined),
     "file",
   );

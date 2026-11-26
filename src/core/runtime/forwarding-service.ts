@@ -6,7 +6,7 @@ import { getAppConfigValidationError, isValidAppConfig } from "../../shared/vali
 import { FileCache } from "../cache/file-cache";
 import { HttpProxy, type HttpProxyAddress, type HttpProxyOptions, type HttpProxyStats, type TcpBridgeLike } from "../http/http-proxy";
 import { TcpBridgePool } from "../tcp/tcp-bridge";
-import { createTztCodec } from "../tcp/tzt-codec";
+import { createTztCodec, type TztCodec } from "../tcp/tzt-codec";
 import { isAutoRecoverablePort, recoverOccupiedPort } from "./port-recovery";
 
 interface HttpRuntime extends TcpBridgeLike {
@@ -50,6 +50,7 @@ export class ForwardingService {
   private readonly recoverOccupiedPort: NonNullable<ForwardingServiceOptions["recoverOccupiedPort"]>;
   private http: HttpRuntime | undefined;
   private tcp: (TcpBridgeLike & { close(): Promise<void>; getConnectionCount?: () => number }) | undefined;
+  private codec: TztCodec | undefined;
   private cache: Pick<FileCache, "close" | "getOrDownload" | "remove"> | undefined;
   private state: RuntimeStatus["state"] = "stopped";
   private error: string | undefined;
@@ -88,7 +89,10 @@ export class ForwardingService {
       const rootDir = this.config.cache.rootDir || path.join(os.tmpdir(), "local-forwarder-cache");
       this.cache = this.cacheFactory({ rootDir });
       created.push(async () => { await this.cache?.close(); this.cache = undefined; });
-      this.tcp = this.tcpFactory({ connectTimeoutMs: this.config.server.timeoutMs, requestTimeoutMs: this.config.server.timeoutMs });
+      this.codec = createTztCodec();
+      const codec = this.codec;
+      created.push(async () => { await codec.close?.(); this.codec = undefined; });
+      this.tcp = this.tcpFactory({ connectTimeoutMs: this.config.server.timeoutMs, requestTimeoutMs: this.config.server.timeoutMs, codec });
       created.push(async () => { await this.tcp?.close(); this.tcp = undefined; });
       this.http = this.httpFactory({
         bindHost: this.config.server.bindHost,
@@ -104,7 +108,7 @@ export class ForwardingService {
         tcpBridge: this.tcp,
         cache: this.cache,
         cacheConfig: this.config.cache,
-        cacheCodec: this.config.cache.decryptEnabled ? createTztCodec() : undefined,
+        cacheCodec: this.config.cache.decryptEnabled ? codec : undefined,
         onLog: (entry) => this.appendLogEntry(entry),
         onLoginValuesChanged: (values) => this.onLoginValuesChanged?.(values),
       });
@@ -144,6 +148,11 @@ export class ForwardingService {
     this.http = undefined;
     await this.tcp?.close().catch(() => undefined);
     this.tcp = undefined;
+    try {
+      await this.codec?.close?.();
+    } catch {
+    }
+    this.codec = undefined;
     await this.cache?.close().catch(() => undefined);
     this.cache = undefined;
     this.address = undefined;

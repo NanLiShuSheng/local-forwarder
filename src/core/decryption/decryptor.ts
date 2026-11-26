@@ -137,7 +137,16 @@ function verifyCrc(body: Buffer, expectedCrc: number): string | undefined {
   return `CRC32 校验失败（应为 ${expectedCrc.toString(16).padStart(8, "0")}，实际为 ${actualCrc.toString(16).padStart(8, "0")}）`;
 }
 
-export async function decryptDirectory({
+export async function decryptDirectory(options: DecryptDirectoryOptions): Promise<Omit<DecryptionResult, "ok">> {
+  const ownedCodec = options.codec === undefined ? createTztCodec() : undefined;
+  try {
+    return await runDecryptDirectory({ ...options, codec: options.codec ?? ownedCodec });
+  } finally {
+    await ownedCodec?.close?.();
+  }
+}
+
+async function runDecryptDirectory({
   inputDir,
   outputDir,
   statePath = path.join(inputDir, encryptionStateFileName),
@@ -155,9 +164,8 @@ export async function decryptDirectory({
   const expectedHashes = await readExpectedHashes(statePath) ?? {};
   const jobs = collected.files.map((filePath) => createDecryptionJob(filePath, inputDir, outputDir, expectedHashes));
 
-  let activeCodec = codec;
+  const activeCodec = codec ?? createTztCodec();
   const getCodec = (): Pick<TztCodec, "rc4Batch"> => {
-    activeCodec ??= createTztCodec();
     return activeCodec;
   };
 
@@ -209,7 +217,7 @@ export async function decryptDirectory({
     let scriptError: string | undefined;
     if (scriptJobs.length > 0) {
       try {
-        decryptedScripts = getCodec().rc4Batch(scriptJobs.map((entry) => entry.body), "file");
+        decryptedScripts = await getCodec().rc4Batch(scriptJobs.map((entry) => entry.body), "file");
       } catch (error) {
         scriptError = `RC4 解密失败：${errorMessage(error)}`;
       }

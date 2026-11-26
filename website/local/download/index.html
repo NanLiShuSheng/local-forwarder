@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="/styles.css?v=20261124-prototype">
   <title>Local Forwarder — 本地 HTTP / HTTPS / TCP 转发工作台</title>
   <script>document.documentElement.classList.add("js");</script>
-  <script src="/main.js?v=20261124-prototype" defer></script>
+  <script src="/main.js?v=20261126-macos" defer></script>
 </head>
 <body class="page-download">
   <a class="skip-link" href="#main">跳到主要内容</a>
@@ -288,14 +288,14 @@
         </div>
 
         <div class="download-platform">
-          <span class="platform-label">macOS · 暂不可用</span>
+          <span class="platform-label">macOS · DMG</span>
           <div class="mac-actions">
-            <span class="mac-link is-unavailable" aria-disabled="true" title="macOS 安装包暂不可用">
-              <span>Intel</span><small>DMG · 暂不可用</small>
-            </span>
-            <span class="mac-link is-unavailable" aria-disabled="true" title="macOS 安装包暂不可用">
-              <span>Apple Silicon</span><small>DMG · 暂不可用</small>
-            </span>
+            <a class="mac-link is-loading" href="#download" data-download="mac-x64" aria-disabled="true">
+              <span>Intel</span><small data-download-label>DMG · 正在读取最新版本</small>
+            </a>
+            <a class="mac-link is-loading" href="#download" data-download="mac-arm64" aria-disabled="true">
+              <span>Apple Silicon</span><small data-download-label>DMG · 正在读取最新版本</small>
+            </a>
           </div>
         </div>
 
@@ -315,7 +315,7 @@
       <a href="#workflow">使用方式</a>
       <a href="#download">下载</a>
     </nav>
-    <p>© 2026 Local Forwarder <span>·</span> <a href="https://www.finbr.asia/">finbr.asia</a></p>
+    <p>© 2026 Local Forwarder <span>·</span> <a href="https://www.finbr.asia/">finbr.asia</a><br><span>ICP备案号：</span><a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">浙ICP备2026103133号</a></p>
   </footer>
 </body>
 </html>

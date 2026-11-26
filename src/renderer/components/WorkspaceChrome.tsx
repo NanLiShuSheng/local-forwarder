@@ -145,9 +145,11 @@ export function WorkspaceTitlebar({
     </div>
     <div className="lf-titlebar-spacer" />
     <button className="lf-cmd-button" type="button" onClick={onOpenCommand}><WorkspaceIcon name="search" className="lf-icon lf-icon-sm" /><span>搜索环境、页面或命令</span><kbd>{shortcutModifierLabel()}</kbd><kbd>K</kbd></button>
-    <button className={`lf-icon-button ${updateAvailable ? "has-update" : ""}`} type="button" title={updateAvailable ? `发现新版本 ${updateState.update?.version ?? ""}` : "检查更新"} onClick={onCheckForUpdates}><WorkspaceIcon name="update" className="lf-icon" />{updateAvailable && <span className="lf-update-dot" />}</button>
-    <button className="lf-icon-button" type="button" title={theme === "dark" ? `切换到浅色外观（${formatShortcut("L")}）` : `切换到深色外观（${formatShortcut("L")}）`} onClick={onToggleTheme}><WorkspaceIcon name={theme === "dark" ? "sun" : "moon"} className="lf-icon" /></button>
-    <button className="lf-account-chip" type="button" title={customer.hasCustomer ? `当前登录客户 ${customer.code}` : "查看登录缓存"} onClick={onOpenAccount}>{customer.initial}</button>
+    <div className="lf-titlebar-actions" role="group" aria-label="应用操作">
+      <button className={`lf-icon-button ${updateAvailable ? "has-update" : ""}`} type="button" title={updateAvailable ? `发现新版本 ${updateState.update?.version ?? ""}` : "检查更新"} onClick={onCheckForUpdates}><WorkspaceIcon name="update" className="lf-icon" />{updateAvailable && <span className="lf-update-dot" />}</button>
+      <button className="lf-icon-button" type="button" title={theme === "dark" ? `切换到浅色外观（${formatShortcut("L")}）` : `切换到深色外观（${formatShortcut("L")}）`} onClick={onToggleTheme}><WorkspaceIcon name={theme === "dark" ? "sun" : "moon"} className="lf-icon" /></button>
+      <button className="lf-account-chip" type="button" title={customer.hasCustomer ? `当前登录客户 ${customer.code}` : "查看登录缓存"} onClick={onOpenAccount}>{customer.initial}</button>
+    </div>
   </header>;
 }
 

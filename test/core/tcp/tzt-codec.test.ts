@@ -1,7 +1,13 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import { createTztCodec, getNode16BinaryCandidates } from "../../../src/core/tcp/tzt-codec";
+
+const codec = createTztCodec();
+
+after(async () => {
+  await codec.close?.();
+});
 
 test("Node 16 candidates prefer the bundled Windows x64 runtime", () => {
   const candidates = getNode16BinaryCandidates("/packed/protocol", "win32", "x64", {});
@@ -15,45 +21,52 @@ test("Node 16 environment override is preferred and unsupported Windows arch has
   assert.equal(getNode16BinaryCandidates("/packed/protocol", "win32", "arm64", {}).some((candidate) => candidate.includes("win-x64")), false);
 });
 
-test("codec preserves the legacy RC4 and encode regression vectors", () => {
-  const codec = createTztCodec();
-
-  assert.equal(codec.rc4(Buffer.from("Plaintext"), "x").toString("hex"), "32da9e2ceaea1a6e75");
-  assert.equal(codec.rc4(Buffer.from("Plaintext"), "file").toString("hex"), "7ad9f940a0c3d07a8f");
+test("codec preserves the legacy RC4 and encode regression vectors", async () => {
+  assert.equal((await codec.rc4(Buffer.from("Plaintext"), "x")).toString("hex"), "32da9e2ceaea1a6e75");
+  assert.equal((await codec.rc4(Buffer.from("Plaintext"), "file")).toString("hex"), "7ad9f940a0c3d07a8f");
   assert.deepEqual(
-    codec.rc4Batch([Buffer.from("Plaintext"), Buffer.from("Plaintext")], "file").map((entry) => entry.toString("hex")),
+    (await codec.rc4Batch([Buffer.from("Plaintext"), Buffer.from("Plaintext")], "file")).map((entry) => entry.toString("hex")),
     ["7ad9f940a0c3d07a8f", "7ad9f940a0c3d07a8f"],
   );
   assert.equal(
-    codec.encode({ Action: "100", foo: "bar" }, 12).toString("hex"),
+    (await codec.encode({ Action: "100", foo: "bar" }, 12)).toString("hex"),
     "b7072500000064000300000200000031320006416374696f6e0300000031303003666f6f03000000626172",
   );
 });
 
-test("codec preserves long and GBK text through the legacy runtime", () => {
-  const codec = createTztCodec();
-  const frame = codec.encode({ Action: "100", message: `中文${"x".repeat(100)}` }, 12);
+test("codec preserves long and GBK text through the legacy runtime", async () => {
+  const frame = await codec.encode({ Action: "100", message: `中文${"x".repeat(100)}` }, 12);
 
-  assert.deepEqual(codec.decode(frame), {
+  assert.deepEqual(await codec.decode(frame), {
     Action: "100",
     message: `中文${"x".repeat(100)}`,
     HandleSerialNo: "12",
   });
 });
 
-test("codec decodes a legacy frame and preserves its serial number", () => {
-  const codec = createTztCodec();
+test("codec accepts frames larger than 1 MiB", async () => {
+  const frame = await codec.encode({ Action: "100", message: "x".repeat(1_500_000) }, 12);
+
+  assert.equal(String((await codec.decode(frame)).message).length, 1_500_000);
+});
+
+test("codec decodes a legacy frame and preserves its serial number", async () => {
   const frame = Buffer.from(
     "b707250000006400000000020000003132009617e8f7adba12dc8067265b85505ab73a8b8040e9ccde05f0",
     "hex",
   );
 
-  assert.deepEqual(codec.decode(frame), { Action: "100", foo: "bar", HandleSerialNo: "12" });
+  assert.deepEqual(await codec.decode(frame), { Action: "100", foo: "bar", HandleSerialNo: "12" });
 });
 
-test("codec rejects malformed and truncated frames instead of returning bad data", () => {
-  const codec = createTztCodec();
+test("codec rejects malformed and truncated frames instead of returning bad data", async () => {
+  await assert.rejects(codec.decode(Buffer.from("b70706000000", "hex")), /truncated|length|invalid/i);
+  await assert.rejects(codec.decode(Buffer.from("00000700000000", "hex")), /magic|invalid/i);
+});
 
-  assert.throws(() => codec.decode(Buffer.from("b70706000000", "hex")), /truncated|length|invalid/i);
-  assert.throws(() => codec.decode(Buffer.from("00000700000000", "hex")), /magic|invalid/i);
+test("codec correlates concurrent requests through one persistent helper", async () => {
+  const frames = await Promise.all(Array.from({ length: 40 }, (_, index) => codec.encode({ Action: "100", index }, index + 1)));
+  const decoded = await Promise.all(frames.map((frame) => codec.decode(frame)));
+  assert.deepEqual(decoded.map((response) => response.index), Array.from({ length: 40 }, (_, index) => String(index)));
+  assert.deepEqual(decoded.map((response) => response.HandleSerialNo), Array.from({ length: 40 }, (_, index) => String(index + 1)));
 });

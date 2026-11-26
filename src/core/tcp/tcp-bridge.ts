@@ -12,16 +12,23 @@ export interface TcpBridgeOptions {
   codec?: TztCodec;
 }
 
+export interface TztStream {
+  done: Promise<void>;
+  cancel: () => void;
+}
+
 interface PendingRequest {
   resolve: (value: TztResponse) => void;
   reject: (reason?: unknown) => void;
   timer: NodeJS.Timeout;
+  onFrame?: (frame: TztResponse) => boolean;
 }
 
 interface ConnectionState {
   key: string;
   socket: net.Socket;
   buffer: Buffer;
+  draining: boolean;
   pending: Map<number, PendingRequest>;
   connected: boolean;
   failed: boolean;
@@ -35,29 +42,34 @@ function endpointKey(target: TcpTarget): string {
   return `${target.host}:${target.port}`;
 }
 
+const MAX_FRAME_SIZE = 64 * 1024 * 1024;
+
 export class TcpBridgePool {
   private readonly codec: TztCodec;
   private readonly connectTimeoutMs: number;
   private readonly requestTimeoutMs: number;
+  private readonly ownsCodec: boolean;
   private readonly connections = new Map<string, ConnectionState>();
   private serial = 0;
   private closed = false;
 
   public constructor(options: TcpBridgeOptions) {
     this.codec = options.codec ?? createTztCodec();
+    this.ownsCodec = options.codec === undefined;
     this.connectTimeoutMs = options.connectTimeoutMs;
     this.requestTimeoutMs = options.requestTimeoutMs;
     if (!Number.isFinite(this.connectTimeoutMs) || this.connectTimeoutMs < 0) throw new Error("connectTimeoutMs must be non-negative");
     if (!Number.isFinite(this.requestTimeoutMs) || this.requestTimeoutMs < 0) throw new Error("requestTimeoutMs must be non-negative");
   }
 
-  public request(target: TcpTarget, query: TztQuery): Promise<TztResponse> {
-    if (this.closed) return Promise.reject(new Error("TCP bridge is closed"));
-    if (!Number.isInteger(target.port) || target.port < 1 || target.port > 65535) return Promise.reject(new Error("Invalid TCP target port"));
+  public async request(target: TcpTarget, query: TztQuery): Promise<TztResponse> {
+    if (this.closed) throw new Error("TCP bridge is closed");
+    if (!Number.isInteger(target.port) || target.port < 1 || target.port > 65535) throw new Error("Invalid TCP target port");
 
     const serial = this.nextSerial();
     const key = endpointKey(target);
-    const frame = this.codec.encode(query, serial);
+    const frame = await this.codec.encode(query, serial);
+    if (this.closed) throw new Error("TCP bridge is closed");
     const connection = this.getOrCreateConnection(target, key);
     return new Promise<TztResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -72,12 +84,46 @@ export class TcpBridgePool {
     });
   }
 
+  public async requestStream(target: TcpTarget, query: TztQuery, onFrame: (frame: TztResponse) => boolean): Promise<TztStream> {
+    if (this.closed) throw new Error("TCP bridge is closed");
+    if (!Number.isInteger(target.port) || target.port < 1 || target.port > 65535) throw new Error("Invalid TCP target port");
+
+    const serial = this.nextSerial();
+    const key = endpointKey(target);
+    const frame = await this.codec.encode(query, serial);
+    if (this.closed) throw new Error("TCP bridge is closed");
+    const connection = this.getOrCreateConnection(target, key);
+    let cancel: () => void = () => undefined;
+    const done = new Promise<void>((resolve, reject) => {
+      const pending: PendingRequest = {
+        resolve: () => resolve(),
+        reject,
+        timer: this.createIdleTimeout(connection, key, serial),
+        onFrame,
+      };
+      connection.pending.set(serial, pending);
+      cancel = () => {
+        if (connection.pending.delete(serial)) {
+          clearTimeout(pending.timer);
+          resolve();
+        }
+      };
+      void connection.connectPromise.then(() => {
+        if (!connection.failed && connection.pending.has(serial)) connection.socket.write(frame, (error) => {
+          if (error) this.failConnection(connection, error);
+        });
+      }).catch(() => undefined);
+    });
+    return { done, cancel };
+  }
+
   public async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
     const connections = [...this.connections.values()];
     this.connections.clear();
     for (const connection of connections) this.failConnection(connection, new Error("TCP bridge closed"));
+    if (this.ownsCodec) await this.codec.close?.();
   }
 
   public getConnectionCount(): number {
@@ -104,6 +150,7 @@ export class TcpBridgePool {
       key,
       socket,
       buffer: Buffer.alloc(0),
+      draining: false,
       pending: new Map(),
       connected: false,
       failed: false,
@@ -128,38 +175,72 @@ export class TcpBridgePool {
   private handleData(connection: ConnectionState, chunk: Buffer): void {
     if (connection.failed) return;
     connection.buffer = Buffer.concat([connection.buffer, chunk]);
-    while (connection.buffer.length >= 6) {
-      if (connection.buffer.readUInt16LE(0) !== 0x07b7) {
-        this.failConnection(connection, new Error("Invalid TZT frame: bad magic"));
-        return;
+    void this.drainFrames(connection);
+  }
+
+  private async drainFrames(connection: ConnectionState): Promise<void> {
+    if (connection.draining) return;
+    connection.draining = true;
+    try {
+      while (!connection.failed && connection.buffer.length >= 6) {
+        if (connection.buffer.readUInt16LE(0) !== 0x07b7) {
+          this.failConnection(connection, new Error("Invalid TZT frame: bad magic"));
+          return;
+        }
+        const payloadLength = connection.buffer.readUInt32LE(2);
+        const frameLength = payloadLength + 6;
+        if (frameLength <= 6 || frameLength > MAX_FRAME_SIZE) {
+          this.failConnection(connection, new Error(`Invalid TZT frame length: ${frameLength}`));
+          return;
+        }
+        if (connection.buffer.length < frameLength) return;
+        const frame = connection.buffer.subarray(0, frameLength);
+        connection.buffer = connection.buffer.subarray(frameLength);
+        let response: TztResponse;
+        try {
+          response = await this.codec.decode(frame);
+        } catch (error) {
+          this.failConnection(connection, error);
+          return;
+        }
+        if (connection.failed) return;
+        const serial = Number(response.HandleSerialNo);
+        const pending = connection.pending.get(serial);
+        // A timed-out request may still have a response in flight. Ignore that
+        // valid late frame so it cannot take down unrelated requests sharing the
+        // same long-lived connection.
+        if (pending === undefined) continue;
+        delete response.HandleSerialNo;
+        if (pending.onFrame !== undefined) {
+          let keepOpen = false;
+          try {
+            keepOpen = pending.onFrame(response);
+          } catch (error) {
+            connection.pending.delete(serial);
+            clearTimeout(pending.timer);
+            pending.reject(error);
+            continue;
+          }
+          if (keepOpen) {
+            clearTimeout(pending.timer);
+            pending.timer = this.createIdleTimeout(connection, connection.key, serial);
+            continue;
+          }
+        }
+        connection.pending.delete(serial);
+        clearTimeout(pending.timer);
+        pending.resolve(response);
       }
-      const payloadLength = connection.buffer.readUInt32LE(2);
-      const frameLength = payloadLength + 6;
-      if (frameLength <= 6 || frameLength > 1024 * 1024) {
-        this.failConnection(connection, new Error(`Invalid TZT frame length: ${frameLength}`));
-        return;
-      }
-      if (connection.buffer.length < frameLength) return;
-      const frame = connection.buffer.subarray(0, frameLength);
-      connection.buffer = connection.buffer.subarray(frameLength);
-      let response: TztResponse;
-      try {
-        response = this.codec.decode(frame);
-      } catch (error) {
-        this.failConnection(connection, error);
-        return;
-      }
-      const serial = Number(response.HandleSerialNo);
-      const pending = connection.pending.get(serial);
-      // A timed-out request may still have a response in flight. Ignore that
-      // valid late frame so it cannot take down unrelated requests sharing the
-      // same long-lived connection.
-      if (pending === undefined) continue;
-      connection.pending.delete(serial);
-      clearTimeout(pending.timer);
-      delete response.HandleSerialNo;
-      pending.resolve(response);
+    } finally {
+      connection.draining = false;
     }
+  }
+
+  private createIdleTimeout(connection: ConnectionState, key: string, serial: number): NodeJS.Timeout {
+    return setTimeout(() => {
+      const pending = connection.pending.get(serial);
+      if (pending !== undefined && connection.pending.delete(serial)) pending.reject(new Error(`TCP stream idle timeout for ${key}`));
+    }, this.requestTimeoutMs);
   }
 
   private failConnection(connection: ConnectionState, reason: unknown): void {

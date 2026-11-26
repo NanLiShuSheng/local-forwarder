@@ -4,6 +4,9 @@
 
   const versionNodes = [...document.querySelectorAll("[data-version]")];
   const windowsLink = document.querySelector('[data-download="windows"]');
+  const macIntelLink = document.querySelector('[data-download="mac-x64"]');
+  const macArm64Link = document.querySelector('[data-download="mac-arm64"]');
+  const hasMacDownloads = macIntelLink !== null || macArm64Link !== null;
   const downloadStatus = document.querySelector("[data-download-status]");
   const nav = document.querySelector("[data-nav]");
   const reduceMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -72,6 +75,30 @@
     return { version, fileName: fileName.trim(), releaseDate };
   };
 
+  const parseMacManifest = (text) => {
+    let manifest;
+    try {
+      manifest = JSON.parse(text);
+    } catch {
+      throw new Error("Invalid mac-update.json");
+    }
+    const version = typeof manifest?.version === "string" ? manifest.version : "";
+    const files = Array.isArray(manifest?.files) ? manifest.files : [];
+    const fileForArch = (arch) => {
+      const file = files.find((entry) => entry?.arch === arch && typeof entry?.name === "string");
+      return file?.name.trim() || undefined;
+    };
+    const x64FileName = fileForArch("x64");
+    const arm64FileName = fileForArch("arm64");
+    if (!version || !x64FileName || !arm64FileName) throw new Error("Invalid mac-update.json");
+    return {
+      version,
+      x64FileName,
+      arm64FileName,
+      releaseDate: typeof manifest.releaseDate === "string" ? manifest.releaseDate : undefined,
+    };
+  };
+
   const formatReleaseDate = (value) => {
     if (!value) return "";
     const date = new Date(value);
@@ -95,8 +122,14 @@
   };
 
   const loadDownloads = async () => {
-    try {
-      const windowsManifest = parseWindowsManifest(await fetchText("latest.yml"));
+    const [windowsResult, macResult] = await Promise.allSettled([
+      fetchText("latest.yml").then(parseWindowsManifest),
+      hasMacDownloads ? fetchText("mac-update.json").then(parseMacManifest) : Promise.resolve(undefined),
+    ]);
+    const windowsManifest = windowsResult.status === "fulfilled" ? windowsResult.value : undefined;
+    const macManifest = macResult.status === "fulfilled" ? macResult.value : undefined;
+
+    if (windowsManifest) {
       setVersion(windowsManifest.version);
       setLinkReady(
         windowsLink,
@@ -104,20 +137,47 @@
         "下载 Windows x64 安装包",
       );
       windowsLink?.setAttribute("download", "");
+    } else {
+      setLinkUnavailable(windowsLink, "Windows 版本读取失败");
+    }
 
-      const releaseDate = formatReleaseDate(windowsManifest.releaseDate);
-      setStatus(
-        releaseDate
-          ? `最新 Windows 版本已就绪 · 发布于 ${releaseDate}`
-          : "最新 Windows 版本已就绪",
-      );
-    } catch {
+    if (hasMacDownloads) {
+      if (macManifest) {
+        setVersion(macManifest.version);
+        setLinkReady(macIntelLink, resolveAssetUrl(macManifest.x64FileName), `DMG · v${macManifest.version}`);
+        setLinkReady(macArm64Link, resolveAssetUrl(macManifest.arm64FileName), `DMG · v${macManifest.version}`);
+        macIntelLink?.setAttribute("download", "");
+        macArm64Link?.setAttribute("download", "");
+      } else {
+        setLinkUnavailable(macIntelLink, "Intel 版本读取失败", "无法读取 macOS Intel 安装包");
+        setLinkUnavailable(macArm64Link, "Apple Silicon 版本读取失败", "无法读取 macOS Apple Silicon 安装包");
+      }
+    }
+
+    if (!windowsManifest && !macManifest) {
       versionNodes.forEach((node) => {
         node.textContent = VERSION_PLACEHOLDER;
       });
-      setLinkUnavailable(windowsLink, "Windows 版本读取失败");
       setStatus("无法读取最新版本信息，请稍后刷新页面", true);
+      return;
     }
+
+    if (windowsManifest && (!hasMacDownloads || macManifest)) {
+      const releaseDate = formatReleaseDate(windowsManifest.releaseDate ?? macManifest?.releaseDate);
+      setStatus(
+        releaseDate
+          ? `最新${hasMacDownloads ? " Windows 与 macOS " : " Windows "}版本已就绪 · 发布于 ${releaseDate}`
+          : `最新${hasMacDownloads ? " Windows 与 macOS " : " Windows "}版本已就绪`,
+      );
+      return;
+    }
+
+    setStatus(
+      windowsManifest
+        ? "Windows 版本已就绪，macOS 下载信息读取失败，请稍后刷新"
+        : "macOS 版本已就绪，Windows 下载信息读取失败，请稍后刷新",
+      true,
+    );
   };
 
   const setupImageLoadState = () => {

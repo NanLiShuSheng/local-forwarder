@@ -99,3 +99,14 @@ test("titlebar does not show configuration save status", async () => {
   assert.doesNotMatch(titlebar, /配置已保存|lf-save-state|saveState/);
   assert.doesNotMatch(styles, /\.lf-save-state/);
 });
+
+test("titlebar utility icons keep consistent size and breathing room", async () => {
+  const [titlebar, styles] = await Promise.all([
+    readFile("src/renderer/components/WorkspaceChrome.tsx", "utf8"),
+    readFile("src/renderer/styles.css", "utf8"),
+  ]);
+
+  assert.match(titlebar, /<div className="lf-titlebar-actions"[\s\S]*?lf-icon-button[\s\S]*?lf-icon-button[\s\S]*?lf-account-chip[\s\S]*?<\/div>/);
+  assert.match(styles, /\.lf-titlebar-actions\s*\{[^}]*gap:\s*14px/);
+  assert.match(styles, /\.lf-titlebar-actions \.lf-icon-button,\s*\n\.lf-titlebar-actions \.lf-account-chip\s*\{[^}]*width:\s*32px[^}]*height:\s*32px/);
+});

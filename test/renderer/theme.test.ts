@@ -571,8 +571,8 @@ test("themes use the approved green workbench palettes", async () => {
     "sidebar-background": "#010409",
     "panel-background": "#151b23",
     "text-primary": "#f0f6fc",
-    "button-primary-background": "#659f87",
-    "button-primary-hover": "#72a791",
+    "button-primary-background": "#74c4a3",
+    "button-primary-hover": "#82d0b0",
     "button-primary-text": "#06120c",
     "border-default": "#2f3742",
     "border-selected": "#54c091",
@@ -705,7 +705,7 @@ test("dark theme keeps green labels on the softened jade text level", async () =
     assert.match(extractCssRule(source, selector), /color:\s*var\(--text-action\)/, `${selector} must use the softer green text level`);
   }
   assert.equal(extractCssToken(darkRule, "accent"), "#54c091");
-  assert.equal(extractCssToken(darkRule, "button-primary-hover"), "#72a791");
+  assert.equal(extractCssToken(darkRule, "button-primary-hover"), "#82d0b0");
 });
 
 test("light theme uses white panels, subtle gray surfaces, and green selected states", async () => {

@@ -14,6 +14,12 @@ const MAX_LOG_DETAIL_SIZE = 256 * 1024;
 
 export interface TcpBridgeLike {
   request(target: { host: string; port: number }, query: Record<string, string>): Promise<Record<string, unknown>>;
+  requestStream?(target: { host: string; port: number }, query: Record<string, string>, onFrame: (frame: Record<string, unknown>) => boolean): TcpBridgeStream | Promise<TcpBridgeStream>;
+}
+
+export interface TcpBridgeStream {
+  done: Promise<void>;
+  cancel: () => void;
 }
 
 export interface HttpProxyOptions {
@@ -91,6 +97,10 @@ function requestPathFor(requestUrl: string | undefined): string | undefined {
 function shouldRecordRequest(requestType: LogEntry["requestType"], requestPath: string | undefined, logAllRequests: boolean | undefined): boolean {
   if (logAllRequests === true || requestType !== undefined) return true;
   return requestPath !== undefined && /^\/req/i.test(requestPath);
+}
+
+function isLongLivedRequest(request: IncomingMessage, requestPath: string | undefined): boolean {
+  return request.headers["tztforward"] === "forward" || requestPath === "/reqsse";
 }
 
 function captureResponse(response: ServerResponse): ResponseCapture {
@@ -209,6 +219,27 @@ function uppercaseRecordKeys(record: Record<string, unknown>): Record<string, un
   const output: Record<string, unknown> = Object.create(null);
   for (const [key, value] of Object.entries(record)) output[key.toUpperCase()] = value;
   return output;
+}
+
+function sseFramePayload(frame: Record<string, unknown>, binary: boolean): { payload: string; terminal: boolean } {
+  const grid: unknown = frame.GRID0 || frame.Grid0;
+  const terminal = typeof grid === "string" && grid !== "" && Number(grid) === 0;
+  if (binary) {
+    const zzkeyByte = frame.zzkeyByte as Record<string, unknown> | undefined;
+    const raw = zzkeyByte?.Grid0;
+    const bytes = Array.isArray(raw)
+      ? Buffer.from(raw as number[])
+      : raw !== null && typeof raw === "object" && Array.isArray((raw as { data?: unknown }).data)
+        ? Buffer.from((raw as { data: number[] }).data)
+        : undefined;
+    return { payload: bytes === undefined ? "" : `${bytes.toString("base64")}\r\n\r\n`, terminal };
+  }
+  if (grid) {
+    if (Array.isArray(grid)) return { payload: grid.map((entry) => entry === null || entry === undefined || entry === "" ? "\r\n" : String(entry)).join("\r\n"), terminal };
+    return { payload: String(grid), terminal };
+  }
+  const { zzbytes: _zzbytes, zzkeyByte: _zzkeyByte, ...rest } = frame;
+  return { payload: JSON.stringify(uppercaseRecordKeys(rest)), terminal };
 }
 
 function parseGridVersion(value: string): number | undefined {
@@ -487,7 +518,8 @@ export class HttpProxy {
     const started = Date.now();
     const requestType = requestTypeFor(request);
     const requestPath = requestPathFor(request.url);
-    const responseCapture = captureResponse(response);
+    const longLived = isLongLivedRequest(request, requestPath);
+    const responseCapture = longLived ? undefined : captureResponse(response);
     this.stats.requestCount += 1;
     let requestBody: Buffer<ArrayBufferLike> = Buffer.alloc(0);
     let statusCode = 500;
@@ -502,7 +534,10 @@ export class HttpProxy {
       requestBody = body;
       const url = new URL(request.url ?? "/", "http://local-forwarder.invalid");
       const actionResponse = legacyActionResponse(request.url ?? "/", request.headers.host);
-      if (actionResponse !== undefined) {
+      if (longLived) {
+        await this.handleSse(request.url ?? "/reqsse", body, response, request.headers);
+        statusCode = response.statusCode;
+      } else if (actionResponse !== undefined) {
         if (actionResponse.location !== undefined) {
           response.writeHead(actionResponse.statusCode, { location: actionResponse.location });
           response.end();
@@ -559,9 +594,69 @@ export class HttpProxy {
     } finally {
       const durationMs = Date.now() - started;
       this.stats.totalDurationMs += durationMs;
-      if (shouldRecordRequest(requestType, requestPath, this.options.logAllRequests)) {
+      if (!longLived && responseCapture !== undefined && shouldRecordRequest(requestType, requestPath, this.options.logAllRequests)) {
         this.options.onLog?.({ timestamp: new Date().toISOString(), level: statusCode >= 500 ? "error" : "info", message: `${request.method ?? "GET"} ${request.url ?? "/"}`, direction: "inbound", protocol: "http", statusCode, durationMs, requestType: requestType ?? "http", requestPath, requestParams: requestParamsFor(request, requestBody), responseData: responseDataFor(response, responseCapture) });
       }
+    }
+  }
+
+  private async handleSse(route: string, body: Buffer, response: ServerResponse, headers: IncomingHttpHeaders): Promise<void> {
+    const bridge = this.options.tcpBridge;
+    if (bridge?.requestStream === undefined) {
+      writeJson(response, { error: "TCP bridge is unavailable" }, 502);
+      return;
+    }
+    const substituted = substituteVariables(new URLSearchParams(parseParams(route, body)).toString(), this.localValues);
+    const params = Object.fromEntries(new URLSearchParams(substituted).entries());
+    const targets = (this.options.tcpTargets ?? []).filter((target) => target.enabled);
+    const target = targets[Number(uppercaseParams(params).REQLINKTYPE ?? 0)] ?? targets[0];
+    if (target === undefined) {
+      writeJson(response, { error: "TCP target is unavailable" }, 502);
+      return;
+    }
+    if (target.transport === "http") {
+      writeJson(response, { error: "SSE streaming requires a TCP target" }, 502);
+      return;
+    }
+    const binary = headers["tztcontenttype"] === "application/octet-stream";
+    let headersSent = false;
+    const ensureHeaders = () => {
+      if (headersSent) return;
+      headersSent = true;
+      response.writeHead(200, { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache, no-store", connection: "keep-alive" });
+    };
+    let stream: TcpBridgeStream | undefined;
+    let canceled = false;
+    const cancelStream = () => {
+      canceled = true;
+      stream?.cancel();
+    };
+    response.once("close", cancelStream);
+    try {
+      stream = await bridge.requestStream({ host: target.host, port: target.port }, params, (frame) => {
+        this.captureLocalValues(frame);
+        const { payload, terminal } = sseFramePayload(frame, binary);
+        if (payload.length === 0 && !terminal) return true;
+        ensureHeaders();
+        if (payload.length > 0) response.write(payload);
+        if (terminal) {
+          response.end();
+          return false;
+        }
+        return true;
+      });
+      if (canceled) {
+        stream.cancel();
+        return;
+      }
+      await stream.done;
+      if (!response.writableEnded && !response.destroyed) {
+        ensureHeaders();
+        response.end();
+      }
+    } catch (error) {
+      if (!headersSent) writeJson(response, { error: error instanceof Error ? error.message : "TCP stream failed" }, /timeout/i.test(String(error)) ? 504 : 502);
+      else if (!response.writableEnded) response.end();
     }
   }
 
@@ -774,7 +869,7 @@ export class HttpProxy {
         const requestedEncodedPath = relative.toLowerCase().endsWith(".d");
         const resolvedEncodedFallback = candidate !== sourceRelative;
         if (candidate.toLowerCase().endsWith(".d") && this.options.cacheCodec !== undefined && (this.options.decodeStaticDResources === true || requestedEncodedPath || resolvedEncodedFallback)) {
-          data = Buffer.from(decodeCachedResource(candidate, data, this.options.cacheCodec, true));
+          data = Buffer.from(await decodeCachedResource(candidate, data, this.options.cacheCodec, true));
         }
         if (!candidate.toLowerCase().endsWith(".d") || this.options.cacheCodec !== undefined) {
           data = rewriteLegacyNavigationScript(candidate, data);
@@ -969,7 +1064,7 @@ export class HttpProxy {
     try {
       if (cacheConfig.decryptEnabled) {
         if (this.options.cacheCodec === undefined) throw new Error("resource cache codec is unavailable");
-        data = decodeCachedResource(cacheKey, result.data, this.options.cacheCodec, true);
+        data = await decodeCachedResource(cacheKey, result.data, this.options.cacheCodec, true);
       } else {
         data = Buffer.from(result.data);
       }

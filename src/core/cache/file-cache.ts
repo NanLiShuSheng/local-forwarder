@@ -90,19 +90,19 @@ export class FileCache {
   }
 }
 
-export function decodeCachedResource(
+export async function decodeCachedResource(
   relativePath: string,
   data: Uint8Array,
   codec: Pick<TztCodec, "rc4">,
   decryptEnabled: boolean,
-): Buffer {
+): Promise<Buffer> {
   const input = Buffer.from(data);
   if (!decryptEnabled || !relativePath.toLowerCase().endsWith(".d")) return input;
   const originalName = relativePath.slice(0, -2);
   const extension = path.extname(originalName).toLowerCase();
   if (![".js", ".html", ".htm", ".css"].includes(extension)) return input;
   if (input.length < 4) throw new Error(`Invalid encrypted resource: ${relativePath}`);
-  const decrypted = codec.rc4(input.subarray(0, -4), "file");
+  const decrypted = await codec.rc4(input.subarray(0, -4), "file");
   if (path.basename(originalName).toLowerCase() === "tzt.js") {
     try {
       return gunzipSync(decrypted);

@@ -623,7 +623,7 @@ test("serves gzip-encoded default .d HTML with a gzip response header", async ()
   const codec = createTztCodec();
   const projectPath = await mkdtemp(path.join(os.tmpdir(), "forwarder-gzip-project-"));
   const html = "<!doctype html><html><body>local-info</body></html>";
-  const encoded = Buffer.concat([codec.rc4(gzipSync(Buffer.from(html)), "file"), Buffer.from([0, 0, 0, 0])]);
+  const encoded = Buffer.concat([await codec.rc4(gzipSync(Buffer.from(html)), "file"), Buffer.from([0, 0, 0, 0])]);
   await writeFile(path.join(projectPath, "index.html.d"), encoded);
   const proxy = new HttpProxy({
     bindHost: "127.0.0.1",
@@ -644,6 +644,7 @@ test("serves gzip-encoded default .d HTML with a gzip response header", async ()
     assert.equal(await response.text(), html);
   } finally {
     await proxy.stop();
+    await codec.close?.();
     await rm(projectPath, { recursive: true, force: true });
   }
 });
@@ -656,6 +657,7 @@ test("serves HSComm HTTP.DirList files as raw Windows static responses", async (
   await writeFile(path.join(root, "download", "index.html.d"), raw);
   await writeFile(path.join(root, "Doc", "foo.txt.d"), "doc-bytes");
   await writeFile(path.join(root, "index.html.d"), raw);
+  const codec = createTztCodec();
   const proxy = new HttpProxy({
     bindHost: "127.0.0.1",
     port: 0,
@@ -663,7 +665,7 @@ test("serves HSComm HTTP.DirList files as raw Windows static responses", async (
     defaultDocument: "LoadBalance.dll",
     httpDirectories: ["/DownLoad/", "/Doc/"],
     decodeStaticDResources: true,
-    cacheCodec: createTztCodec(),
+    cacheCodec: codec,
     rules: [],
     timeoutMs: 500,
   });
@@ -705,6 +707,7 @@ test("serves HSComm HTTP.DirList files as raw Windows static responses", async (
     assert.equal(await missing.text(), "<HTML><HEAD><TITLE>404 Not Found</TITLE></HEAD><BODY><H1>404 Not Found</H1>The requested URL /DownLoad/missing.html.d was not found on this server.<P></BODY></HTML>\r\n");
   } finally {
     await proxy.stop();
+    await codec.close?.();
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -907,6 +910,216 @@ test("uses the jy reqxml target when ReqLinkType is omitted", async () => {
   }
 });
 
+test("streams reqsse frames over TCP until the zero sentinel without recording request logs", async () => {
+  const calls: Array<{ target: { host: string; port: number }; query: Record<string, string> }> = [];
+  const logs: LogEntry[] = [];
+  const bridge = {
+    request: async () => ({}),
+    requestStream: (target: { host: string; port: number }, query: Record<string, string>, onFrame: (frame: Record<string, unknown>) => boolean) => {
+      calls.push({ target, query });
+      let resolveDone!: () => void;
+      const done = new Promise<void>((resolve) => { resolveDone = resolve; });
+      queueMicrotask(() => {
+        for (const frame of [
+          { GRID0: "first\r\n" },
+          { GRID0: ["row1", null, "row3"] },
+          { ACTION: "210" },
+          { GRID0: "0" },
+        ]) {
+          if (!onFrame(frame)) break;
+        }
+        resolveDone();
+      });
+      return { done, cancel: () => resolveDone() };
+    },
+  };
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    rules: [],
+    logAllRequests: true,
+    tcpTargets: [
+      { id: "hq", name: "hq", host: "hq-target", port: 9000, enabled: true },
+      { id: "jy", name: "jy", host: "jy-target", port: 9001, enabled: true },
+    ],
+    tcpBridge: bridge,
+    timeoutMs: 500,
+    onLog: (entry) => logs.push(entry),
+  });
+
+  try {
+    const address = await proxy.start();
+    const response = await fetch(`http://127.0.0.1:${address.port}/reqsse?Action=52100`, {
+      headers: { "x-requested-with": "XMLHttpRequest" },
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") ?? "", /text\/event-stream/);
+    assert.equal(await response.text(), 'first\r\nrow1\r\n\r\n\r\nrow3{"ACTION":"210"}0');
+    assert.deepEqual(calls[0], {
+      target: { host: "hq-target", port: 9000 },
+      query: { Action: "52100" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(logs, []);
+  } finally {
+    await proxy.stop();
+  }
+});
+
+test("routes tztforward header requests into the SSE stream without recording logs", async () => {
+  const logs: LogEntry[] = [];
+  const bridge = {
+    request: async () => ({}),
+    requestStream: (_target: { host: string; port: number }, _query: Record<string, string>, onFrame: (frame: Record<string, unknown>) => boolean) => {
+      let resolveDone!: () => void;
+      const done = new Promise<void>((resolve) => { resolveDone = resolve; });
+      queueMicrotask(() => {
+        onFrame({ GRID0: "tick\r\n" });
+        onFrame({ GRID0: "0" });
+        resolveDone();
+      });
+      return { done, cancel: () => resolveDone() };
+    },
+  };
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    rules: [],
+    logAllRequests: true,
+    tcpTargets: [{ id: "hq", name: "hq", host: "hq-target", port: 9000, enabled: true }],
+    tcpBridge: bridge,
+    timeoutMs: 500,
+    onLog: (entry) => logs.push(entry),
+  });
+
+  try {
+    const address = await proxy.start();
+    const response = await fetch(`http://127.0.0.1:${address.port}/ordinary/path`, { headers: { tztforward: "forward" } });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") ?? "", /text\/event-stream/);
+    assert.equal(await response.text(), "tick\r\n0");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(logs, []);
+  } finally {
+    await proxy.stop();
+  }
+});
+
+test("streams binary reqsse frames as base64", async () => {
+  const bridge = {
+    request: async () => ({}),
+    requestStream: (_target: { host: string; port: number }, _query: Record<string, string>, onFrame: (frame: Record<string, unknown>) => boolean) => {
+      let resolveDone!: () => void;
+      const done = new Promise<void>((resolve) => { resolveDone = resolve; });
+      queueMicrotask(() => {
+        onFrame({ GRID0: "payload", zzkeyByte: { Grid0: [1, 2, 3] } });
+        onFrame({ GRID0: "0" });
+        resolveDone();
+      });
+      return { done, cancel: () => resolveDone() };
+    },
+  };
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    rules: [],
+    tcpTargets: [{ id: "hq", name: "hq", host: "hq-target", port: 9000, enabled: true }],
+    tcpBridge: bridge,
+    timeoutMs: 500,
+  });
+
+  try {
+    const address = await proxy.start();
+    const response = await fetch(`http://127.0.0.1:${address.port}/reqsse?Action=52100`, {
+      headers: { tztcontenttype: "application/octet-stream" },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), "AQID\r\n\r\n");
+  } finally {
+    await proxy.stop();
+  }
+});
+
+test("rejects reqsse for an HTTP transport target without recording a log", async () => {
+  const logs: LogEntry[] = [];
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    rules: [],
+    logAllRequests: true,
+    tcpTargets: [{ id: "hq", name: "hq", host: "127.0.0.1", port: 9000, protocol: "http", transport: "http", enabled: true }],
+    tcpBridge: {
+      request: async () => ({}),
+      requestStream: () => { throw new Error("requestStream must not be called"); },
+    },
+    timeoutMs: 500,
+    onLog: (entry) => logs.push(entry),
+  });
+
+  try {
+    const address = await proxy.start();
+    const response = await fetch(`http://127.0.0.1:${address.port}/reqsse?Action=52100`, {
+      headers: { "x-requested-with": "XMLHttpRequest" },
+    });
+    assert.equal(response.status, 502);
+    assert.deepEqual(await response.json(), { error: "SSE streaming requires a TCP target" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(logs, []);
+  } finally {
+    await proxy.stop();
+  }
+});
+
+test("cancels a reqsse TCP stream when the client disconnects", async () => {
+  let canceled = 0;
+  let resolveCanceled!: () => void;
+  const streamCanceled = new Promise<void>((resolve) => { resolveCanceled = resolve; });
+  const bridge = {
+    request: async () => ({}),
+    requestStream: (_target: { host: string; port: number }, _query: Record<string, string>, onFrame: (frame: Record<string, unknown>) => boolean) => {
+      let resolveDone!: () => void;
+      const done = new Promise<void>((resolve) => { resolveDone = resolve; });
+      queueMicrotask(() => onFrame({ GRID0: "tick\r\n" }));
+      return {
+        done,
+        cancel: () => {
+          canceled += 1;
+          resolveDone();
+          resolveCanceled();
+        },
+      };
+    },
+  };
+  const proxy = new HttpProxy({
+    bindHost: "127.0.0.1",
+    port: 0,
+    rules: [],
+    tcpTargets: [{ id: "hq", name: "hq", host: "hq-target", port: 9000, enabled: true }],
+    tcpBridge: bridge,
+    timeoutMs: 500,
+  });
+
+  try {
+    const address = await proxy.start();
+    await new Promise<void>((resolve, reject) => {
+      const request = http.get({ host: "127.0.0.1", port: address.port, path: "/reqsse?Action=52100" }, (response) => {
+        response.once("data", () => {
+          response.destroy();
+          resolve();
+        });
+      });
+      request.once("error", reject);
+    });
+    await Promise.race([
+      streamCanceled,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("stream was not canceled")), 500)),
+    ]);
+    assert.equal(canceled, 1);
+  } finally {
+    await proxy.stop();
+  }
+});
+
 test("handles local values, maps, files, and TCP reqxml without leaving data in the renderer", async () => {
   const bridge = { request: async (_target: unknown, query: Record<string, string>) => ({ Action: query.Action ?? "", ERRORNO: "0" }) };
   const logs: LogEntry[] = [];
@@ -984,7 +1197,7 @@ test("downloads and caches .d resources, then serves the decoded cache after the
     "window.MyWebView.onJsOverrideUrlLoading(str)",
   ].join("\n");
   const compressed = gzipSync(Buffer.from(source));
-  const encrypted = Buffer.concat([codec.rc4(compressed, "file"), Buffer.from([0, 0, 0, 0])]);
+  const encrypted = Buffer.concat([await codec.rc4(compressed, "file"), Buffer.from([0, 0, 0, 0])]);
   let downloadCount = 0;
   const target = http.createServer((request, response) => {
     if (request.url !== "/download/TZT.js.d") {
@@ -1029,6 +1242,7 @@ test("downloads and caches .d resources, then serves the decoded cache after the
   } finally {
     await proxy.stop();
     await cache.close();
+    await codec.close?.();
     await rm(rootDir, { recursive: true, force: true });
     if (target.listening) await close(target);
   }

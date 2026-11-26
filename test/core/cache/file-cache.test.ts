@@ -33,9 +33,9 @@ test("deduplicates concurrent downloads and cleans failed temporary files", asyn
 test("decodes encrypted and gzipped .d scripts while keeping binary assets unchanged", async () => {
   const codec = { rc4: (data: Uint8Array) => Buffer.from(data).map((value) => value ^ 0xff) };
   const encryptedScript = Buffer.concat([codec.rc4(gzipSync(Buffer.from("console.log('ok')"))), Buffer.from([1, 2, 3, 4])]);
-  assert.equal(decodeCachedResource("TZT.js.d", encryptedScript, codec, true).toString(), "console.log('ok')");
+  assert.equal((await decodeCachedResource("TZT.js.d", encryptedScript, codec, true)).toString(), "console.log('ok')");
   const image = Buffer.from([0, 255, 1]);
-  assert.deepEqual(decodeCachedResource("image.png.d", image, codec, true), image);
+  assert.deepEqual(await decodeCachedResource("image.png.d", image, codec, true), image);
 });
 
 test("rewrites the TZT native navigation callback for local browser navigation", () => {
