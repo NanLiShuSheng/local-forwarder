@@ -583,6 +583,14 @@
       .build-grid, .data-workspace { grid-template-columns: 1fr; }
     }
   </style>
+  <script>
+    (() => {
+      const tone = new URLSearchParams(location.search).get('tone');
+      if (!tone) return;
+      document.documentElement.dataset.tone = tone;
+      document.write('<link rel="stylesheet" href="dark-tone-tokens.css">');
+    })();
+  </script>
 </head>
 <body>
   <div class="app" id="app" data-theme="light">
@@ -1543,6 +1551,8 @@
 
     const params = new URLSearchParams(location.search);
     const requestedTheme = params.get('theme');
+    const requestedTone = params.get('tone');
+    if (requestedTone) app.dataset.tone = requestedTone;
     const storedTheme = (() => { try { return localStorage.getItem('lf-prototype-theme'); } catch { return null; } })();
     setThemeOption(requestedTheme === 'dark' || requestedTheme === 'light' ? requestedTheme : (storedTheme || 'light'), { persist: false });
     const hashRoute = location.hash.replace(/^#\/?/, '');

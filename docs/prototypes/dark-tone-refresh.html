@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>深色主题 · 去灰方案对比</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --page: #050607;
+      --panel: #0b0d0c;
+      --border: #202521;
+      --text: #f1f3ef;
+      --muted: #8e9891;
+      --faint: #657068;
+      --mint: #65d8ad;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 1720px;
+      color: var(--text);
+      background:
+        radial-gradient(900px 360px at 12% -160px, rgba(101, 216, 173, 0.09), transparent 64%),
+        linear-gradient(180deg, #070908 0%, var(--page) 42%, #040505 100%);
+    }
+    h1, h2, p { margin: 0; }
+    .review { width: 1660px; margin: 0 auto; padding: 30px 0 28px; }
+    .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; margin-bottom: 22px; }
+    .eyebrow { margin-bottom: 8px; color: var(--mint); font-size: 10px; font-weight: 800; letter-spacing: 0.17em; text-transform: uppercase; }
+    h1 { font-size: 28px; line-height: 1.12; letter-spacing: -0.035em; }
+    .lede { max-width: 880px; margin-top: 8px; color: #b9c1bb; font-size: 12px; line-height: 1.65; }
+    .lede b { color: var(--text); font-weight: 680; }
+    .principles { width: 410px; flex: 0 0 410px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .principle { border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; background: rgba(13, 17, 14, 0.85); }
+    .principle strong { display: block; color: #e9ede9; font-size: 10px; }
+    .principle span { display: block; margin-top: 3px; color: var(--faint); font-size: 8.5px; line-height: 1.45; }
+    .scheme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .scheme { overflow: hidden; border: 1px solid var(--border); border-radius: 15px; background: linear-gradient(180deg, rgba(13, 17, 14, 0.96), rgba(7, 9, 8, 0.98)); box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22); }
+    .scheme.recommended { border-color: rgba(101, 216, 173, 0.38); box-shadow: 0 0 0 1px rgba(101, 216, 173, 0.06), 0 20px 54px rgba(0, 0, 0, 0.28); }
+    .scheme-head { min-height: 78px; display: flex; align-items: flex-start; gap: 10px; padding: 14px 15px 12px; }
+    .index { width: 27px; height: 27px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid #303831; border-radius: 8px; color: #aeb8b1; background: #101411; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 800; }
+    .scheme-title { min-width: 0; flex: 1; }
+    .scheme h2 { font-size: 14px; letter-spacing: -0.02em; }
+    .scheme-head p { margin-top: 3px; color: var(--muted); font-size: 9.5px; line-height: 1.5; }
+    .tag { flex: 0 0 auto; border: 1px solid rgba(101, 216, 173, 0.3); border-radius: 99px; padding: 3px 7px; color: #b8f4dc; background: rgba(101, 216, 173, 0.10); font-size: 8px; font-weight: 800; white-space: nowrap; }
+    .tag.neutral { border-color: #343b36; color: #a2aea5; background: #131714; }
+    .tag.warm { border-color: rgba(215, 180, 111, 0.28); color: #e8cea0; background: rgba(215, 180, 111, 0.08); }
+    .preview-shell { position: relative; width: 518px; height: 324px; margin: 0 auto; overflow: hidden; border: 1px solid #1d231f; border-radius: 9px; background: #050606; }
+    .preview-shell iframe { position: absolute; top: 0; left: 0; width: 1440px; height: 900px; border: 0; transform: scale(0.36); transform-origin: 0 0; pointer-events: none; }
+    .scheme-foot { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; min-height: 70px; padding: 12px 15px 14px; }
+    .scheme-note { max-width: 330px; color: #8f9992; font-size: 9px; line-height: 1.55; }
+    .scheme-note b { color: #d9dfda; font-weight: 650; }
+    .swatches { display: flex; gap: 4px; flex: 0 0 auto; padding-top: 2px; }
+    .swatches i { width: 17px; height: 22px; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 4px; background: var(--c); }
+    .recommendation { display: flex; align-items: center; gap: 10px; margin-top: 16px; border: 1px solid rgba(101, 216, 173, 0.18); border-radius: 11px; padding: 10px 14px; color: #b8c4bc; background: rgba(101, 216, 173, 0.045); font-size: 10px; line-height: 1.5; }
+    .recommendation strong { color: #e8f7ef; font-weight: 700; }
+    .recommendation .dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 4px rgba(101, 216, 173, 0.10); }
+    .critique { display: flex; gap: 22px; margin-top: 9px; color: #69736c; font-size: 9px; }
+    .critique span { display: inline-flex; align-items: center; gap: 6px; }
+    .critique i { width: 4px; height: 4px; border-radius: 50%; background: #4b554e; }
+  </style>
+</head>
+<body>
+  <main class="review">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Obsidian · green accent</p>
+        <h1>曜石黑：保留 App 绿色，只调饱和度</h1>
+        <p class="lede">沿用方案 3 的 <b>纯黑基底 + 暖白文字</b>，强调色保持 App 绿色的色相（H154°），仅提高明度与饱和度。三档都在同一个工作台、同一比例下对比。</p>
+      </div>
+      <div class="principles" aria-label="优化原则">
+        <div class="principle"><strong>原 App 绿</strong><span>#4D9375 · S31%</span></div>
+        <div class="principle"><strong>色相不变</strong><span>统一 H154°</span></div>
+        <div class="principle"><strong>只调饱和度</strong><span>38 / 46 / 62%</span></div>
+      </div>
+    </header>
+
+    <section class="scheme-grid">
+      <article class="scheme">
+        <div class="scheme-head">
+          <span class="index">01</span>
+          <div class="scheme-title"><h2>低饱和 · 松烟绿</h2><p>H154° / S38% / L54%，更内敛，接近原 App 的绿色气质。</p></div>
+          <span class="tag neutral">克制</span>
+        </div>
+        <div class="preview-shell"><iframe src="workbench-redesign.html?theme=dark&tone=obsidian-green-soft&view=workbench" title="低饱和松烟绿方案预览"></iframe></div>
+        <div class="scheme-foot">
+          <p class="scheme-note"><b>特点：</b>柔和、不抢眼；纯黑上的状态识别度略低，大面积按钮也更低调。</p>
+          <div class="swatches" aria-label="色板"><i style="--c:#050506"></i><i style="--c:#0d0e10"></i><i style="--c:#17191c"></i><i style="--c:#5db690"></i><i style="--c:#f5f2ea"></i></div>
+        </div>
+      </article>
+
+      <article class="scheme recommended">
+        <div class="scheme-head">
+          <span class="index">02</span>
+          <div class="scheme-title"><h2>中饱和 · 玉青绿</h2><p>H154° / S46% / L54%，清晰但不发光，最平衡。</p></div>
+          <span class="tag">推荐</span>
+        </div>
+        <div class="preview-shell"><iframe src="workbench-redesign.html?theme=dark&tone=obsidian-green-balanced&view=workbench" title="中饱和玉青绿方案预览"></iframe></div>
+        <div class="scheme-foot">
+          <p class="scheme-note"><b>推荐理由：</b>保留 App 绿的可识别性，又能在纯黑背景上拉开状态与主操作按钮。</p>
+          <div class="swatches" aria-label="色板"><i style="--c:#050506"></i><i style="--c:#0d0e10"></i><i style="--c:#17191c"></i><i style="--c:#54c091"></i><i style="--c:#f5f2ea"></i></div>
+        </div>
+      </article>
+
+      <article class="scheme">
+        <div class="scheme-head">
+          <span class="index">03</span>
+          <div class="scheme-title"><h2>高饱和 · 青荧光</h2><p>H154° / S62% / L54%，状态最跳，数码感更强。</p></div>
+          <span class="tag warm">醒目</span>
+        </div>
+        <div class="preview-shell"><iframe src="workbench-redesign.html?theme=dark&tone=obsidian-green-vivid&view=workbench" title="高饱和青荧光方案预览"></iframe></div>
+        <div class="scheme-foot">
+          <p class="scheme-note"><b>特点：</b>运行状态和主按钮最醒目；大面积使用会显得偏“荧光”，与暖白文字冲突更明显。</p>
+          <div class="swatches" aria-label="色板"><i style="--c:#050506"></i><i style="--c:#0d0e10"></i><i style="--c:#17191c"></i><i style="--c:#41d293"></i><i style="--c:#f5f2ea"></i></div>
+        </div>
+      </article>
+    </section>
+
+    <footer class="recommendation"><span class="dot"></span><span><strong>建议先落 02 中饱和玉青绿：</strong>相比原 App 绿仅提高饱和度与明度，色相不变；按钮、运行状态和选中态更清楚，同时保留曜石黑的克制感。</span></footer>
+    <div class="critique"><span><i></i>三套使用同一页面与缩放比例</span><span><i></i>绿色统一为 App 的 H154°</span><span><i></i>仅比较饱和度与明度变化</span></div>
+  </main>
+</body>
+</html>

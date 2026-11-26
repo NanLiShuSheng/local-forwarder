@@ -1,0 +1,195 @@
+/* Dark tone exploration for the Workbench prototype.
+   These override only the existing dark-theme tokens and elevation shadows. */
+
+.app[data-theme="dark"][data-tone="moss-ink"] {
+  --bg: #060807;
+  --bg-glow: rgba(101, 216, 173, 0.055);
+  --chrome: #070a08;
+  --rail: #070a08;
+  --sidebar: #090d0b;
+  --panel: #0d1310;
+  --panel-2: #111814;
+  --panel-3: #17211b;
+  --line: #253029;
+  --line-soft: #19221d;
+  --line-strong: #35433a;
+  --text: #f4f6f2;
+  --text-soft: #cbd2cc;
+  --muted: #929d95;
+  --faint: #69756d;
+  --accent: #65d8ad;
+  --accent-strong: #8ceac7;
+  --accent-soft: rgba(101, 216, 173, 0.11);
+  --accent-line: rgba(101, 216, 173, 0.30);
+  --accent-ring: rgba(101, 216, 173, 0.15);
+  --danger: #ff9393;
+  --danger-soft: rgba(255, 110, 110, 0.08);
+  --danger-line: rgba(255, 110, 110, 0.25);
+  --warning: #f0c473;
+  --warning-soft: rgba(240, 196, 115, 0.08);
+  --warning-line: rgba(240, 196, 115, 0.24);
+  --info: #80bdff;
+  --info-soft: rgba(100, 165, 255, 0.10);
+  --info-line: rgba(100, 165, 255, 0.24);
+  --purple: #b9a7ff;
+  --purple-soft: rgba(165, 140, 255, 0.10);
+  --purple-line: rgba(165, 140, 255, 0.24);
+  --hover: #131c17;
+  --selected: rgba(101, 216, 173, 0.09);
+  --input: #07100c;
+  --button: #0f1612;
+  --button-border: #2d3b33;
+  --code-bg: #070c09;
+  --code-gutter: #0a100d;
+  --code-key: #80c8ff;
+  --code-string: #77e6c0;
+  --code-number: #f0c473;
+  --shadow: rgba(0, 0, 0, 0.26);
+  --shadow-strong: rgba(0, 0, 0, 0.46);
+}
+
+.app[data-theme="dark"][data-tone="glacier-black"] {
+  --bg: #06090f;
+  --bg-glow: rgba(117, 189, 255, 0.055);
+  --chrome: #070b11;
+  --rail: #070b10;
+  --sidebar: #090e15;
+  --panel: #0d1520;
+  --panel-2: #111b27;
+  --panel-3: #172331;
+  --line: #223244;
+  --line-soft: #182433;
+  --line-strong: #31465d;
+  --text: #f3f7fc;
+  --text-soft: #c8d4e1;
+  --muted: #8999aa;
+  --faint: #667789;
+  --accent: #75bdff;
+  --accent-strong: #9ed2ff;
+  --accent-soft: rgba(117, 189, 255, 0.11);
+  --accent-line: rgba(117, 189, 255, 0.30);
+  --accent-ring: rgba(117, 189, 255, 0.15);
+  --danger: #ff9297;
+  --danger-soft: rgba(255, 110, 118, 0.08);
+  --danger-line: rgba(255, 110, 118, 0.25);
+  --warning: #e8c177;
+  --warning-soft: rgba(232, 193, 119, 0.08);
+  --warning-line: rgba(232, 193, 119, 0.24);
+  --info: #75bdff;
+  --info-soft: rgba(117, 189, 255, 0.10);
+  --info-line: rgba(117, 189, 255, 0.24);
+  --purple: #b7a8ff;
+  --purple-soft: rgba(160, 140, 255, 0.10);
+  --purple-line: rgba(160, 140, 255, 0.24);
+  --hover: #121d29;
+  --selected: rgba(117, 189, 255, 0.09);
+  --input: #08111b;
+  --button: #0f1924;
+  --button-border: #2a3b50;
+  --code-bg: #070d15;
+  --code-gutter: #0b131d;
+  --code-key: #8acbff;
+  --code-string: #8ed7ff;
+  --code-number: #e8c177;
+  --shadow: rgba(0, 0, 0, 0.28);
+  --shadow-strong: rgba(0, 0, 0, 0.48);
+}
+
+.app[data-theme="dark"][data-tone^="obsidian-green"] {
+  --bg: #050506;
+  --bg-glow: rgba(84, 192, 145, 0.04);
+  --chrome: #070708;
+  --rail: #060607;
+  --sidebar: #080809;
+  --panel: #0d0e10;
+  --panel-2: #111215;
+  --panel-3: #17191c;
+  --line: #25282c;
+  --line-soft: #1a1c1f;
+  --line-strong: #363a3f;
+  --text: #f5f2ea;
+  --text-soft: #d0ccc2;
+  --muted: #98948b;
+  --faint: #706c64;
+  --danger: #ff9893;
+  --danger-soft: rgba(255, 115, 110, 0.08);
+  --danger-line: rgba(255, 115, 110, 0.24);
+  --warning: #e4b967;
+  --warning-soft: rgba(228, 185, 103, 0.08);
+  --warning-line: rgba(228, 185, 103, 0.23);
+  --info: #9bbff2;
+  --info-soft: rgba(125, 165, 220, 0.09);
+  --info-line: rgba(125, 165, 220, 0.22);
+  --purple: #c2b4e8;
+  --purple-soft: rgba(175, 158, 220, 0.09);
+  --purple-line: rgba(175, 158, 220, 0.22);
+  --hover: #151516;
+  --input: #0b0b0c;
+  --button: #101012;
+  --button-border: #303136;
+  --code-bg: #080809;
+  --code-gutter: #0b0b0d;
+  --code-key: #a9c7f0;
+  --code-string: #a9dbc4;
+  --code-number: #e4b967;
+  --shadow: rgba(0, 0, 0, 0.28);
+  --shadow-strong: rgba(0, 0, 0, 0.50);
+}
+
+/* Same App-green hue (154°), three saturation levels. */
+.app[data-theme="dark"][data-tone="obsidian-green-soft"] {
+  --accent: #5db690;
+  --accent-strong: #83d2b0;
+  --accent-soft: rgba(93, 182, 144, 0.10);
+  --accent-line: rgba(93, 182, 144, 0.27);
+  --accent-ring: rgba(93, 182, 144, 0.14);
+  --selected: rgba(93, 182, 144, 0.08);
+}
+
+.app[data-theme="dark"][data-tone="obsidian-green-balanced"] {
+  --accent: #54c091;
+  --accent-strong: #7adab3;
+  --accent-soft: rgba(84, 192, 145, 0.11);
+  --accent-line: rgba(84, 192, 145, 0.30);
+  --accent-ring: rgba(84, 192, 145, 0.15);
+  --selected: rgba(84, 192, 145, 0.09);
+}
+
+.app[data-theme="dark"][data-tone="obsidian-green-vivid"] {
+  --accent: #41d293;
+  --accent-strong: #6fe6b7;
+  --accent-soft: rgba(65, 210, 147, 0.12);
+  --accent-line: rgba(65, 210, 147, 0.32);
+  --accent-ring: rgba(65, 210, 147, 0.16);
+  --selected: rgba(65, 210, 147, 0.10);
+}
+
+/* Crisp, low-haze elevation: separation comes from black levels and borders. */
+.app[data-theme="dark"][data-tone] .panel,
+.app[data-theme="dark"][data-tone] .metric {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.025), 0 10px 26px rgba(0, 0, 0, 0.12);
+}
+
+.app[data-theme="dark"][data-tone] .env-switch,
+.app[data-theme="dark"][data-tone] .btn:not(.primary):not(.danger),
+.app[data-theme="dark"][data-tone] .operator,
+.app[data-theme="dark"][data-tone] .context-note {
+  box-shadow: none;
+}
+
+.app[data-theme="dark"][data-tone] .main {
+  background: radial-gradient(circle at 16% -10%, var(--bg-glow), transparent 32%), var(--bg);
+}
+
+.app[data-theme="dark"][data-tone] .env-hero {
+  background: linear-gradient(100deg, var(--accent-soft) 0%, var(--panel) 48%, var(--panel-2) 100%);
+}
+
+.app[data-theme="dark"][data-tone] .data-table tr.selected {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.app[data-theme="dark"][data-tone] .btn.primary {
+  color: color-mix(in srgb, var(--bg) 85%, #000);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 15%, transparent);
+}

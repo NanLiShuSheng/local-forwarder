@@ -567,19 +567,19 @@ test("themes use the approved green workbench palettes", async () => {
   const lightRule = extractCssRule(source, ".app-shell[data-theme=\"light\"]");
 
   const darkExpected = {
-    "app-background": "#050505",
-    "sidebar-background": "#080808",
-    "panel-background": "#0d0d0d",
-    "text-primary": "#bdb8ae",
+    "app-background": "#0d1117",
+    "sidebar-background": "#010409",
+    "panel-background": "#151b23",
+    "text-primary": "#f0f6fc",
     "button-primary-background": "#659f87",
     "button-primary-hover": "#72a791",
     "button-primary-text": "#06120c",
-    "border-default": "#252525",
+    "border-default": "#2f3742",
     "border-selected": "#54c091",
     "selection-border": "#54c091",
     "selection-tab-text": "#63ad8e",
     "selection-tab-underline": "#54c091",
-    "selection-row-text": "#bdb8ae",
+    "selection-row-text": "#f0f6fc",
     "selection-row-accent": "#54c091",
     "accent": "#54c091",
     "accent-hover": "#63ad8e",
@@ -632,57 +632,61 @@ test("light theme primary actions use a muted jade fill with softer white text",
   assert.match(hoverRule, /background:\s*var\(--button-primary-hover\)/);
 });
 
-test("dark theme uses neutral obsidian surfaces with warm text", async () => {
+test("dark theme reuses the 0.5.0 graphite surfaces and cool text", async () => {
   const source = await readFile("src/renderer/styles.css", "utf8");
   const darkRule = extractCssRule(source, ".app-shell");
-  const surfaceTokens = [
-    "app-background",
-    "sidebar-background",
-    "panel-background",
-    "surface-background",
-    "surface-alt-background",
-    "surface-subtle-background",
-    "surface-hover-background",
-    "input-background",
-    "code-background",
-    "border-default",
-    "border-strong",
-  ] as const;
+  const expected = {
+    "app-background": "#0d1117",
+    "sidebar-background": "#010409",
+    "panel-background": "#151b23",
+    "surface-background": "#212830",
+    "surface-alt-background": "#262c36",
+    "surface-subtle-background": "#1a2029",
+    "surface-elevated-background": "#2a313c",
+    "input-background": "#010409",
+    "code-background": "#010409",
+    "border-default": "#2f3742",
+    "border-strong": "#3d444d",
+    "text-primary": "#f0f6fc",
+    "text-secondary": "#b7bdc8",
+    "text-muted": "#949ca6",
+  };
 
-  for (const token of surfaceTokens) {
-    const color = parseCssColor(extractCssToken(darkRule, token));
-    assert.ok(color.red === color.green && color.green === color.blue, `${token} must stay neutral black`);
+  for (const [token, value] of Object.entries(expected)) {
+    assert.equal(extractCssToken(darkRule, token), value, `unexpected 0.5.0 dark token: ${token}`);
   }
-  const text = parseCssColor(extractCssToken(darkRule, "text-primary"));
-  assert.ok(text.red > text.green && text.green > text.blue, "text-primary must keep the warm ivory hue");
-  assert.equal(extractCssToken(darkRule, "warning"), "#e4b967");
-  assert.equal(extractCssToken(darkRule, "info"), "#9bbff2");
-  assert.equal(extractCssToken(darkRule, "log-request-action-text"), "#9bbff2");
+  for (const token of ["app-background", "sidebar-background", "panel-background"] as const) {
+    const color = parseCssColor(extractCssToken(darkRule, token));
+    assert.ok(color.blue > color.red, `${token} must keep the cool graphite cast`);
+  }
+  assert.equal(extractCssToken(darkRule, "warning"), "#d29922");
+  assert.equal(extractCssToken(darkRule, "info"), "#58a6ff");
+  assert.equal(extractCssToken(darkRule, "log-request-action-text"), "#79c0ff");
 });
 
-test("dark theme keeps primary and selected text on one softened warm-ivory level", async () => {
+test("dark theme uses the 0.5.0 cool primary text level with green selection text", async () => {
   const source = await readFile("src/renderer/styles.css", "utf8");
   const darkRule = extractCssRule(source, ".app-shell");
-  const primaryTokens = [
+  const coolTextTokens = [
     "text-primary",
     "text-bright",
     "selection-card-text",
     "selection-row-text",
     "text-selected",
-    "inverse",
   ] as const;
 
-  for (const token of primaryTokens) {
-    assert.equal(extractCssToken(darkRule, token), "#bdb8ae", `unexpected dark primary text token: ${token}`);
+  for (const token of coolTextTokens) {
+    assert.equal(extractCssToken(darkRule, token), "#f0f6fc", `unexpected dark primary text token: ${token}`);
   }
+  assert.equal(extractCssToken(darkRule, "inverse"), "#ffffff");
   const text = parseCssColor(extractCssToken(darkRule, "text-primary"));
-  assert.ok(text.red > text.green && text.green > text.blue, "softened dark text must keep the warm ivory hue");
+  assert.ok(text.blue > text.red, "dark text must keep the cool graphite hue");
   const panel = parseCssColor(extractCssToken(darkRule, "panel-background"));
-  assert.ok(contrastRatio(text, panel) >= 9.5, "softened dark text must retain strong readability");
+  assert.ok(contrastRatio(text, panel) >= 12, "dark text must retain strong readability");
   assert.match(source, /\.lf-context-head h1\s*\{[^}]*color:\s*var\(--text-primary\)/);
 });
 
-test("dark theme keeps green labels on a softer jade text level", async () => {
+test("dark theme keeps green labels on the softened jade text level", async () => {
   const source = await readFile("src/renderer/styles.css", "utf8");
   const darkRule = extractCssRule(source, ".app-shell");
   const textTokens = [
@@ -778,8 +782,8 @@ test("JSON preview reserves success green for status and uses theme interaction 
   assert.doesNotMatch(exportColorsBlock, /#f4f7fb|#f8fafc|#f0f4f8|#d6dfeb|#dbe3ed|#152033|#4e6078|#52647b|#256da8|#086b53|#8a5a00|#a93545|#d7eee7/i);
 });
 
-test("renderer source contains no legacy Primer blue or old slate interaction literals", async () => {
-  const legacyPalette = /#(?:1f6feb|0969da|58a6ff|79c0ff|0550ae|0a66c2|c4dcf1|d5e8f8|29425a|22384c|dfe8f1|e7eef5|7c93a8|5b7894)\b/i;
+test("renderer source contains no legacy blue theme accents or old slate selection literals", async () => {
+  const legacyPalette = /#(?:1f6feb|0969da|0550ae|0a66c2|c4dcf1|d5e8f8|dfe8f1|e7eef5|7c93a8|5b7894)\b/i;
   const files = await rendererSourceFiles("src/renderer");
 
   for (const file of files) {
@@ -802,7 +806,7 @@ test("encryption and decryption progress cards use the green workbench palette",
   const decryptionStat = extractCssRule(source, ".decryption-stat-grid div");
 
   assert.equal(extractCssToken(darkRule, "progress-card-border"), "rgb(84 192 145 / 28%)");
-  assert.equal(extractCssToken(darkRule, "progress-track-background"), "#171717");
+  assert.equal(extractCssToken(darkRule, "progress-track-background"), "#22384c");
   assert.equal(extractCssToken(darkRule, "progress-percent-text"), "#63ad8e");
   assert.equal(extractCssToken(lightRule, "progress-card-border"), "#a9e5d0");
   assert.equal(extractCssToken(lightRule, "progress-track-background"), "#dbe3ec");
@@ -841,8 +845,8 @@ test("overview config fields use a green-tinted dark surface and a soft light su
   const fieldRule = extractCssRule(source, ".proxy-instance-overview-field");
   const inputRule = source.match(/^\.proxy-instance-overview-field \.overview-config-input \{[^}]*\}/m)?.[0] ?? "";
 
-  assert.match(extractCssToken(darkRule, "overview-field-background"), /radial-gradient\([^;]*rgb\(84 192 145 \/ 7%\)/);
-  assert.match(extractCssToken(darkRule, "overview-field-background"), /linear-gradient\([^;]*#111111/);
+  assert.match(extractCssToken(darkRule, "overview-field-background"), /radial-gradient\([^;]*rgb\(84 192 145 \/ 12%\)/);
+  assert.match(extractCssToken(darkRule, "overview-field-background"), /linear-gradient\([^;]*#1b2736/);
   assert.match(extractCssToken(lightRule, "overview-field-background"), /linear-gradient\([^;]*#f7f9fb/);
   assert.match(fieldRule, /background:\s*var\(--overview-field-background\)/);
   assert.match(fieldRule, /box-shadow:\s*var\(--overview-field-shadow\)/);
