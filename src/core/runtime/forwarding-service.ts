@@ -24,6 +24,7 @@ export interface ForwardingServiceOptions {
   config: AppConfig;
   configStore?: { save(config: AppConfig): Promise<void> };
   onLoginValuesChanged?: (values: Record<string, string>) => void;
+  codec?: TztCodec;
   httpFactory?: (options: HttpProxyOptions) => HttpRuntime;
   tcpFactory?: (options: ConstructorParameters<typeof TcpBridgePool>[0]) => TcpBridgeLike & { close(): Promise<void>; getConnectionCount?: () => number };
   cacheFactory?: (options: { rootDir: string }) => Pick<FileCache, "close" | "getOrDownload" | "remove">;
@@ -48,6 +49,7 @@ export class ForwardingService {
   private readonly tcpFactory: NonNullable<ForwardingServiceOptions["tcpFactory"]>;
   private readonly cacheFactory: NonNullable<ForwardingServiceOptions["cacheFactory"]>;
   private readonly recoverOccupiedPort: NonNullable<ForwardingServiceOptions["recoverOccupiedPort"]>;
+  private readonly injectedCodec: TztCodec | undefined;
   private http: HttpRuntime | undefined;
   private tcp: (TcpBridgeLike & { close(): Promise<void>; getConnectionCount?: () => number }) | undefined;
   private codec: TztCodec | undefined;
@@ -67,6 +69,7 @@ export class ForwardingService {
     this.tcpFactory = options.tcpFactory ?? ((tcpOptions) => new TcpBridgePool(tcpOptions));
     this.cacheFactory = options.cacheFactory ?? ((cacheOptions) => new FileCache(cacheOptions));
     this.recoverOccupiedPort = options.recoverOccupiedPort ?? recoverOccupiedPort;
+    this.injectedCodec = options.codec;
   }
 
   public async start(): Promise<RuntimeStatus> {
@@ -89,9 +92,12 @@ export class ForwardingService {
       const rootDir = this.config.cache.rootDir || path.join(os.tmpdir(), "local-forwarder-cache");
       this.cache = this.cacheFactory({ rootDir });
       created.push(async () => { await this.cache?.close(); this.cache = undefined; });
-      this.codec = createTztCodec();
+      this.codec = this.injectedCodec ?? createTztCodec();
       const codec = this.codec;
-      created.push(async () => { await codec.close?.(); this.codec = undefined; });
+      created.push(async () => {
+        if (this.injectedCodec === undefined) await codec.close?.();
+        if (this.codec === codec) this.codec = undefined;
+      });
       this.tcp = this.tcpFactory({ connectTimeoutMs: this.config.server.timeoutMs, requestTimeoutMs: this.config.server.timeoutMs, codec });
       created.push(async () => { await this.tcp?.close(); this.tcp = undefined; });
       this.http = this.httpFactory({
@@ -148,9 +154,11 @@ export class ForwardingService {
     this.http = undefined;
     await this.tcp?.close().catch(() => undefined);
     this.tcp = undefined;
-    try {
-      await this.codec?.close?.();
-    } catch {
+    if (this.injectedCodec === undefined) {
+      try {
+        await this.codec?.close?.();
+      } catch {
+      }
     }
     this.codec = undefined;
     await this.cache?.close().catch(() => undefined);

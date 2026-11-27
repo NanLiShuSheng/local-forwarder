@@ -13,11 +13,12 @@ import { ProxyWorkspaceStore } from "../src/core/runtime/proxy-workspace-store";
 import { getDecryptionPreferencesPath, getEncryptionEncoderPath, getEncryptionPreferencesPath, getPreloadPath, getRendererIndexPath } from "./paths";
 import { createRendererSecurityPolicy, type RendererSecurityPolicy } from "./security";
 import { createSaveConfigHandler, createTrustedIpcHandler, type IpcHandler } from "./ipc";
-import { createManualRequestLogEntry, extractManualLoginValues, sendManualRequest } from "../src/core/request/manual-request";
+import { createManualRequestLogEntry, extractManualLoginValues, ManualTcpRequestBridge, sendManualRequest } from "../src/core/request/manual-request";
 import { getManualRequestConfigValidationError, isValidManualRequestConfig } from "../src/shared/validation";
 import { createElectronUpdateAdapter, createUpdateService, type UpdateService } from "./update-service";
 import { createUpdateLifecycleGate } from "./update-lifecycle";
 import { createMacManualUpdateAdapter, createMacUpdateUrls } from "./mac-manual-update";
+import { getUsageAnalyticsConfig, trackAppLaunch } from "./usage-analytics";
 
 const IPC_CHANNELS = {
   getConfig: "config:get",
@@ -75,6 +76,7 @@ let manager: ForwardingServiceManager;
 let configStore: ConfigStore;
 let workspaceStore: ProxyWorkspaceStore;
 let updateService: UpdateService | undefined;
+let manualTcpBridge: ManualTcpRequestBridge | undefined;
 let updateInstallInProgress = false;
 let encryptionAbortController: AbortController | undefined;
 const updateLifecycle = createUpdateLifecycleGate();
@@ -387,7 +389,10 @@ function registerIpcHandlers(policy: RendererSecurityPolicy): void {
       return { ok: false, error: `Invalid request payload: ${getManualRequestConfigValidationError(payload) ?? "request"}` };
     }
     try {
-      const result = await sendManualRequest({ ...payload, timeoutMs: manager.getConfig().server.timeoutMs });
+      const result = await sendManualRequest(
+        { ...payload, timeoutMs: manager.getConfig().server.timeoutMs },
+        { tcpBridge: manualTcpBridge },
+      );
       let loginSuccess = false;
       if (result.body !== undefined) {
         const loginValues = extractManualLoginValues(payload.paramsText, result.body);
@@ -474,6 +479,7 @@ async function loadService(): Promise<void> {
     workspaceStore,
     defaultCacheRoot: path.join(app.getPath("userData"), "cache"),
   });
+  manualTcpBridge = new ManualTcpRequestBridge(manager.getTztCodec());
 }
 
 function getCurrentUpdateState(): UpdateState {
@@ -571,6 +577,17 @@ app.whenReady().then(() => {
     registerIpcHandlers(rendererSecurityPolicy);
     createWindow(rendererSecurityPolicy);
     void updateService?.startBackgroundCheck();
+    void trackAppLaunch({
+      ...getUsageAnalyticsConfig(),
+      userDataPath: app.getPath("userData"),
+      isPackaged: app.isPackaged,
+      isSmokeMode: smokeMode,
+      appVersion: app.getVersion(),
+      platform: process.platform,
+      arch: process.arch,
+      osVersion: process.getSystemVersion(),
+      locale: app.getLocale(),
+    });
   }).catch((error) => {
     dialog.showErrorBox("Local Forwarder", error instanceof Error ? error.message : "could not load configuration");
     app.quit();
@@ -591,8 +608,11 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", (event) => {
   updateService?.dispose();
-  if (quitting || manager === undefined || manager.list().every((instance) => instance.status.state === "stopped")) return;
-  event.preventDefault();
+  if (quitting) return;
   quitting = true;
-  void manager.stopAll().finally(() => app.quit());
+  event.preventDefault();
+  void (async () => {
+    await manualTcpBridge?.close().catch(() => undefined);
+    await manager?.close().catch(() => undefined);
+  })().finally(() => app.quit());
 });

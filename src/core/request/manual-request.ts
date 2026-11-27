@@ -3,6 +3,7 @@ import { parseManualRequestParams, serializeManualRequestParams } from "../../sh
 import { hasSuccessfulLoginErrorNo, parseLocalCacheText } from "../../shared/local-cache";
 import type { LogEntry, ManualRequestConfig } from "../../shared/contracts";
 import { TcpBridgePool } from "../tcp/tcp-bridge";
+import type { TztCodec } from "../tcp/tzt-codec";
 
 const MAX_RESPONSE_SIZE = 16 * 1024 * 1024;
 const MAX_LOG_DETAIL_SIZE = 256 * 1024;
@@ -20,6 +21,38 @@ export interface ManualRequestResult {
   statusMessage?: string;
   body: string;
   durationMs: number;
+}
+
+export interface ManualRequestDependencies {
+  tcpBridge?: ManualTcpRequester;
+}
+
+export interface ManualTcpRequester {
+  request(target: { host: string; port: number }, query: Record<string, string>, timeoutMs: number): Promise<Record<string, unknown>>;
+}
+
+export class ManualTcpRequestBridge implements ManualTcpRequester {
+  private bridge: TcpBridgePool | undefined;
+  private timeoutMs: number | undefined;
+
+  public constructor(private readonly codec: TztCodec) {}
+
+  public async request(target: { host: string; port: number }, query: Record<string, string>, timeoutMs: number) {
+    if (this.bridge === undefined || this.timeoutMs !== timeoutMs) {
+      const previous = this.bridge;
+      this.bridge = new TcpBridgePool({ connectTimeoutMs: timeoutMs, requestTimeoutMs: timeoutMs, codec: this.codec });
+      this.timeoutMs = timeoutMs;
+      await previous?.close();
+    }
+    return this.bridge.request(target, query);
+  }
+
+  public async close(): Promise<void> {
+    const bridge = this.bridge;
+    this.bridge = undefined;
+    this.timeoutMs = undefined;
+    await bridge?.close();
+  }
 }
 
 function truncateLogDetail(value: string): string {
@@ -98,9 +131,9 @@ export function formatTztResponse(response: Record<string, unknown>): string {
   return lines.join("\n");
 }
 
-export function sendManualRequest(options: ManualRequestOptions): Promise<ManualRequestResult> {
+export function sendManualRequest(options: ManualRequestOptions, dependencies: ManualRequestDependencies = {}): Promise<ManualRequestResult> {
   const params = parseManualRequestParams(options.paramsText);
-  if (options.transport !== "http") return sendTztRequest(options, params);
+  if (options.transport !== "http") return sendTztRequest(options, params, dependencies);
   const body = serializeManualRequestParams(params);
   const started = Date.now();
   return new Promise((resolve, reject) => {
@@ -148,13 +181,18 @@ export function sendManualRequest(options: ManualRequestOptions): Promise<Manual
   });
 }
 
-async function sendTztRequest(options: ManualRequestOptions, params: Record<string, string>): Promise<ManualRequestResult> {
+async function sendTztRequest(options: ManualRequestOptions, params: Record<string, string>, dependencies: ManualRequestDependencies): Promise<ManualRequestResult> {
   const started = Date.now();
-  const bridge = new TcpBridgePool({ connectTimeoutMs: options.timeoutMs, requestTimeoutMs: options.timeoutMs });
+  const ownedBridge = dependencies.tcpBridge === undefined
+    ? new TcpBridgePool({ connectTimeoutMs: options.timeoutMs, requestTimeoutMs: options.timeoutMs })
+    : undefined;
+  const bridge: ManualTcpRequester = dependencies.tcpBridge ?? {
+    request: (target, query) => ownedBridge!.request(target, query),
+  };
   try {
-    const response = await bridge.request({ host: options.host.replace(/^\[|\]$/g, ""), port: options.port }, params);
+    const response = await bridge.request({ host: options.host.replace(/^\[|\]$/g, ""), port: options.port }, params, options.timeoutMs);
     return { body: formatTztResponse(response), durationMs: Date.now() - started };
   } finally {
-    await bridge.close();
+    await ownedBridge?.close();
   }
 }

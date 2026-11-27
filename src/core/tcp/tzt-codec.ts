@@ -325,3 +325,58 @@ export function createTztCodec(): TztCodec {
     close: () => runtime.close(),
   };
 }
+
+export interface TztCodecPoolOptions {
+  maxWorkers?: number;
+  createCodec?: () => TztCodec;
+}
+
+interface TztCodecWorker {
+  codec: TztCodec;
+  active: number;
+}
+
+export function createTztCodecPool(options: TztCodecPoolOptions = {}): TztCodec {
+  const maxWorkers = options.maxWorkers ?? 2;
+  if (!Number.isInteger(maxWorkers) || maxWorkers < 1) throw new Error("TZT codec pool size must be a positive integer");
+  const createCodec = options.createCodec ?? createTztCodec;
+  const workers: TztCodecWorker[] = [];
+  let closed = false;
+  let closing: Promise<void> | undefined;
+
+  const selectWorker = (): TztCodecWorker => {
+    if (closed) throw new Error("TZT codec pool closed");
+    let worker = workers.find((candidate) => candidate.active === 0);
+    if (worker === undefined && workers.length < maxWorkers) {
+      worker = { codec: createCodec(), active: 0 };
+      workers.push(worker);
+    }
+    if (worker === undefined) {
+      worker = workers.reduce((leastBusy, candidate) => candidate.active < leastBusy.active ? candidate : leastBusy);
+    }
+    return worker;
+  };
+
+  const invoke = async <T>(operation: (codec: TztCodec) => Awaitable<T>): Promise<T> => {
+    const worker = selectWorker();
+    worker.active += 1;
+    try {
+      return await operation(worker.codec);
+    } finally {
+      worker.active -= 1;
+    }
+  };
+
+  return {
+    rc4: (data, key) => invoke((codec) => codec.rc4(data, key)),
+    rc4Batch: (data, key) => invoke((codec) => codec.rc4Batch(data, key)),
+    encode: (query, serial) => invoke((codec) => codec.encode(query, serial)),
+    decode: (frame) => invoke((codec) => codec.decode(frame)),
+    close: () => {
+      if (closing !== undefined) return closing;
+      closed = true;
+      closing = Promise.allSettled(workers.map(async (worker) => worker.codec.close?.())).then(() => undefined);
+      return closing;
+    },
+  };
+}

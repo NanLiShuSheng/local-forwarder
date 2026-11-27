@@ -1,0 +1,25 @@
+analytics.finbr.asia {
+	@ingest {
+		path /api/send
+		method POST
+	}
+
+	handle @ingest {
+		request_body {
+			max_size 16KB
+		}
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	@api path /api/*
+	handle @api {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	handle {
+		basic_auth {
+			admin REPLACE_WITH_CADDY_PASSWORD_HASH
+		}
+		reverse_proxy 127.0.0.1:3000
+	}
+}

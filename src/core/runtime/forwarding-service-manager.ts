@@ -3,6 +3,7 @@ import path from "node:path";
 import type { AppConfig, LogEntry, ProxyInstance, ProxyInstanceSummary, ProxyWorkspace, RuntimeStatus } from "../../shared/contracts";
 import { createDefaultConfig } from "../config/model";
 import { ForwardingService, type ForwardingServiceOptions } from "./forwarding-service";
+import { createTztCodecPool, type TztCodec } from "../tcp/tzt-codec";
 
 export interface ManagedForwardingService {
   start(): Promise<RuntimeStatus>;
@@ -59,6 +60,7 @@ export class ForwardingServiceManager {
   private readonly workspaceStore: WorkspacePersistence;
   private readonly defaultCacheRoot: string | undefined;
   private readonly serviceFactory: NonNullable<ForwardingServiceManagerOptions["serviceFactory"]>;
+  private readonly codec: TztCodec;
   private readonly services = new Map<string, ManagedForwardingService>();
   private saveQueue: Promise<void> = Promise.resolve();
 
@@ -66,7 +68,8 @@ export class ForwardingServiceManager {
     this.workspace = this.normalizeWorkspace(options.workspace);
     this.workspaceStore = options.workspaceStore;
     this.defaultCacheRoot = options.defaultCacheRoot;
-    this.serviceFactory = options.serviceFactory ?? ((config, configStore) => new ForwardingService({ config, configStore }));
+    this.codec = createTztCodecPool();
+    this.serviceFactory = options.serviceFactory ?? ((config, configStore) => new ForwardingService({ config, configStore, codec: this.codec }));
     for (const instance of this.workspace.instances) {
       this.createService(instance);
     }
@@ -74,6 +77,10 @@ export class ForwardingServiceManager {
 
   public getSelectedInstanceId(): string {
     return this.workspace.selectedInstanceId;
+  }
+
+  public getTztCodec(): TztCodec {
+    return this.codec;
   }
 
   public async select(id: string): Promise<void> {
@@ -270,6 +277,11 @@ export class ForwardingServiceManager {
     for (const service of this.services.values()) {
       if (service.status().state !== "stopped") await service.stop().catch(() => undefined);
     }
+  }
+
+  public async close(): Promise<void> {
+    await this.stopAll();
+    await this.codec.close?.();
   }
 
   private currentInstance(): ProxyInstance {

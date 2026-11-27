@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import net from "node:net";
-import { createManualRequestLogEntry, extractManualLoginValues, formatTztResponse, sendManualRequest } from "../../../src/core/request/manual-request";
+import { createManualRequestLogEntry, extractManualLoginValues, formatTztResponse, ManualTcpRequestBridge, sendManualRequest } from "../../../src/core/request/manual-request";
 import { parseManualRequestParams } from "../../../src/shared/manual-request";
 import { createTztCodec } from "../../../src/core/tcp/tzt-codec";
 
@@ -158,6 +158,48 @@ test("sends pasted request parameters as a TZT frame when the target is a native
     assert.equal(result.statusCode, undefined);
     assert.equal(result.body, "Action = 100\nERRORNO = 0\nACCOUNT = 600554432");
   } finally {
+    await new Promise<void>((resolve) => target.close(() => resolve()));
+    await codec.close?.();
+  }
+});
+
+test("reuses one helper and TCP connection for repeated manual TZT requests", async () => {
+  const codec = createTztCodec();
+  let connectionCount = 0;
+  const target = net.createServer((socket) => {
+    connectionCount += 1;
+    let buffer = Buffer.alloc(0);
+    socket.on("data", async (chunk: Buffer) => {
+      buffer = Buffer.concat([buffer, chunk]);
+      while (buffer.length >= 6) {
+        const frameLength = buffer.readUInt32LE(2) + 6;
+        if (buffer.length < frameLength) return;
+        const frame = buffer.subarray(0, frameLength);
+        buffer = buffer.subarray(frameLength);
+        const request = await codec.decode(frame);
+        const response = await codec.encode({ Action: request.Action ?? "", ERRORNO: "0" }, Number(request.HandleSerialNo));
+        socket.write(response);
+      }
+    });
+  });
+  const port = await new Promise<number>((resolve, reject) => {
+    target.once("error", reject);
+    target.listen({ host: "127.0.0.1", port: 0 }, () => {
+      const address = target.address();
+      if (address === null || typeof address === "string") return reject(new Error("server did not expose an address"));
+      resolve(address.port);
+    });
+  });
+  const bridge = new ManualTcpRequestBridge(codec);
+
+  try {
+    const first = await sendManualRequest({ host: "127.0.0.1", port, paramsText: "Action=100", timeoutMs: 1000, transport: "tzt" }, { tcpBridge: bridge });
+    const second = await sendManualRequest({ host: "127.0.0.1", port, paramsText: "Action=101", timeoutMs: 1000, transport: "tzt" }, { tcpBridge: bridge });
+    assert.equal(first.body, "Action = 100\nERRORNO = 0");
+    assert.equal(second.body, "Action = 101\nERRORNO = 0");
+    assert.equal(connectionCount, 1);
+  } finally {
+    await bridge.close();
     await new Promise<void>((resolve) => target.close(() => resolve()));
     await codec.close?.();
   }

@@ -2,7 +2,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
-import { createTztCodec, getNode16BinaryCandidates } from "../../../src/core/tcp/tzt-codec";
+import { createTztCodec, createTztCodecPool, getNode16BinaryCandidates, type TztCodec } from "../../../src/core/tcp/tzt-codec";
 
 const codec = createTztCodec();
 
@@ -20,6 +20,42 @@ test("Node 16 environment override is preferred and unsupported Windows arch has
   const override = "C:\\tools\\node-v16.13.0\\node.exe";
   assert.equal(getNode16BinaryCandidates("/packed/protocol", "win32", "x64", { TZT_NODE16_BIN: override })[0], override);
   assert.equal(getNode16BinaryCandidates("/packed/protocol", "win32", "arm64", {}).some((candidate) => candidate.includes("win-x64")), false);
+});
+
+test("codec pool lazily reuses workers, caps worker count, and closes each worker once", async () => {
+  let created = 0;
+  let closed = 0;
+  const createWorker = (): TztCodec => {
+    created += 1;
+    const run = async <T>(value: T): Promise<T> => {
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      return value;
+    };
+    return {
+      rc4: (data) => run(Buffer.from(data)),
+      rc4Batch: (data) => run(data.map((entry) => Buffer.from(entry))),
+      encode: () => run(Buffer.alloc(0)),
+      decode: () => run({}),
+      close: async () => { closed += 1; },
+    };
+  };
+  const pool = createTztCodecPool({ maxWorkers: 2, createCodec: createWorker });
+
+  await pool.rc4(Buffer.from("first"), "file");
+  await pool.rc4(Buffer.from("second"), "file");
+  assert.equal(created, 1);
+
+  await Promise.all([
+    pool.rc4(Buffer.from("one"), "file"),
+    pool.rc4(Buffer.from("two"), "file"),
+    pool.rc4(Buffer.from("three"), "file"),
+  ]);
+  assert.equal(created, 2);
+
+  await pool.close?.();
+  await pool.close?.();
+  assert.equal(closed, 2);
+  await assert.rejects(() => pool.rc4(Buffer.from("after-close"), "file"), /closed/i);
 });
 
 test("codec preserves the legacy RC4 and encode regression vectors", async () => {

@@ -6,6 +6,7 @@ import path from "node:path";
 import net from "node:net";
 import { createDefaultConfig } from "../../../src/core/config/model";
 import { ForwardingService } from "../../../src/core/runtime/forwarding-service";
+import type { TztCodec } from "../../../src/core/tcp/tzt-codec";
 import type { AppConfig, LogEntry } from "../../../src/shared/contracts";
 
 async function freePort(): Promise<number> {
@@ -30,6 +31,46 @@ test("service starts, reports status, and stops all listeners", async () => {
     await service.stop();
     assert.equal(service.status().state, "stopped");
     await service.stop();
+  } finally {
+    await service.stop();
+  }
+});
+
+test("does not close an injected codec when one service stops", async () => {
+  const config = createDefaultConfig();
+  config.server.port = await freePort();
+  config.cache.rootDir = await mkdtemp(path.join(os.tmpdir(), "forwarder-service-shared-codec-"));
+  let closeCalls = 0;
+  let receivedCodec: TztCodec | undefined;
+  const codec: TztCodec = {
+    rc4: (data) => Buffer.from(data),
+    rc4Batch: (data) => data.map((entry) => Buffer.from(entry)),
+    encode: () => Buffer.alloc(0),
+    decode: () => ({}),
+    close: async () => { closeCalls += 1; },
+  };
+  const service = new ForwardingService({
+    config,
+    codec,
+    tcpFactory: (options) => {
+      receivedCodec = options.codec;
+      return { request: async () => ({}), close: async () => undefined };
+    },
+    httpFactory: () => ({
+      start: async () => ({ host: "127.0.0.1", port: config.server.port }),
+      stop: async () => undefined,
+      getStats: () => ({ requestCount: 0, successCount: 0, totalDurationMs: 0, tcpConnections: 0 }),
+      getValues: () => ({ localValues: {}, mapValues: {}, fileValues: {} }),
+    }) as never,
+  });
+
+  try {
+    await service.start();
+    await service.stop();
+    await service.start();
+    await service.stop();
+    assert.equal(receivedCodec, codec);
+    assert.equal(closeCalls, 0);
   } finally {
     await service.stop();
   }
